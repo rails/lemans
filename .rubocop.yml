@@ -1,0 +1,25 @@
+AllCops:
+  TargetRubyVersion: 3.3
+  NewCops: enable
+  SuggestExtensions: false
+
+Style/StringLiterals:
+  EnforcedStyle: double_quotes
+
+Style/StringLiteralsInInterpolation:
+  EnforcedStyle: double_quotes
+
+Metrics:
+  Enabled: false
+
+Lint/UnusedMethodArgument:
+  Exclude:
+    - test/**/*
+
+Style/Documentation:
+  Exclude:
+    - test/**/*
+
+Style/FormatStringToken:
+  Exclude:
+    - test/**/*
