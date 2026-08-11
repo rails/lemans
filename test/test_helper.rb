@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+begin
+  require "debug" unless ENV["CI"] == "true"
+rescue LoadError # rubocop:disable Lint/SuppressedException
+end
+
 $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
 require "lemans"
 

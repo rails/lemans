@@ -5,6 +5,8 @@ source "https://rubygems.org"
 # Specify your gem's dependencies in lemans.gemspec
 gemspec
 
+gem "debug", platform: :mri unless ENV["CI"] == "true"
+
 gem "irb"
 gem "rake", "~> 13.0"
 
