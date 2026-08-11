@@ -29,15 +29,20 @@ class ReportTest < Minitest::Test
     end
   end
 
-  def test_the_table_shows_every_trial_and_owns_up_to_the_totals
+  def test_the_rows_show_every_trial_and_the_summary_owns_up_to_the_totals
     with_runs do |runs_dir|
-      table = Lemans::Results::Report.load(runs_dir).to_table
+      report = Lemans::Results::Report.load(runs_dir)
+      rows = report.to_rows
 
-      assert_includes table, "hello-world__aaa"
-      assert_includes table, "environment_error"
-      assert_includes table, "3 trials: 2 scored, 1 invalid, 1 solved"
+      assert_equal %w[task agent model reward outcome cost_usd steps duration_sec trial], rows.first
+      assert_includes rows.flatten, "hello-world__aaa"
+
+      invalid = rows.find { _1.include?("hello-world__bbb") }
+
+      assert_includes invalid, "environment_error"
       # A missing reward reads as absent, not as zero.
-      assert_match(/-\s+environment_error/, table)
+      assert_equal "-", invalid[rows.first.index("reward")]
+      assert_includes report.summary_line, "3 trials: 2 scored, 1 invalid, 1 solved"
     end
   end
 
@@ -62,7 +67,7 @@ class ReportTest < Minitest::Test
 
       assert_equal 3, report.rows.size
       assert_equal 1, report.unreadable
-      assert_includes report.to_table, "1 unreadable result(s) skipped"
+      assert_includes report.summary_line, "1 unreadable result(s) skipped"
     end
   end
 

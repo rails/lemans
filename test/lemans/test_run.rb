@@ -74,16 +74,33 @@ class RunTest < Minitest::Test
     end
   end
 
+  def test_an_interrupt_drops_the_queue_and_still_returns_a_summary
+    Dir.mktmpdir do |runs_dir|
+      events = []
+      summary = build_run(runs_dir, attempts: 3).call do |event, _data|
+        events << event
+        raise Interrupt if event == :started
+      end
+
+      assert summary[:interrupted]
+      assert_includes events, :interrupted
+      assert_equal 0, summary[:total]
+    end
+  end
+
   def test_a_crashed_trial_becomes_a_visible_invalid_line_not_a_silent_hole
     Dir.mktmpdir do |runs_dir|
-      lines = []
+      events = []
       exploding = ->(*, **) { raise "the harness tripped over itself" }
       summary = Lemans::Environments.stub(:build, exploding) do
-        build_run(runs_dir, attempts: 1).call { lines << _1 }
+        build_run(runs_dir, attempts: 1).call { |event, data| events << [event, data] }
       end
 
       assert_equal({ total: 1, scored: 0, invalid: 1, solved: 0 }, summary)
-      assert(lines.any? { _1.include?("crashed") })
+      crash = events.find { |event, _| event == :crashed }
+
+      refute_nil crash
+      assert_includes crash.last[:error], "the harness tripped over itself"
     end
   end
 end

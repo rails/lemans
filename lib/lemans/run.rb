@@ -32,6 +32,7 @@ module Lemans
       results = Concurrent::Array.new
       workers = Array.new(@concurrency) do
         Thread.new do
+          Thread.current.report_on_exception = false
           while (attempt = queue.pop) != :done
             results << run_attempt(attempt, &report)
           end
@@ -40,6 +41,16 @@ module Lemans
       workers.each(&:join)
 
       summarize(results)
+    rescue Interrupt
+      queue&.clear
+      workers = Array(workers).select(&:alive?)
+      report&.call(:interrupted, { in_flight: workers.size })
+      workers.each { _1.raise(Interrupt) }.each do |worker|
+        worker.join
+      rescue Interrupt
+        nil
+      end
+      summarize(results || []).merge(interrupted: true)
     end
 
     private
@@ -91,18 +102,24 @@ module Lemans
         backend: @backend,
         runs_dir: @runs_dir
       )
-      yield "→ #{attempt.task.name} attempt #{attempt.index}/#{@attempts} #{trial.id}" if block_given?
+
+      if block_given?
+        yield :started, { task: attempt.task.name, index: attempt.index, attempts: @attempts, trial: trial.id }
+      end
 
       result = trial.run
       if block_given?
-        yield "  #{attempt.task.name}: #{result[:outcome][:name]} " \
-              "reward=#{result[:reward].inspect} #{result[:duration_sec]}s"
+        yield :finished, {
+          task: attempt.task.name,
+          outcome: result[:outcome][:name],
+          scored: result[:outcome][:scored],
+          reward: result[:reward],
+          duration_sec: result[:duration_sec]
+        }
       end
       result
     rescue StandardError => e
-      # A thread that dies silently would leave a wave looking complete when it
-      # is not, so the failure becomes a visible line and a counted trial.
-      yield "  #{attempt.task.name}: crashed — #{e.class}: #{e.message}" if block_given?
+      yield :crashed, { task: attempt.task.name, error: "#{e.class}: #{e.message}" } if block_given?
       { task: attempt.task.name, outcome: { name: :harness_crash, scored: false }, reward: nil }
     end
 

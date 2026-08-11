@@ -64,13 +64,15 @@ module Lemans
         }
       end
 
-      def to_table
-        cells = [TABLE_COLUMNS.map(&:to_s)] + rows.map { |row| TABLE_COLUMNS.map { display(row[_1]) } }
-        widths = cells.transpose.map { |column| column.map(&:length).max }
+      def to_rows
+        [TABLE_COLUMNS.map(&:to_s)] + rows.map { |row| TABLE_COLUMNS.map { display(row[_1]) } }
+      end
 
-        lines = cells.map { |row| row.zip(widths).map { |cell, width| cell.ljust(width) }.join("  ").rstrip }
-        lines << summary_line
-        lines.join("\n")
+      def summary_line
+        totals = summary
+        line = "#{totals[:total]} trials: #{totals[:scored]} scored, #{totals[:invalid]} invalid, " \
+               "#{totals[:solved]} solved · $#{format("%.4f", totals[:cost_usd])}"
+        unreadable.positive? ? "#{line} · #{unreadable} unreadable result(s) skipped" : line
       end
 
       def to_csv
@@ -81,13 +83,6 @@ module Lemans
       end
 
       private
-
-      def summary_line
-        totals = summary
-        line = "#{totals[:total]} trials: #{totals[:scored]} scored, #{totals[:invalid]} invalid, " \
-               "#{totals[:solved]} solved · $#{format("%.4f", totals[:cost_usd])}"
-        unreadable.positive? ? "#{line} · #{unreadable} unreadable result(s) skipped" : line
-      end
 
       def display(value)
         case value
