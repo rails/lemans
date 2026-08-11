@@ -70,7 +70,7 @@ module Lemans
       clobber = Clobber.new(
         runs_dir: options[:runs_dir],
         tasks: options[:task],
-        ttl_sec: Corpus::Units.seconds(options[:ttl], field: "--older-than")
+        ttl_sec: Corpus::Units.seconds(options[:ttl], field: "--ttl")
       )
       doomed = clobber.matches
       return puts "lemans: nothing to clobber under #{options[:runs_dir]}" if doomed.empty?
