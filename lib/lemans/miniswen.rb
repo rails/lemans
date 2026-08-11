@@ -3,6 +3,9 @@
 require "json"
 require "ruby_llm"
 
+# Disable verbose logging
+RubyLLM.configure { _1.logger = Logger.new(IO::NULL) } unless ENV["DEBUG_RUBYLLM"] == "1"
+
 module Lemans
   # A Ruby port of mini-swe-agent's loop (mini.yaml at commit a83fcae): ask the
   # model for bash tool calls, run them, repeat until it submits or a limit trips.
