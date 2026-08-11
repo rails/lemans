@@ -5,8 +5,8 @@ module Lemans
     # Durations and sizes as a human writes them ("30m", "2GB"), stored as
     # seconds and megabytes. A bare number gets the obvious reading.
     module Units
-      DURATION = /\A(\d+(?:\.\d+)?)\s*(ms|s|m|h)?\z/
-      DURATION_FACTORS = { "ms" => 0.001, "s" => 1, "m" => 60, "h" => 3600 }.freeze
+      DURATION = /\A(\d+(?:\.\d+)?)\s*(ms|s|m|h|d)?\z/
+      DURATION_FACTORS = { "ms" => 0.001, "s" => 1, "m" => 60, "h" => 3600, "d" => 86_400 }.freeze
 
       SIZE = /\A(\d+(?:\.\d+)?)\s*(MB|GB|TB)?\z/i
       SIZE_FACTORS = { "mb" => 1, "gb" => 1024, "tb" => 1024 * 1024 }.freeze

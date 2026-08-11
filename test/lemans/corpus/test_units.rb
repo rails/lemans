@@ -7,6 +7,7 @@ class CorpusUnitsTest < Minitest::Test
     assert_equal 1800.0, Lemans::Corpus::Units.seconds("30m", field: "t")
     assert_equal 300.0, Lemans::Corpus::Units.seconds("300s", field: "t")
     assert_equal 3600.0, Lemans::Corpus::Units.seconds("1h", field: "t")
+    assert_equal 86_400.0, Lemans::Corpus::Units.seconds("1d", field: "t")
     assert_in_delta 0.5, Lemans::Corpus::Units.seconds("500ms", field: "t")
     assert_equal 42.0, Lemans::Corpus::Units.seconds(42, field: "t")
     assert_nil Lemans::Corpus::Units.seconds(nil, field: "t")

@@ -131,6 +131,7 @@ Each trial writes `runs/<task>__<id>/` with `result.json` (reward, outcome, usag
 | `lemans tasks` | List the tasks in a corpus |
 | `lemans run` | Run tasks and grade them (`--task`, `--agent`, `--model`, `-k`, `-c`, `--resume`) |
 | `lemans report` | Summarize `runs/` as a table or CSV |
+| `lemans clobber` | Delete run results (`--task`, `--ttl 10m|2h|1d`, `-f` to skip the confirmation) |
 
 Listing `model` in `bench.yml` as an array turns a run into a sweep: the whole task × attempt grid runs once per model.
 
