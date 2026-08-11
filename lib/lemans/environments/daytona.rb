@@ -1,11 +1,23 @@
 # frozen_string_literal: true
 
 require "concurrent"
-require "daytona"
 require "digest"
 require "securerandom"
 require "shellwords"
 require "timeout"
+
+require "daytona"
+# Disable verbose logging
+unless ENV["DEBUG_DAYTONA"] == "1"
+  null_logger = Logger.new(IO::NULL)
+  # DaytonaApiWhatever.configure is broken: it configures the default config that is never used
+  [DaytonaApiClient, DaytonaToolboxApiClient, DaytonaAnalyticsApiClient].each do |client_mod|
+    client_mod::Configuration.define_method(:logger) { null_logger }
+  end
+
+  # Sdk.logger memoizes with `@logger ||=` and has no writer
+  Daytona::Sdk.instance_variable_set(:@logger, null_logger)
+end
 
 module Lemans
   module Environments
