@@ -95,8 +95,23 @@ class ClobberTest < Minitest::Test
 
   private
 
-  def clobber(runs, tasks: [], ttl_sec: nil)
-    Lemans::Clobber.new(runs_dir: runs, tasks: tasks, ttl_sec: ttl_sec)
+  def clobber(runs, tasks: [], ttl_sec: nil, invalid: false)
+    Lemans::Clobber.new(runs_dir: runs, tasks: tasks, ttl_sec: ttl_sec, invalid: invalid)
+  end
+
+  def test_the_invalid_filter_spares_everything_that_scored
+    in_runs_dir do |runs|
+      scored = trial_dir(runs, "hello-world")
+      scored.join("result.json").write('{"outcome":{"scored":true}}')
+      corpse = trial_dir(runs, "ar-announce-once")
+      corpse.join("result.json").write('{"outcome":{"scored":false}}')
+      truncated = trial_dir(runs, "ac-throttle-search")
+      truncated.join("result.json").write("{ half a resu")
+
+      clobber(runs, invalid: true).call
+
+      assert_equal([scored.basename.to_s], runs.children.map { _1.basename.to_s })
+    end
   end
 
   def in_runs_dir(&)

@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "fileutils"
+require "json"
 require "pathname"
 
 module Lemans
@@ -8,10 +9,11 @@ module Lemans
   class Clobber
     TRIAL_DIR = /\A(?<task>.+)__[A-Za-z0-9]{7}\z/
 
-    def initialize(runs_dir:, tasks: [], ttl_sec: nil)
+    def initialize(runs_dir:, tasks: [], ttl_sec: nil, invalid: false)
       @runs_dir = Pathname(runs_dir)
       @tasks = Array(tasks)
       @ttl_sec = ttl_sec
+      @invalid = invalid
     end
 
     def matches
@@ -36,12 +38,21 @@ module Lemans
         next false if task.nil?
 
         (tasks.empty? || tasks.include?(task)) &&
-          (ttl_sec.nil? || age_sec(entry) > ttl_sec)
+          (ttl_sec.nil? || age_sec(entry) > ttl_sec) &&
+          (!@invalid || invalid?(entry))
       end
     end
 
     def task_name(entry) = TRIAL_DIR.match(entry.basename.to_s)&.[](:task)
 
     def age_sec(entry) = Time.now - entry.mtime
+
+    # A trial that measured nothing; an unreadable result counts — it will
+    # never be read as anything else.
+    def invalid?(entry)
+      JSON.parse(entry.join("result.json").read).dig("outcome", "scored") != true
+    rescue JSON::ParserError, SystemCallError, IOError
+      true
+    end
   end
 end
