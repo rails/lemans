@@ -142,13 +142,7 @@ module Lemans
     end
 
     def summarize(results)
-      scored = results.count { _1.dig(:outcome, :scored) }
-      {
-        total: results.size,
-        scored: scored,
-        invalid: results.size - scored,
-        solved: results.count { _1[:reward].to_f >= 1.0 }
-      }
+      Results::Tally.call(results.map { { scored: _1.dig(:outcome, :scored) == true, reward: _1[:reward] } })
     end
   end
 end

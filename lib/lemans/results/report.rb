@@ -54,14 +54,7 @@ module Lemans
       def empty? = rows.empty? && unreadable.zero?
 
       def summary
-        scored = rows.count { _1[:scored] }
-        {
-          total: rows.size,
-          scored: scored,
-          invalid: rows.size - scored,
-          solved: rows.count { _1[:reward].to_f >= 1.0 },
-          cost_usd: rows.sum { _1[:cost_usd].to_f }
-        }
+        Tally.call(rows).merge(cost_usd: rows.sum { _1[:cost_usd].to_f })
       end
 
       def to_rows
