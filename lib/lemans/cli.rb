@@ -71,7 +71,7 @@ module Lemans
         resume: options[:resume]
       )
       task_width = tasks.map { _1.name.length }.max
-      progress = Progress.new.start
+      progress = Progress.new(total: run.total).start
       summary = run.call do |event, data|
         progress.record(event) { announce(event, data, width: task_width) }
       end

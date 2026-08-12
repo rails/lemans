@@ -8,7 +8,8 @@ module Lemans
       FRAMES = %w[⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏].freeze
       REDRAW_SEC = 0.1
 
-      def initialize(out: $stderr)
+      def initialize(total:, out: $stderr)
+        @total = total
         @out = out
         @lock = Mutex.new
         @in_flight = 0
@@ -53,7 +54,7 @@ module Lemans
 
       def draw
         @frame += 1
-        @out.print "\r\e[2K#{FRAMES[@frame % FRAMES.size]} #{@done} done · #{@in_flight} in flight"
+        @out.print "\r\e[2K#{FRAMES[@frame % FRAMES.size]} #{@done}/#{@total} done · #{@in_flight} in flight"
       end
 
       def erase = @out.print("\r\e[2K")

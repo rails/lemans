@@ -23,6 +23,10 @@ module Lemans
       @backend = backend
     end
 
+    # How many attempts this run will actually schedule — resume already
+    # subtracted the retired ones.
+    def total = pending.size
+
     def call(&report)
       FileUtils.mkdir_p(@runs_dir)
       queue = Queue.new
