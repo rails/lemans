@@ -33,7 +33,11 @@ class OracleTest < Minitest::Test
   end
 
   FakeTask = Struct.new(:name, :solution_context, :bench) do
-    def solution? = solution_context.directory?
+    def solution_files
+      solution_context.glob("**/*").select(&:file?).map { [_1, _1.relative_path_from(solution_context).to_s] }
+    end
+
+    def solution? = solution_files.any?
   end
 
   private

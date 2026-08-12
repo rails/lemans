@@ -48,10 +48,8 @@ module Lemans
     def upload_tests(environment)
       environment.exec!("rm -rf #{Shellwords.escape(TESTS_DIR)} && mkdir -p #{Shellwords.escape(TESTS_DIR)}",
                         timeout_sec: 60)
-      task.tests_dir.glob("**/*").each do |entry|
-        next unless entry.file?
-
-        environment.upload(entry, "#{TESTS_DIR}/#{entry.relative_path_from(task.tests_dir)}")
+      task.test_files.each do |local, remote|
+        environment.upload(local, "#{TESTS_DIR}/#{remote}")
       end
     end
 
