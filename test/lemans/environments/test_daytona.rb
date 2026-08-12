@@ -128,6 +128,21 @@ class DaytonaEnvironmentTest < Minitest::Test
     assert_equal 1, snapshots.calls
   end
 
+  # client.create succeeded, the session did not: without the rollback the
+  # sandbox would bill until its TTL, unreachable by the trial's ensure.
+  def test_a_sandbox_whose_start_fails_partway_is_deleted_not_leaked
+    sandbox = StillbornSandbox.new
+    client = FakeStartClient.new(FlakySnapshotService.new(failures: 0, snapshot: active_snapshot), sandbox)
+    environment = environment_for(reference_image)
+
+    error = Lemans::Environments::Daytona.stub(:client, client) do
+      assert_raises(Lemans::InfrastructureError) { environment.start }
+    end
+
+    assert_match(/could not start sandbox/, error.message)
+    assert sandbox.deleted
+  end
+
   def test_it_says_both_names_it_accepts_when_there_are_no_credentials
     config = FakeDaytonaConfig.new
 
@@ -181,6 +196,25 @@ class DaytonaEnvironmentTest < Minitest::Test
 
   FakeClient = Struct.new(:snapshot)
 
+  # create succeeds, the first session does not — the partial-start case.
+  class StillbornSandbox
+    attr_reader :deleted
+
+    def id = "sb-stillborn"
+
+    def process
+      @process ||= Object.new.tap do |process|
+        def process.create_session(_id) = raise ::Daytona::Sdk::Error, "the toolbox is down"
+      end
+    end
+
+    def delete(wait: false) = @deleted = true
+  end
+
+  FakeStartClient = Struct.new(:snapshot, :sandbox) do
+    def create(_params, on_snapshot_create_logs: nil) = sandbox
+  end
+
   class FakeDaytonaConfig
     attr_accessor :api_key, :jwt_token
 
@@ -192,6 +226,10 @@ class DaytonaEnvironmentTest < Minitest::Test
   def failed_snapshot
     @failed_snapshot ||= FailedSnapshot.new("poisoned", ::DaytonaApiClient::SnapshotState::BUILD_FAILED,
                                             "the registry blinked")
+  end
+
+  def active_snapshot
+    @active_snapshot ||= FailedSnapshot.new("ready", ::DaytonaApiClient::SnapshotState::ACTIVE, nil)
   end
 
   def reference_image

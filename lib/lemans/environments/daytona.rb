@@ -52,6 +52,9 @@ module Lemans
         @shell = Shell.new(sandbox)
         self
       rescue ::Daytona::Sdk::Error => e
+        # A sandbox created but never handed over would bill until its TTL:
+        # the caller's ensure can only stop an environment it received.
+        stop
         raise InfrastructureError, "daytona: could not start sandbox: #{e.message}"
       end
 
