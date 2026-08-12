@@ -92,6 +92,19 @@ class TrialTest < Minitest::Test
     end
   end
 
+  def test_a_harness_bug_is_recorded_as_a_crash_not_lost
+    with_trial do |trial, runs_dir|
+      exploding = ->(*, **) { raise "the harness tripped over itself" }
+      result = Lemans::Environments.stub(:build, exploding) { trial.run }
+
+      assert_equal :harness_crash, result[:outcome][:name]
+      refute result[:outcome][:scored]
+      assert_match(/RuntimeError: the harness tripped/, result[:outcome][:detail])
+      # The crash left evidence a report can find, not just a console line.
+      assert_path_exists runs_dir.join(trial.id, "result.json").to_s
+    end
+  end
+
   def test_an_unknown_agent_is_the_authors_bug_not_an_outcome
     with_trial(agent_name: "gpt-2") do |trial, _runs_dir|
       environment(sandbox) do

@@ -74,7 +74,7 @@ class RunTest < Minitest::Test
     end
   end
 
-  def test_a_crashed_trial_becomes_a_visible_invalid_line_not_a_silent_hole
+  def test_a_crashed_trial_becomes_a_visible_invalid_result_not_a_silent_hole
     Dir.mktmpdir do |runs_dir|
       lines = []
       exploding = ->(*, **) { raise "the harness tripped over itself" }
@@ -83,7 +83,26 @@ class RunTest < Minitest::Test
       end
 
       assert_equal({ total: 1, scored: 0, invalid: 1, solved: 0 }, summary)
-      assert(lines.any? { _1.include?("crashed") })
+      assert(lines.any? { _1.include?("harness_crash") })
+      # The crash is on disk where `lemans report` can see it.
+      outcomes = Pathname(runs_dir).glob("*/result.json").map { JSON.parse(_1.read).dig("outcome", "name") }
+
+      assert_equal ["harness_crash"], outcomes
+    end
+  end
+
+  def test_a_config_error_aborts_the_wave_instead_of_burning_the_grid
+    Dir.mktmpdir do |runs_dir|
+      bench = load_bench
+      run = Lemans::Run.new(bench: bench, tasks: [load_task(bench)], agent_name: "bogus",
+                            runs_dir: runs_dir, backend: "daytona", concurrency: 1, attempts: 3)
+
+      assert_raises(Lemans::ConfigError) do
+        Lemans::Environments.stub(:build, ->(*, **) { FakeEnvironment.new }) { run.call }
+      end
+
+      # Nothing was recorded: the author's bug is not a measurement.
+      assert_empty Pathname(runs_dir).glob("*/result.json")
     end
   end
 end

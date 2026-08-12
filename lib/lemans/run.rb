@@ -30,14 +30,9 @@ module Lemans
       @concurrency.times { queue << :done }
 
       results = Concurrent::Array.new
-      workers = Array.new(@concurrency) do
-        Thread.new do
-          while (attempt = queue.pop) != :done
-            results << run_attempt(attempt, &report)
-          end
-        end
-      end
+      workers = Array.new(@concurrency) { Thread.new { drain(queue, results, &report) } }
       workers.each(&:join)
+      raise @config_error if @config_error
 
       summarize(results)
     end
@@ -82,6 +77,22 @@ module Lemans
       false
     end
 
+    # One worker: pull attempts until the sentinel. A ConfigError poisons every
+    # attempt the same way, so it stops the scheduling of new trials, lets the
+    # ones in flight finish, and surfaces after the join. Anything else Trial
+    # already recorded as a harness_crash result.
+    def drain(queue, results, &)
+      while (attempt = queue.pop) != :done
+        begin
+          results << run_attempt(attempt, &)
+        rescue ConfigError => e
+          @config_error ||= e
+          queue.clear
+          @concurrency.times { queue << :done }
+        end
+      end
+    end
+
     def run_attempt(attempt)
       trial = Trial.new(
         task: attempt.task,
@@ -99,11 +110,6 @@ module Lemans
               "reward=#{result[:reward].inspect} #{result[:duration_sec]}s"
       end
       result
-    rescue StandardError => e
-      # A thread that dies silently would leave a wave looking complete when it
-      # is not, so the failure becomes a visible line and a counted trial.
-      yield "  #{attempt.task.name}: crashed — #{e.class}: #{e.message}" if block_given?
-      { task: attempt.task.name, outcome: { name: :harness_crash, scored: false }, reward: nil }
     end
 
     def summarize(results)

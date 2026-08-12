@@ -59,9 +59,15 @@ module Lemans
       rescue *OUTCOME_FOR_ERROR.keys => e
         outcome = Results::Outcome.new(outcome_for(e), detail: e.message)
       rescue InfrastructureError => e
-        # A ConfigError deliberately does not land here: a malformed corpus is
-        # the author's bug to fix, not a trial outcome to record.
         outcome = Results::Outcome.new(@agent_phase ? :agent_error : :environment_error, detail: e.message)
+      rescue ConfigError
+        # A malformed corpus is the author's bug to fix, not a trial outcome
+        # to record: it aborts the wave instead of burning the grid.
+        raise
+      rescue StandardError => e
+        # A harness bug must leave evidence: without a result.json the crash
+        # would be invisible to `lemans report`.
+        outcome = Results::Outcome.new(:harness_crash, detail: "#{e.class}: #{e.message}")
       ensure
         environment&.stop
       end
