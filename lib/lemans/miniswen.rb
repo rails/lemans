@@ -4,7 +4,10 @@ require "concurrent"
 require "json"
 require "ruby_llm"
 
-RubyLLM.configure { _1.logger = Logger.new(IO::NULL) } unless ENV["DEBUG_RUBYLLM"] == "1"
+RubyLLM.configure do |config|
+  config.log_level = ENV.fetch("RUBYLLM_LOG_LEVEL", "info").to_sym
+  config.logger = Logger.new(IO::NULL) unless ENV["DEBUG_RUBYLLM"] == "1"
+end
 
 module Lemans
   # A Ruby port of mini-swe-agent's loop (mini.yaml at commit a83fcae): ask the
