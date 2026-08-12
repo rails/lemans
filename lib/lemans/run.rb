@@ -60,7 +60,10 @@ module Lemans
     end
 
     # An attempt only counts against this wave if it measured the same thing:
-    # same agent, same model, and actually scored.
+    # same agent, same model, same profile and task bytes, and actually
+    # scored. Without the digests, editing bench.yml and resuming would let
+    # old-profile trials satisfy the new wave — "nothing changed" as an
+    # assumption instead of evidence.
     def completed_attempts(task, model)
       @runs_dir.glob("*/result.json").count { same_wave?(_1, task, model) }
     end
@@ -71,6 +74,8 @@ module Lemans
       result[:task] == task.name &&
         result[:agent] == @agent_name &&
         result[:model] == (model || @bench.agent.model) &&
+        result[:profile_digest] == @bench.digest &&
+        result[:task_digest] == task.digest &&
         result.dig(:outcome, :scored) == true
     rescue JSON::ParserError, SystemCallError, IOError
       # A truncated or vanished result is not an attempt anyone can count.

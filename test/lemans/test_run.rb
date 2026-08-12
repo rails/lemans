@@ -14,11 +14,14 @@ class RunTest < Minitest::Test
                     runs_dir: runs_dir, backend: "daytona", concurrency: 1, **)
   end
 
-  def retire(runs_dir, scored:, agent: "oracle")
+  def retire(runs_dir, scored:, agent: "oracle", profile_digest: nil, task_digest: nil)
+    bench = load_bench
     dir = File.join(runs_dir, "hello-world__#{scored ? "done" : "bad"}")
     FileUtils.mkdir_p(dir)
     File.write(File.join(dir, "result.json"), JSON.generate(
                                                 task: "hello-world", agent: agent, model: "openrouter/z-ai/glm-5.2",
+                                                profile_digest: profile_digest || bench.digest,
+                                                task_digest: task_digest || load_task(bench).digest,
                                                 outcome: { name: "completed", scored: scored }
                                               ))
   end
@@ -30,6 +33,24 @@ class RunTest < Minitest::Test
       summary = build_run(runs_dir, resume: true, attempts: 1).call
 
       assert_equal 0, summary[:total]
+    end
+  end
+
+  # Every result records what it measured; resume must consult it, or editing
+  # bench.yml and resuming lets old-profile trials satisfy the new wave.
+  def test_resume_does_not_count_a_trial_from_another_profile_or_task_version
+    Dir.mktmpdir do |runs_dir|
+      retire(runs_dir, scored: true, profile_digest: "0ld-pr0f1le-d1gest")
+
+      fake = FakeEnvironment.new(on_command: lambda { |files|
+        files["/logs/verifier/reward.txt"] = "1"
+        files["/logs/verifier/checks.txt"] = "ran"
+      })
+      summary = Lemans::Environments.stub(:build, ->(*, **) { fake }) do
+        build_run(runs_dir, resume: true, attempts: 1).call
+      end
+
+      assert_equal 1, summary[:total]
     end
   end
 
