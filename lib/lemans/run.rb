@@ -35,6 +35,20 @@ module Lemans
       raise @config_error if @config_error
 
       summarize(results)
+    rescue Interrupt
+      queue&.clear
+      # clear ate the sentinels too. A worker the raise below cannot reach —
+      # blocked in an FFI call — finishes its trial, returns to the queue,
+      # and must still find one, or the graceful first ^C never completes.
+      @concurrency.times { queue << :done } if queue
+      workers = Array(workers).select(&:alive?)
+      report&.call(:interrupted, { in_flight: workers.size })
+      workers.each { _1.raise(Interrupt) }.each do |worker|
+        worker.join
+      rescue Interrupt
+        nil
+      end
+      summarize(results || []).merge(interrupted: true)
     end
 
     private
@@ -87,6 +101,8 @@ module Lemans
     # ones in flight finish, and surfaces after the join. Anything else Trial
     # already recorded as a harness_crash result.
     def drain(queue, results, &)
+      # The TUI owns failure output; a dying worker must not spray stderr.
+      Thread.current.report_on_exception = false
       while (attempt = queue.pop) != :done
         begin
           results << run_attempt(attempt, &)
@@ -107,12 +123,20 @@ module Lemans
         backend: @backend,
         runs_dir: @runs_dir
       )
-      yield "→ #{attempt.task.name} attempt #{attempt.index}/#{@attempts} #{trial.id}" if block_given?
+
+      if block_given?
+        yield :started, { task: attempt.task.name, index: attempt.index, attempts: @attempts, trial: trial.id }
+      end
 
       result = trial.run
       if block_given?
-        yield "  #{attempt.task.name}: #{result[:outcome][:name]} " \
-              "reward=#{result[:reward].inspect} #{result[:duration_sec]}s"
+        yield :finished, {
+          task: attempt.task.name,
+          outcome: result[:outcome][:name],
+          scored: result[:outcome][:scored],
+          reward: result[:reward],
+          duration_sec: result[:duration_sec]
+        }
       end
       result
     end

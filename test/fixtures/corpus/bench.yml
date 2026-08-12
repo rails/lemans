@@ -22,7 +22,7 @@ environment:
       - files.pythonhosted.org
 
 agent:
-  name: mini-swe-agent
+  name: miniswen
   version: "2.4.6"
   model: openrouter/z-ai/glm-5.2
   timeout: 30m

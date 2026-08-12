@@ -2,6 +2,7 @@
 
 require "test_helper"
 require "json"
+require "timeout"
 require "tmpdir"
 require "yaml"
 
@@ -95,17 +96,67 @@ class RunTest < Minitest::Test
     end
   end
 
+  def test_an_interrupt_drops_the_queue_and_still_returns_a_summary
+    Dir.mktmpdir do |runs_dir|
+      events = []
+      summary = build_run(runs_dir, attempts: 3).call do |event, _data|
+        events << event
+        raise Interrupt if event == :started
+      end
+
+      assert summary[:interrupted]
+      assert_includes events, :interrupted
+      assert_equal 0, summary[:total]
+    end
+  end
+
+  # A worker deep in an FFI call cannot receive the raised Interrupt; it
+  # finishes its trial and returns to the queue — which must still hold a
+  # sentinel, or the graceful first ^C never completes.
+  def test_a_worker_that_survives_the_interrupt_still_gets_to_exit
+    Dir.mktmpdir do |runs_dir|
+      unraisable = FakeEnvironment.new(on_command: lambda { |files|
+        begin
+          sleep 0.4
+        rescue Interrupt
+          nil # the FFI window: the raise lands, the call carries on
+        end
+        files["/logs/verifier/reward.txt"] = "1"
+        files["/logs/verifier/checks.txt"] = "ran"
+      })
+
+      interrupted_once = false
+      summary = Timeout.timeout(10) do
+        Lemans::Environments.stub(:build, ->(*, **) { unraisable }) do
+          build_run(runs_dir, attempts: 2, concurrency: 2).call do |event, _data|
+            if event == :started && !interrupted_once
+              interrupted_once = true
+              raise Interrupt
+            end
+          end
+        end
+      end
+
+      assert summary[:interrupted]
+    end
+  end
+
+  # A crash is not its own event: Trial records it as a harness_crash result,
+  # so it arrives as a normal :finished with an invalid outcome — and on disk
+  # where `lemans report` can see it.
   def test_a_crashed_trial_becomes_a_visible_invalid_result_not_a_silent_hole
     Dir.mktmpdir do |runs_dir|
-      lines = []
+      events = []
       exploding = ->(*, **) { raise "the harness tripped over itself" }
       summary = Lemans::Environments.stub(:build, exploding) do
-        build_run(runs_dir, attempts: 1).call { lines << _1 }
+        build_run(runs_dir, attempts: 1).call { |event, data| events << [event, data] }
       end
 
       assert_equal({ total: 1, scored: 0, invalid: 1, solved: 0 }, summary)
-      assert(lines.any? { _1.include?("harness_crash") })
-      # The crash is on disk where `lemans report` can see it.
+      finished = events.find { |event, _| event == :finished }
+
+      refute_nil finished
+      assert_equal :harness_crash, finished.last[:outcome]
       outcomes = Pathname(runs_dir).glob("*/result.json").map { JSON.parse(_1.read).dig("outcome", "name") }
 
       assert_equal ["harness_crash"], outcomes
