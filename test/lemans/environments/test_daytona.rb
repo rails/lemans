@@ -84,6 +84,36 @@ class DaytonaEnvironmentTest < Minitest::Test
     assert_raises(Lemans::ConfigError) { environment.send(:network_kwargs, policy) }
   end
 
+  # timeout = 0 is libcurl's "no timeout": one silently dropped connection
+  # would park a worker thread forever, unkillable even by Thread#kill.
+  def test_every_generated_client_gets_a_real_http_deadline
+    [::DaytonaApiClient, ::DaytonaToolboxApiClient, ::DaytonaAnalyticsApiClient].each do |client_mod|
+      assert_equal Lemans::Environments::Daytona::HTTP_TIMEOUT_SEC, client_mod::Configuration.new.timeout
+    end
+    assert_operator Lemans::Environments::Daytona::HTTP_TIMEOUT_SEC, :>,
+                    Lemans::Environments::Daytona::SHORT_COMMAND_SEC
+  end
+
+  def test_a_snapshot_lookup_survives_a_dropped_connection
+    snapshots = FlakySnapshotService.new(failures: 2, snapshot: failed_snapshot)
+    environment = quiet(environment_for(Lemans::Corpus::Task::ImageSpec.registry("ghcr.io/lemans/reference:1")))
+
+    found = with_client(snapshots) { environment.send(:find_snapshot, "any") }
+
+    assert_equal failed_snapshot, found
+    assert_equal 3, snapshots.calls
+  end
+
+  def test_a_snapshot_lookup_does_not_retry_a_missing_snapshot
+    snapshots = FlakySnapshotService.new(failures: 5, snapshot: failed_snapshot, status_code: 404)
+    environment = quiet(environment_for(Lemans::Corpus::Task::ImageSpec.registry("ghcr.io/lemans/reference:1")))
+
+    found = with_client(snapshots) { environment.send(:find_snapshot, "any") }
+
+    assert_nil found
+    assert_equal 1, snapshots.calls
+  end
+
   def test_it_says_both_names_it_accepts_when_there_are_no_credentials
     config = FakeDaytonaConfig.new
 
@@ -116,6 +146,25 @@ class DaytonaEnvironmentTest < Minitest::Test
     def create(params, on_logs: nil) = @created << params
   end
 
+  # A connection that drops N times before the service answers.
+  class FlakySnapshotService
+    attr_reader :calls
+
+    def initialize(failures:, snapshot:, status_code: nil)
+      @failures = failures
+      @snapshot = snapshot
+      @status_code = status_code
+      @calls = 0
+    end
+
+    def get(_name)
+      @calls += 1
+      raise ::Daytona::Sdk::Error.new("Connection timed out", status_code: @status_code) if @calls <= @failures
+
+      @snapshot
+    end
+  end
+
   FakeClient = Struct.new(:snapshot)
 
   class FakeDaytonaConfig
@@ -133,6 +182,12 @@ class DaytonaEnvironmentTest < Minitest::Test
 
   def with_client(snapshots, &)
     Lemans::Environments::Daytona.stub(:client, FakeClient.new(snapshots), &)
+  end
+
+  # Retries back off for real; the test should not.
+  def quiet(environment)
+    def environment.sleep(_seconds) = nil
+    environment
   end
 
   def snapshot_name_for(image, resources: resources_with)

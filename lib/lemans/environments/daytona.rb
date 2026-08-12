@@ -29,6 +29,24 @@ module Lemans
       MAX_OUTPUT_BYTES = 200_000
       TTL_MINUTES = 120
 
+      # The generated clients ship with `timeout = 0` — libcurl's "no timeout"
+      # — so a silently dropped connection blocks its thread forever, and the
+      # FFI call has no unblock function, so not even Thread#kill reclaims it.
+      # The Python SDK sends a per-request `timeout + 5`; these clients have no
+      # per-request knob, so one deadline covers every call, sized to clear the
+      # longest single request — an exec long-polling for SHORT_COMMAND_SEC.
+      # Build-log streaming is unaffected: it bypasses these clients.
+      HTTP_TIMEOUT_SEC = SHORT_COMMAND_SEC + 30
+
+      [DaytonaApiClient, DaytonaToolboxApiClient, DaytonaAnalyticsApiClient].each do |client_mod|
+        client_mod::Configuration.define_method(:timeout) { HTTP_TIMEOUT_SEC }
+      end
+
+      # Reads whose repeat is free get more tries after a dropped connection;
+      # anything that mutates gets none — the mutation may have landed
+      # server-side before the failure surfaced.
+      READ_ATTEMPTS = 3
+
       # Only reached when a caller builds an environment without a profile.
       # Waiting forever on a wedged build is the one thing that must not happen.
       DEFAULT_BUILD_TIMEOUT_SEC = 600
@@ -189,7 +207,7 @@ module Lemans
       end
 
       def find_snapshot(name)
-        client.snapshot.get(name)
+        with_read_retries { client.snapshot.get(name) }
       rescue *SDK_ERRORS => e
         return nil if status_code(e) == 404
 
@@ -333,7 +351,7 @@ module Lemans
       def await_status(status_file, timeout_sec)
         deadline = now + timeout_sec
         loop do
-          status = exec_directly("cat #{status_file} 2>/dev/null", timeout_sec: 30, env: {})
+          status = with_read_retries { exec_directly("cat #{status_file} 2>/dev/null", timeout_sec: 30, env: {}) }
           value = status[:output].to_s.strip
           return Integer(value) if value.match?(/\A\d+\z/)
           return nil if now > deadline
@@ -343,7 +361,22 @@ module Lemans
       end
 
       def tail(log_file, bytes: MAX_OUTPUT_BYTES)
-        exec_directly("tail -c #{bytes} #{log_file} 2>/dev/null", timeout_sec: 60, env: {})[:output].to_s
+        with_read_retries do
+          exec_directly("tail -c #{bytes} #{log_file} 2>/dev/null", timeout_sec: 60, env: {})
+        end[:output].to_s
+      end
+
+      def with_read_retries
+        attempts = 0
+        begin
+          yield
+        rescue *SDK_ERRORS => e
+          attempts += 1
+          raise if status_code(e) == 404 || attempts >= READ_ATTEMPTS
+
+          sleep POLL_INTERVAL_SEC
+          retry
+        end
       end
 
       def network_kwargs(policy, for_update: false)
