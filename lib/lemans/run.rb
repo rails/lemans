@@ -19,7 +19,7 @@ module Lemans
       @attempts = attempts
       @concurrency = concurrency
       @resume = resume
-      @model = model
+      @model = Array(model)
       @backend = backend
     end
 
@@ -62,7 +62,7 @@ module Lemans
     end
 
     def models
-      return [@model] if @model
+      return @model if @model.any?
       return [nil] if @bench.agent.models.empty?
 
       @bench.agent.models

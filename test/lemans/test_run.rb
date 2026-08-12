@@ -72,6 +72,27 @@ class RunTest < Minitest::Test
     end
   end
 
+  # `--model a b` on the CLI sweeps without editing bench.yml.
+  def test_a_model_override_list_sweeps_like_a_bench_list
+    Dir.mktmpdir do |runs_dir|
+      fakes = Array.new(2) do
+        FakeEnvironment.new(on_command: lambda { |files|
+          files["/logs/verifier/reward.txt"] = "1"
+          files["/logs/verifier/checks.txt"] = "ran"
+        })
+      end
+      summary = Lemans::Environments.stub(:build, ->(*, **) { fakes.shift }) do
+        build_run(runs_dir, attempts: 1, model: %w[model-a model-b]).call
+      end
+
+      assert_equal 2, summary[:total]
+
+      models = Pathname(runs_dir).glob("*/result.json").map { JSON.parse(_1.read)["model"] }
+
+      assert_equal %w[model-a model-b], models.sort
+    end
+  end
+
   def test_a_model_list_runs_the_whole_grid_once_per_model
     Dir.mktmpdir do |runs_dir|
       config = YAML.safe_load_file(BenchFixture::ROOT.join("bench.yml"), aliases: true)
