@@ -7,9 +7,10 @@ require "tmpdir"
 
 class ReportTest < Minitest::Test
   def write_result(runs_dir, trial:, task: "hello-world", agent: "miniswen", reward: 1.0,
-                   outcome: "completed", scored: true, cost: 0.0001, detail: nil)
+                   outcome: "completed", scored: true, cost: 0.0001, detail: nil,
+                   model: "openrouter/deepseek/deepseek-v4-flash")
     result = {
-      trial: trial, task: task, agent: agent, model: "openrouter/deepseek/deepseek-v4-flash",
+      trial: trial, task: task, agent: agent, model: model,
       reward: reward, outcome: { name: outcome, scored: scored, detail: detail }.compact,
       usage: { cost_usd: cost, steps: 2 }, duration_sec: 9.8,
       started_at: "2026-08-11T10:0#{trial.length % 10}:00Z"
@@ -42,7 +43,27 @@ class ReportTest < Minitest::Test
       assert_includes invalid, "environment_error"
       # A missing reward reads as absent, not as zero.
       assert_equal "-", invalid[rows.first.index("reward")]
-      assert_includes report.summary_line, "3 trials: 2 scored, 1 invalid, 1 solved"
+      assert_includes report.summary_lines.join("\n"), "3 trials: 2 scored, 1 invalid, 1 solved (50%)"
+    end
+  end
+
+  def test_a_sweep_groups_the_summary_per_model_with_short_names
+    Dir.mktmpdir do |runs_dir|
+      write_result(runs_dir, trial: "a__1", model: "openrouter/openai/gpt-5.6-luna", reward: 1.0)
+      write_result(runs_dir, trial: "a__2", model: "openrouter/openai/gpt-5.6-luna", reward: 0.0)
+      write_result(runs_dir, trial: "a__3", model: "openrouter/z-ai/glm-5.2", reward: 1.0)
+
+      report = Lemans::Results::Report.load(runs_dir)
+      lines = report.summary_lines
+
+      assert_equal 3, lines.size
+      assert(lines[0..1].any? { _1.start_with?("gpt-5.6-luna") && _1.include?("1 solved (50%)") })
+      assert(lines[0..1].any? { _1.start_with?("glm-5.2") && _1.include?("1 solved (100%)") })
+      assert lines.last.start_with?("total")
+      assert_includes lines.last, "2 solved (67%)"
+      # The table shows the short name; the CSV keeps the full provenance.
+      assert_includes report.to_rows.flatten, "gpt-5.6-luna"
+      assert_includes report.to_csv, "openrouter/openai/gpt-5.6-luna"
     end
   end
 
@@ -67,7 +88,7 @@ class ReportTest < Minitest::Test
 
       assert_equal 3, report.rows.size
       assert_equal 1, report.unreadable
-      assert_includes report.summary_line, "1 unreadable result(s) skipped"
+      assert_includes report.summary_lines.join("\n"), "1 unreadable result(s) skipped"
     end
   end
 

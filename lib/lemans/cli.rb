@@ -148,7 +148,8 @@ module Lemans
 
     def print_report(report)
       print_table report.to_rows
-      say report.summary_line, (report.summary[:invalid].positive? ? :red : nil)
+      color = report.summary[:invalid].positive? ? :red : nil
+      report.summary_lines.each { say _1, color }
     end
   end
 end
