@@ -9,7 +9,6 @@ module Lemans
   # One task, one agent, one reward. Only what happens inside the agent phase
   # is a statement about the model; everything else is the harness's fault.
   class Trial
-    # The exception class decides which phase a failure is filed against.
     OUTCOME_FOR_ERROR = {
       VerifierError => :verifier_error,
       AccountingError => :accounting_error
@@ -136,12 +135,8 @@ module Lemans
         reward: outcome.scored? ? reward : nil,
         outcome: outcome.to_h,
         usage: usage&.to_h,
-        # What produced this number. Two rewards are only comparable if all
-        # four agree, and "nothing changed" is not evidence.
         lemans_version: VERSION,
         profile_digest: bench.digest,
-        # What the profile put in the sandbox, file by file — a suspected
-        # verifier-script change can be settled from the results alone.
         profile_files: bench.file_digests,
         task_digest: task.digest,
         bench: bench.revision.to_h,

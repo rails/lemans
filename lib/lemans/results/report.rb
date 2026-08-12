@@ -66,8 +66,6 @@ module Lemans
           end
       end
 
-      # One line per model when the directory holds a sweep, then the total;
-      # a single model gets just its own line.
       def summary_lines
         per_model = rows.group_by { short_model(_1[:model]) }
         lines =
@@ -91,8 +89,7 @@ module Lemans
 
       private
 
-      # The rank is solved out of scored — invalid trials measured nothing,
-      # so they weigh on their own count, not on the rate.
+      # The rank divides solved by scored, not total: invalid trials measured nothing.
       def stats(group)
         totals = Tally.call(group).merge(cost_usd: group.sum { _1[:cost_usd].to_f })
         rank = totals[:scored].positive? ? " (#{(100.0 * totals[:solved] / totals[:scored]).round}%)" : ""
@@ -100,8 +97,6 @@ module Lemans
           "#{totals[:solved]} solved#{rank} · $#{format("%.4f", totals[:cost_usd])}"
       end
 
-      # "openrouter/openai/gpt-5.6-luna" reads as its last segment on a
-      # terminal; the CSV keeps the full name.
       def short_model(model) = model.to_s.split("/").last
 
       def display(value)

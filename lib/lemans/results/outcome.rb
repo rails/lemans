@@ -24,8 +24,6 @@ module Lemans
         define_method(:"#{outcome}?") { name == outcome }
       end
 
-      # A scored trial's reward is a measurement. An invalid trial's is not, and
-      # must be excluded from accuracy rather than counted as a failure.
       def scored? = SCORED.include?(name)
 
       def invalid? = !scored?

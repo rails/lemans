@@ -6,29 +6,19 @@ require "logger"
 module Lemans
   module Environments
     class Daytona
-      # Every repair the Daytona SDK needs to be usable from a harness, in one
-      # place, so a fixed SDK deletes a file instead of starting a scavenger
-      # hunt. Upstream ask: per-request timeouts like the Python SDK's
-      # `_request_timeout` — tracked in tmp/upstream-daytona-sdk-timeouts.md.
+      # Repairs the Daytona SDK needs to be usable from a harness. Upstream ask: per-request
+      # timeouts like the Python SDK's — tracked in tmp/upstream-daytona-sdk-timeouts.md.
       module SdkTweaks
         GENERATED_CLIENTS = [
           ::DaytonaApiClient, ::DaytonaToolboxApiClient, ::DaytonaAnalyticsApiClient
         ].freeze
 
-        # Sized to clear the longest request lemans makes: an exec
-        # long-polling server-side for SHORT_COMMAND_SEC, with the margin the
-        # Python SDK uses (`timeout + 5`, generously). Known casualties, both
-        # fine today: fs.upload_file/download_file share this cap (our files
-        # are scripts and logs — revisit for benches with big artifacts), and
-        # an exec with no timeout_sec is no longer unbounded.
+        # Must clear the longest request: an exec long-polling server-side for SHORT_COMMAND_SEC.
+        # Also caps fs uploads/downloads and execs with no timeout_sec — fine for scripts and logs.
         HTTP_TIMEOUT_SEC = Shell::SHORT_COMMAND_SEC + 30
 
-        # The generated clients default to `timeout = 0` — libcurl's "never
-        # time out" — so a silently dropped connection parks its thread
-        # forever, and the FFI call has no unblock function, so not even
-        # Thread#kill reclaims it. Only that 0 is replaced; a deliberately
-        # configured deadline wins. Log streaming is unaffected: it rides
-        # Net::HTTP, not these clients.
+        # The clients default to timeout=0, libcurl's "never time out"; a dropped connection then
+        # parks a thread no Thread#kill reclaims. Only that 0 is replaced; explicit config wins.
         module Deadline
           def timeout
             value = super
@@ -36,9 +26,8 @@ module Lemans
           end
         end
 
-        # `DaytonaApiWhatever.configure` is broken — it configures a default
-        # config the SDK never reads — and `Sdk.logger` memoizes with
-        # `@logger ||=` and has no writer, so both are silenced by hand.
+        # `.configure` is broken — it sets a default config the SDK never reads — and `Sdk.logger`
+        # memoizes with no writer, so both are silenced by hand.
         module Quiet
           NULL_LOGGER = Logger.new(IO::NULL)
 

@@ -37,9 +37,8 @@ module Lemans
       summarize(results)
     rescue Interrupt
       queue&.clear
-      # clear ate the sentinels too. A worker the raise below cannot reach —
-      # blocked in an FFI call — finishes its trial, returns to the queue,
-      # and must still find one, or the graceful first ^C never completes.
+      # clear ate the sentinels too: a worker the raise below cannot reach (blocked in FFI) returns
+      # to the queue and must still find one, or the graceful first ^C never completes.
       @concurrency.times { queue << :done } if queue
       workers = Array(workers).select(&:alive?)
       report&.call(:interrupted, { in_flight: workers.size })
@@ -53,8 +52,6 @@ module Lemans
 
     private
 
-    # Resume works off results already on disk rather than a separate ledger:
-    # the result file is the only record that survives a killed process anyway.
     def pending
       models.flat_map do |model|
         @tasks.flat_map do |task|
@@ -64,8 +61,6 @@ module Lemans
       end
     end
 
-    # Several models in bench.yml turn the run into a sweep: the whole
-    # task × attempt grid runs once per model. --model overrides the sweep.
     def models
       return [@model] if @model
       return [nil] if @bench.agent.models.empty?
@@ -73,11 +68,8 @@ module Lemans
       @bench.agent.models
     end
 
-    # An attempt only counts against this run if it measured the same thing:
-    # same agent, same model, same profile and task bytes, and actually
-    # scored. Without the digests, editing bench.yml and resuming would let
-    # old-profile trials satisfy the new run — "nothing changed" as an
-    # assumption instead of evidence.
+    # Counts only attempts that measured the same thing (agent, model, digests, scored) — otherwise
+    # editing bench.yml and resuming would let old-profile trials satisfy the new run.
     def completed_attempts(task, model)
       @runs_dir.glob("*/result.json").count { same_run?(_1, task, model) }
     end
@@ -92,14 +84,11 @@ module Lemans
         result[:task_digest] == task.digest &&
         result.dig(:outcome, :scored) == true
     rescue JSON::ParserError, SystemCallError, IOError
-      # A truncated or vanished result is not an attempt anyone can count.
       false
     end
 
-    # One worker: pull attempts until the sentinel. A ConfigError poisons every
-    # attempt the same way, so it stops the scheduling of new trials, lets the
-    # ones in flight finish, and surfaces after the join. Anything else Trial
-    # already recorded as a harness_crash result.
+    # A ConfigError poisons every attempt alike: stop scheduling, let in-flight trials finish,
+    # surface after the join. Anything else Trial already recorded as a harness_crash result.
     def drain(queue, results, &)
       # The TUI owns failure output; a dying worker must not spray stderr.
       Thread.current.report_on_exception = false

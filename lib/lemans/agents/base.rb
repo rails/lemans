@@ -7,8 +7,6 @@ module Lemans
     class Base
       Result = Data.define(:outcome, :usage, :trajectory)
 
-      # mini-swe-agent joins this list with the accounting layer: an adapter
-      # that cannot price its trials has no business being buildable.
       REGISTRY = {
         "nop" => "Nop",
         "oracle" => "Oracle",

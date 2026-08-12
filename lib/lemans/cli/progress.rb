@@ -2,10 +2,8 @@
 
 module Lemans
   class CLI < Thor
-    # The pulse under the streamed statuses: a spinner with live counts, so a
-    # long quiet image build reads as work, not a hang. It owns the terminal's
-    # last line — event output goes through #record so the two never collide.
-    # On a non-tty (CI, a pipe) it draws nothing and only relays the events.
+    # A spinner with live counts that owns the terminal's last line; event output goes through
+    # #record so the two never collide. On a non-tty it draws nothing and only relays events.
     class Progress
       FRAMES = %w[⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏].freeze
       REDRAW_SEC = 0.1
@@ -30,9 +28,8 @@ module Lemans
         self
       end
 
-      # Counts the event and prints its line while the spinner is off-screen:
-      # events arrive from worker threads, and two writers on one terminal
-      # line is how progress bars end up inside other people's words.
+      # Prints the event's line while the spinner is off-screen: events arrive from worker
+      # threads, and two writers on one terminal line collide.
       def record(event)
         @lock.synchronize do
           @in_flight += 1 if event == :started

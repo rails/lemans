@@ -38,8 +38,7 @@ module Lemans
       freeze
     end
 
-    # Backends allowlist domains and IP ranges through separate APIs, so the
-    # split happens here rather than in each of them.
+    # Backends allowlist domains and IP ranges through separate APIs; the split happens once here.
     def domains = hosts.reject { ip_target?(_1) }
 
     def ip_targets = hosts.select { ip_target?(_1) }

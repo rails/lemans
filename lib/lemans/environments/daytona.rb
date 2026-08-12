@@ -7,15 +7,11 @@ require "daytona"
 
 module Lemans
   module Environments
-    # Daytona sandboxes. Daytona builds images server-side and enforces the
-    # network policy itself; built images become content-named snapshots for
-    # reuse. This class is the Base contract and nothing else: snapshots live
-    # in SnapshotStore, command execution in Shell, SDK repairs in SdkTweaks.
+    # Daytona sandboxes. Daytona builds images server-side into reusable content-named
+    # snapshots and enforces the network policy itself.
     class Daytona < Base
       TTL_MINUTES = 120
 
-      # Only reached when a caller builds an environment without a profile.
-      # Waiting forever on a wedged build is the one thing that must not happen.
       DEFAULT_BUILD_TIMEOUT_SEC = 600
 
       SdkTweaks.apply!

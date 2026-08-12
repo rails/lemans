@@ -4,7 +4,6 @@ require "concurrent"
 require "json"
 require "ruby_llm"
 
-# Disable verbose logging
 RubyLLM.configure { _1.logger = Logger.new(IO::NULL) } unless ENV["DEBUG_RUBYLLM"] == "1"
 
 module Lemans
@@ -15,14 +14,12 @@ module Lemans
     MAX_OBSERVATION_CHARS = 10_000
     MAX_CONSECUTIVE_FORMAT_ERRORS = 3
 
-    # The bash tool exactly as mini-swe-agent defines it. Only ever rendered
-    # into the request — the completion executes nothing — so no execute body.
+    # Only ever rendered into the request — the completion executes nothing — so no execute body.
     class BashTool < RubyLLM::Tool
       description "Execute a bash command"
       param :command, desc: "The bash command to execute"
 
-      # ruby_llm would otherwise derive "lemans--miniswen--bash" from the
-      # full class path.
+      # ruby_llm would otherwise derive "lemans--miniswen--bash" from the class path.
       def name = "bash"
     end
 
@@ -31,8 +28,6 @@ module Lemans
     TRUNCATION_FINISH_REASONS = %w[length max_tokens].freeze
     CLAIMED_TOOL_FINISH_REASONS = %w[tool_calls tool_use].freeze
 
-    # mini.yaml's environment env: pagers and progress bars off, so output is
-    # plain text the model can read.
     EXEC_ENV = {
       "PAGER" => "cat",
       "MANPAGER" => "cat",
@@ -149,10 +144,8 @@ module Lemans
 
     NO_TOOL_CALLS_ERROR = "No tool calls found in the response. Every response MUST include at least one tool call."
 
-    # ruby_llm reads no API keys from ENV on its own; the conventional variable
-    # is the provider's config option upcased (openrouter_api_key →
-    # OPENROUTER_API_KEY). One write for a process-wide effect: concurrent
-    # trials must not take turns rewriting the same global configuration.
+    # ruby_llm reads no API keys from ENV on its own; the conventional variable is the provider's
+    # config option upcased. Delayed once: concurrent trials must not rewrite the global config.
     ENV_CONFIGURATION = Concurrent::Delay.new do
       RubyLLM.configure do |config|
         RubyLLM::Provider.providers.each_value do |provider|
@@ -190,8 +183,7 @@ module Lemans
 
     attr_reader :messages
 
-    # `model` is a litellm-style name ("openrouter/z-ai/glm-5.2"); cost comes
-    # from ruby_llm's registry, nil when unpriced. Limits of 0 or nil are disabled.
+    # `model` is a litellm-style name ("openrouter/z-ai/glm-5.2"). Limits of 0 or nil are disabled.
     def initialize(model:, environment:, step_limit: 0, time_limit_sec: 0, cost_limit_usd: nil,
                    exec_timeout_sec: 30, clock: -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) })
       raise ConfigError, "miniswen needs a model to drive" if model.nil? || model.to_s.empty?
@@ -224,7 +216,7 @@ module Lemans
         (status = limit_reached) and return finish(status)
 
         actions = next_actions
-        if actions.nil? # a format error was appended for the model to read
+        if actions.nil?
           return finish(:format_error) if @consecutive_format_errors >= MAX_CONSECUTIVE_FORMAT_ERRORS
 
           next
@@ -246,8 +238,6 @@ module Lemans
       @environment.exec(command, timeout_sec: @exec_timeout_sec, env: EXEC_ENV)
     end
 
-    # mini.yaml interpolates platform.uname() of the machine that executes
-    # commands; here that machine is the sandbox, so it is asked directly.
     def instance_message(instruction)
       uname = execute("uname -srvm").output.to_s.strip
       format(INSTANCE_TEMPLATE,
@@ -256,8 +246,7 @@ module Lemans
              macos_sed_note: uname.start_with?("Darwin") ? "\n#{MACOS_SED_NOTE}" : "")
     end
 
-    # Limits are checked before the model is asked, the way mini-swe-agent
-    # does it: the check keeps the next step from being paid for.
+    # Checked before the model is asked, so the tripping step is never paid for.
     def limit_reached
       return :step_limit if @step_limit.positive? && @steps >= @step_limit
       return :time_limit if @time_limit_sec.positive? && (@clock.call - @started_at) >= @time_limit_sec
@@ -275,8 +264,7 @@ module Lemans
       track_cost(response)
 
       entry = { role: "assistant", content: response[:content].to_s, metrics: metrics_from(response) }
-      # The model's reasoning, when the provider surfaces it. It rides along
-      # for the trajectory; the llm never sends it back.
+      # Thinking rides along for the trajectory only; it is never sent back to the model.
       entry[:thinking] = response[:thinking] if response[:thinking]
       @messages << entry
 
@@ -295,10 +283,8 @@ module Lemans
       tool_calls
     end
 
-    # An unpriced completion under a cost ceiling is fatal on the spot: the
-    # trial would end as accounting_error anyway, and only failing fast
-    # actually stops the spend. Without a ceiling, unknown cost is just a
-    # fact to report.
+    # An unpriced completion under a cost ceiling is fatal on the spot: only failing fast stops
+    # the spend. Without a ceiling, unknown cost is just a fact to report.
     def track_cost(response)
       cost = response[:cost_usd]
       if cost.nil?
@@ -313,8 +299,6 @@ module Lemans
       end
     end
 
-    # mini-swe-agent's parse_toolcall_actions: every call must be the bash
-    # tool with a command. Returns nil when all calls are runnable.
     def actions_error(tool_calls)
       return NO_TOOL_CALLS_ERROR if tool_calls.empty?
 
@@ -328,8 +312,6 @@ module Lemans
       nil
     end
 
-    # mini.yaml's format_error_template: a response cut off by the token
-    # limit gets told to be brief, anything else gets the tool-call guidance.
     def format_error_message(error, response, tool_calls)
       finish_reason = response[:finish_reason].to_s
       if TRUNCATION_FINISH_REASONS.include?(finish_reason) ||
@@ -350,8 +332,6 @@ module Lemans
       }
     end
 
-    # mini-swe-agent's convention: a successful command whose output leads with
-    # the marker is done, and everything after the marker line is the submission.
     def submitted?(result)
       result.exit_code.zero? && result.output.to_s.lstrip.lines.first&.strip == SUBMIT_MARKER
     end
@@ -370,8 +350,6 @@ module Lemans
       }
     end
 
-    # mini.yaml's observation_template: a JSON object the model reads back.
-    # Past 10k characters the model gets the head and tail, not all of it.
     def observation_content(exit_code, output)
       if output.length < MAX_OBSERVATION_CHARS
         <<~OBSERVATION.strip
@@ -394,7 +372,6 @@ module Lemans
       end
     end
 
-    # The trajectory's copy of the raw output, elided the same amount.
     def truncate(output)
       return output if output.length <= MAX_OBSERVATION_CHARS
 
@@ -409,11 +386,7 @@ module Lemans
       )
     end
 
-    # -- The model side: one completion per turn, spoken through ruby_llm. --
-    # Provider#complete, not Chat: Chat's job is the loop, which lives above.
-
-    # Returns the turn as a hash of content, tool calls, finish_reason, token
-    # counts and cost. The single seam tests stub to script a model.
+    # Provider#complete, not Chat: Chat runs its own loop, and the loop lives above.
     def complete(messages)
       model_info, provider = resolved
       response = provider.complete(

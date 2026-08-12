@@ -9,9 +9,7 @@ module Lemans
   module Environments
     class Daytona
       # Content-named snapshots: one build per image digest × resource shape,
-      # reused forever after. Owns lookup, build, activation and the discarding
-      # of poisoned builds, plus the locking that keeps two trials from
-      # building the same snapshot at once.
+      # reused forever after.
       class SnapshotStore
         include Retries
 
@@ -38,7 +36,6 @@ module Lemans
           @logger = logger
         end
 
-        # Returns the name of a ready snapshot, building one when none exists.
         def call
           self.class.lock(name).with_write_lock do
             existing = find(name)

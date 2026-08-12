@@ -70,8 +70,6 @@ module Lemans
         concurrency: Integer(options[:concurrency]),
         resume: options[:resume]
       )
-      # The tasks are known before the run starts, so the streaming progress
-      # lines can align into the columns the final table will have.
       task_width = tasks.map { _1.name.length }.max
       progress = Progress.new.start
       summary = run.call do |event, data|

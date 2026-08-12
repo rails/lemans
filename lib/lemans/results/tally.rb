@@ -2,9 +2,8 @@
 
 module Lemans
   module Results
-    # One definition of the numbers everyone quotes — how many trials, how
-    # many measured anything, how many solved — so the streaming summary and
-    # the report can never drift apart.
+    # One definition of the numbers everyone quotes — total, scored, invalid, solved — so the
+    # streaming summary and the report can never drift apart.
     module Tally
       def self.call(entries)
         scored = entries.count { _1[:scored] }

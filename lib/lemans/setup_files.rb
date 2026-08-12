@@ -6,8 +6,6 @@ module Lemans
   # The files a phase's setup steps consume. Paths are confined to the
   # directory that declared them and must exist at load time.
   module SetupFiles
-    # The phases files may be handed to, named after the bench.yml sections
-    # whose setup steps consume them.
     PHASES = %i[environment verifier].freeze
 
     def self.call(declared, root:, label:)

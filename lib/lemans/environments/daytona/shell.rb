@@ -7,11 +7,8 @@ require "shellwords"
 module Lemans
   module Environments
     class Daytona
-      # Runs one sandbox's commands. Short commands go straight through the
-      # toolbox API and finish inside the HTTP deadline; long ones run
-      # detached in a session and are polled, because a direct call would die
-      # at that deadline. Daytona reports no async exit code, so the command
-      # writes its own.
+      # Runs one sandbox's commands. Long commands run detached and are polled — a direct call
+      # would die at the HTTP deadline — and no async exit code exists, so the command writes its own.
       class Shell
         include Retries
 
