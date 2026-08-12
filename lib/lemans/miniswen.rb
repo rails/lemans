@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "concurrent"
 require "json"
 require "ruby_llm"
 
@@ -148,6 +149,22 @@ module Lemans
 
     NO_TOOL_CALLS_ERROR = "No tool calls found in the response. Every response MUST include at least one tool call."
 
+    # ruby_llm reads no API keys from ENV on its own; the conventional variable
+    # is the provider's config option upcased (openrouter_api_key →
+    # OPENROUTER_API_KEY). One write for a process-wide effect: concurrent
+    # trials must not take turns rewriting the same global configuration.
+    ENV_CONFIGURATION = Concurrent::Delay.new do
+      RubyLLM.configure do |config|
+        RubyLLM::Provider.providers.each_value do |provider|
+          provider.configuration_requirements.each do |option|
+            value = ENV.fetch(option.to_s.upcase, nil)
+            config.public_send(:"#{option}=", value) if value
+          end
+        end
+      end
+      true
+    end
+
     TRUNCATION_ERROR_MESSAGE = <<~MESSAGE
       Your previous response reached the output token limit (finish_reason=%<finish_reason>s) before you produced a tool call, so it was cut off. Respond more concisely and finish with exactly one bash tool call. If you need to think more, do so briefly.
     MESSAGE
@@ -179,7 +196,7 @@ module Lemans
                    exec_timeout_sec: 30, clock: -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) })
       raise ConfigError, "miniswen needs a model to drive" if model.nil? || model.to_s.empty?
 
-      configure_from_env
+      ENV_CONFIGURATION.value!
       @provider, @id = split(model.to_s)
       @model = model.to_s
       @bash_tool = BashTool.new
@@ -255,7 +272,7 @@ module Lemans
       response = complete(@messages)
       @steps += 1
       @totals.each_key { @totals[_1] += response[_1].to_i }
-      response[:cost_usd].nil? ? @cost_known = false : @cost_usd += response[:cost_usd]
+      track_cost(response)
 
       entry = { role: "assistant", content: response[:content].to_s, metrics: metrics_from(response) }
       # The model's reasoning, when the provider surfaces it. It rides along
@@ -276,6 +293,24 @@ module Lemans
       @consecutive_format_errors = 0
       entry[:tool_calls] = tool_calls
       tool_calls
+    end
+
+    # An unpriced completion under a cost ceiling is fatal on the spot: the
+    # trial would end as accounting_error anyway, and only failing fast
+    # actually stops the spend. Without a ceiling, unknown cost is just a
+    # fact to report.
+    def track_cost(response)
+      cost = response[:cost_usd]
+      if cost.nil?
+        if @cost_limit_usd
+          raise AccountingError,
+                "#{@model} returned an unpriced completion; cost_limit cannot be enforced"
+        end
+
+        @cost_known = false
+      else
+        @cost_usd += cost
+      end
     end
 
     # mini-swe-agent's parse_toolcall_actions: every call must be the bash
@@ -464,19 +499,6 @@ module Lemans
       body.dig("choices", 0, "finish_reason") || body["stop_reason"]
     rescue JSON::ParserError
       nil
-    end
-
-    # ruby_llm reads no API keys from ENV on its own; the conventional variable
-    # is the provider's config option upcased (openrouter_api_key → OPENROUTER_API_KEY).
-    def configure_from_env
-      RubyLLM.configure do |config|
-        RubyLLM::Provider.providers.each_value do |provider|
-          provider.configuration_requirements.each do |option|
-            value = ENV.fetch(option.to_s.upcase, nil)
-            config.public_send(:"#{option}=", value) if value
-          end
-        end
-      end
     end
 
     def split(model)

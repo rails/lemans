@@ -135,8 +135,6 @@ module Lemans
         detail = data[:scored] ? "reward=#{data[:reward].inspect}" : data[:outcome].to_s
         say_status STATUS_VERBS.fetch(data[:outcome].to_sym, data[:outcome]),
                    "#{task}  #{detail.ljust(12)}  #{data[:duration_sec]}s", finished_color(data)
-      when :crashed
-        say_status :error, "#{task}  crashed — #{data[:error]}", :red
       when :interrupted
         say_status :interrupt, "waiting for #{data[:in_flight]} in-flight trial(s), ^C again to abandon", :yellow
       end

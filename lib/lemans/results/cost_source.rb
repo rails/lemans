@@ -8,9 +8,6 @@ module Lemans
       # No model was called at all — the oracle and the no-op agent.
       def self.none = new(name: :none, model: nil, priced_as: nil, registry: nil)
 
-      # The agent's own accounting, believed because it reported real spending.
-      def self.agent(model) = new(name: :agent, model: model, priced_as: nil, registry: nil)
-
       def to_h = { name: name, model: model, priced_as: priced_as, registry: registry }.compact
     end
   end

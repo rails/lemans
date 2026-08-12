@@ -14,11 +14,14 @@ class RunTest < Minitest::Test
                     runs_dir: runs_dir, backend: "daytona", concurrency: 1, **)
   end
 
-  def retire(runs_dir, scored:, agent: "oracle")
+  def retire(runs_dir, scored:, agent: "oracle", profile_digest: nil, task_digest: nil)
+    bench = load_bench
     dir = File.join(runs_dir, "hello-world__#{scored ? "done" : "bad"}")
     FileUtils.mkdir_p(dir)
     File.write(File.join(dir, "result.json"), JSON.generate(
                                                 task: "hello-world", agent: agent, model: "openrouter/z-ai/glm-5.2",
+                                                profile_digest: profile_digest || bench.digest,
+                                                task_digest: task_digest || load_task(bench).digest,
                                                 outcome: { name: "completed", scored: scored }
                                               ))
   end
@@ -30,6 +33,24 @@ class RunTest < Minitest::Test
       summary = build_run(runs_dir, resume: true, attempts: 1).call
 
       assert_equal 0, summary[:total]
+    end
+  end
+
+  # Every result records what it measured; resume must consult it, or editing
+  # bench.yml and resuming lets old-profile trials satisfy the new wave.
+  def test_resume_does_not_count_a_trial_from_another_profile_or_task_version
+    Dir.mktmpdir do |runs_dir|
+      retire(runs_dir, scored: true, profile_digest: "0ld-pr0f1le-d1gest")
+
+      fake = FakeEnvironment.new(on_command: lambda { |files|
+        files["/logs/verifier/reward.txt"] = "1"
+        files["/logs/verifier/checks.txt"] = "ran"
+      })
+      summary = Lemans::Environments.stub(:build, ->(*, **) { fake }) do
+        build_run(runs_dir, resume: true, attempts: 1).call
+      end
+
+      assert_equal 1, summary[:total]
     end
   end
 
@@ -88,7 +109,10 @@ class RunTest < Minitest::Test
     end
   end
 
-  def test_a_crashed_trial_becomes_a_visible_invalid_line_not_a_silent_hole
+  # A crash is not its own event: Trial records it as a harness_crash result,
+  # so it arrives as a normal :finished with an invalid outcome — and on disk
+  # where `lemans report` can see it.
+  def test_a_crashed_trial_becomes_a_visible_invalid_result_not_a_silent_hole
     Dir.mktmpdir do |runs_dir|
       events = []
       exploding = ->(*, **) { raise "the harness tripped over itself" }
@@ -97,10 +121,28 @@ class RunTest < Minitest::Test
       end
 
       assert_equal({ total: 1, scored: 0, invalid: 1, solved: 0 }, summary)
-      crash = events.find { |event, _| event == :crashed }
+      finished = events.find { |event, _| event == :finished }
 
-      refute_nil crash
-      assert_includes crash.last[:error], "the harness tripped over itself"
+      refute_nil finished
+      assert_equal :harness_crash, finished.last[:outcome]
+      outcomes = Pathname(runs_dir).glob("*/result.json").map { JSON.parse(_1.read).dig("outcome", "name") }
+
+      assert_equal ["harness_crash"], outcomes
+    end
+  end
+
+  def test_a_config_error_aborts_the_wave_instead_of_burning_the_grid
+    Dir.mktmpdir do |runs_dir|
+      bench = load_bench
+      run = Lemans::Run.new(bench: bench, tasks: [load_task(bench)], agent_name: "bogus",
+                            runs_dir: runs_dir, backend: "daytona", concurrency: 1, attempts: 3)
+
+      assert_raises(Lemans::ConfigError) do
+        Lemans::Environments.stub(:build, ->(*, **) { FakeEnvironment.new }) { run.call }
+      end
+
+      # Nothing was recorded: the author's bug is not a measurement.
+      assert_empty Pathname(runs_dir).glob("*/result.json")
     end
   end
 end

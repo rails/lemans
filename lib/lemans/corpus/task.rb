@@ -9,11 +9,20 @@ module Lemans
     # One task: an instruction, an environment, a verifier, a solution.
     # Anything lemans does not understand belongs under `metadata`, copied untouched.
     class Task
-      DEFAULT_FILENAME = "task.yml"
       INSTRUCTION = "instruction.md"
       ENVIRONMENT_DIR = "environment"
       TESTS_DIR = "tests"
       SOLUTION_DIR = "solution"
+
+      # The flat layout: a directory per file is ceremony when each holds one.
+      # A task that ships more files grows the directory back.
+      FLAT_TEST = "verification_test.rb"
+      FLAT_SOLUTION = "solution.patch"
+      FLAT_SEED = "environment.patch"
+
+      # instruction.md's frontmatter is the task's whole configuration: the
+      # name is the directory, the metadata rides with the story.
+      FRONTMATTER = /\A---\n(.*?)\n---\n/m
 
       # An image, either already published or built from a task's Dockerfile.
       # Built images are named by content digest, so reuse is only ever of the identical thing.
@@ -54,10 +63,14 @@ module Lemans
 
       def self.load(dir, bench:)
         dir = Pathname(dir)
-        path = dir.join(DEFAULT_FILENAME)
-        raise ConfigError, "no #{DEFAULT_FILENAME} in #{dir}" unless path.file?
+        new(frontmatter(dir), dir: dir, bench: bench)
+      end
 
-        new(YAML.safe_load_file(path, aliases: true) || {}, dir: dir, bench: bench)
+      def self.frontmatter(dir)
+        match = dir.join(INSTRUCTION).read.match(FRONTMATTER) or return {}
+        YAML.safe_load(match[1]) || {}
+      rescue Errno::ENOENT
+        {} # validate! reports the missing instruction with its own message
       end
 
       def initialize(config, dir:, bench:)
@@ -77,7 +90,8 @@ module Lemans
         freeze
       end
 
-      def instruction = instruction_path.read
+      # The story alone: frontmatter is for the harness, never for the agent.
+      def instruction = instruction_path.read.sub(FRONTMATTER, "")
 
       def instruction_path = dir.join(INSTRUCTION)
 
@@ -89,6 +103,24 @@ module Lemans
       # the agent works and are uploaded into the sandbox only at verification time.
       def tests_dir = dir.join(TESTS_DIR)
 
+      # [absolute, remote-relative] pairs: the tests/ directory when it
+      # exists, the flat verification_test.rb otherwise.
+      def test_files
+        if tests_dir.directory?
+          expand(tests_dir)
+        else
+          flat(FLAT_TEST)
+        end
+      end
+
+      def solution_files
+        if solution_context.directory?
+          expand(solution_context)
+        else
+          flat(FLAT_SOLUTION)
+        end
+      end
+
       # The corpus's shared image when it declares one, otherwise this task's
       # own build. Exclusive by construction.
       def environment_image
@@ -99,13 +131,20 @@ module Lemans
         end
       end
 
-      # Paths relative to the task directory, in the order the author listed them.
-      # Everything about where they land in the sandbox belongs to Setup.
-      def setup_files(phase) = @files.fetch(phase.to_sym, [])
+      # Paths relative to the task directory, in the order the author listed
+      # them, plus the conventional seed: a flat environment.patch is shipped
+      # to environment setup by existing, no declaration needed.
+      def setup_files(phase)
+        declared = @files.fetch(phase.to_sym, [])
+        seed = Pathname(FLAT_SEED)
+        return declared unless phase.to_sym == :environment && dir.join(seed).file? && !declared.include?(seed)
+
+        declared + [seed]
+      end
 
       def solution_context = dir.join(SOLUTION_DIR)
 
-      def solution? = solution_context.directory?
+      def solution? = solution_files.any?
 
       def to_h
         {
@@ -119,6 +158,15 @@ module Lemans
 
       private
 
+      def expand(root)
+        root.glob("**/*").select(&:file?).map { [_1, _1.relative_path_from(root).to_s] }
+      end
+
+      def flat(filename)
+        path = dir.join(filename)
+        path.file? ? [[path, filename]] : []
+      end
+
       def validate!(config)
         raise ConfigError, "#{dir}: #{INSTRUCTION} is required" unless instruction_path.file?
 
@@ -128,8 +176,9 @@ module Lemans
           raise ConfigError, "#{dir}: #{ENVIRONMENT_DIR}/Dockerfile is required when bench.yml names no shared image"
         end
 
-        unless tests_dir.directory?
-          raise ConfigError, "#{dir}: #{TESTS_DIR}/ is required — the verifier uploads it at verification time"
+        if test_files.empty?
+          raise ConfigError, "#{dir}: #{TESTS_DIR}/ or a flat #{FLAT_TEST} is required — " \
+                             "the verifier uploads it at verification time"
         end
 
         # There is no per-task tuning; what a corpus needs to vary belongs in
@@ -138,7 +187,7 @@ module Lemans
 
         declared = config["overrides"]
         named = declared.is_a?(Hash) && declared.any? ? " (#{declared.keys.join(", ")})" : ""
-        raise ConfigError, "#{dir}: task.yml cannot override the frozen profile#{named} — " \
+        raise ConfigError, "#{dir}: a task cannot override the frozen profile#{named} — " \
                            "what has to vary belongs in bench.yml, where it varies for every trial"
       end
 
