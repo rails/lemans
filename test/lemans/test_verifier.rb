@@ -39,6 +39,14 @@ class VerifierTest < Minitest::Test
     end
   end
 
+  def test_a_wipe_that_fails_invalidates_the_trial_instead_of_trusting_a_stale_reward
+    with_verifier do |verifier, _dir|
+      stubborn = sandbox(refuses: /\Arm -f /)
+
+      assert_raises(Lemans::VerifierError) { verifier.call(stubborn) }
+    end
+  end
+
   def test_a_missing_reward_fails_closed_instead_of_reading_as_zero
     with_verifier do |verifier, _dir|
       silent = FakeEnvironment.new(on_command: ->(files) { files["/logs/verifier/checks.txt"] = "ran" })
