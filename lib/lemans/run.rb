@@ -37,6 +37,10 @@ module Lemans
       summarize(results)
     rescue Interrupt
       queue&.clear
+      # clear ate the sentinels too. A worker the raise below cannot reach —
+      # blocked in an FFI call — finishes its trial, returns to the queue,
+      # and must still find one, or the graceful first ^C never completes.
+      @concurrency.times { queue << :done } if queue
       workers = Array(workers).select(&:alive?)
       report&.call(:interrupted, { in_flight: workers.size })
       workers.each { _1.raise(Interrupt) }.each do |worker|

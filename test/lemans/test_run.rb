@@ -2,6 +2,7 @@
 
 require "test_helper"
 require "json"
+require "timeout"
 require "tmpdir"
 require "yaml"
 
@@ -106,6 +107,37 @@ class RunTest < Minitest::Test
       assert summary[:interrupted]
       assert_includes events, :interrupted
       assert_equal 0, summary[:total]
+    end
+  end
+
+  # A worker deep in an FFI call cannot receive the raised Interrupt; it
+  # finishes its trial and returns to the queue — which must still hold a
+  # sentinel, or the graceful first ^C never completes.
+  def test_a_worker_that_survives_the_interrupt_still_gets_to_exit
+    Dir.mktmpdir do |runs_dir|
+      unraisable = FakeEnvironment.new(on_command: lambda { |files|
+        begin
+          sleep 0.4
+        rescue Interrupt
+          nil # the FFI window: the raise lands, the call carries on
+        end
+        files["/logs/verifier/reward.txt"] = "1"
+        files["/logs/verifier/checks.txt"] = "ran"
+      })
+
+      interrupted_once = false
+      summary = Timeout.timeout(10) do
+        Lemans::Environments.stub(:build, ->(*, **) { unraisable }) do
+          build_run(runs_dir, attempts: 2, concurrency: 2).call do |event, _data|
+            if event == :started && !interrupted_once
+              interrupted_once = true
+              raise Interrupt
+            end
+          end
+        end
+      end
+
+      assert summary[:interrupted]
     end
   end
 
