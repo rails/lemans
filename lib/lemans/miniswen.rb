@@ -433,6 +433,9 @@ module Lemans
     end
 
     def payload(response)
+      # Providers under load occasionally answer with no completion at all.
+      raise InfrastructureError, "miniswen: #{@model} returned an empty completion" if response.nil?
+
       tokens = response.tokens
       {
         content: response.content.to_s,
