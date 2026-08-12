@@ -86,10 +86,17 @@ module Lemans
         return if @sandbox.nil?
 
         id = @sandbox.id
+        wait = true
         begin
-          @sandbox.delete(wait: true)
+          @sandbox.delete(wait:)
           @sandbox = nil
         rescue StandardError => e
+          # VM shutdown: confirming destruction needs threads Ruby no longer
+          # grants, but the bare DELETE needs none — the meter still stops.
+          if e.is_a?(ThreadError) && wait
+            wait = false
+            retry
+          end
           warn "lemans: sandbox #{id} may still be running — delete failed: #{e.class}: #{e.message}"
         end
       end
