@@ -23,7 +23,7 @@ class TreeDigestTest < Minitest::Test
   def digest_of(files)
     Dir.mktmpdir do |dir|
       files.each { |path, content| File.binwrite(File.join(dir, path), content) }
-      break Lemans::Corpus::TreeDigest.call(dir)
+      break Lemans::TreeDigest.call(dir)
     end
   end
 end

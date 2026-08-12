@@ -5,8 +5,8 @@ require "fileutils"
 require "json"
 
 module Lemans
-  # A whole wave: every task, k attempts each, several trials in flight.
-  # Concurrency and resume exist because a sequential wave is a day of wall clock.
+  # A whole run: every task, k attempts each, several trials in flight.
+  # Concurrency and resume exist because a sequential run is a day of wall clock.
   class Run
     Attempt = Data.define(:task, :model, :index)
 
@@ -64,7 +64,7 @@ module Lemans
       end
     end
 
-    # Several models in bench.yml turn the wave into a sweep: the whole
+    # Several models in bench.yml turn the run into a sweep: the whole
     # task × attempt grid runs once per model. --model overrides the sweep.
     def models
       return [@model] if @model
@@ -73,16 +73,16 @@ module Lemans
       @bench.agent.models
     end
 
-    # An attempt only counts against this wave if it measured the same thing:
+    # An attempt only counts against this run if it measured the same thing:
     # same agent, same model, same profile and task bytes, and actually
     # scored. Without the digests, editing bench.yml and resuming would let
-    # old-profile trials satisfy the new wave — "nothing changed" as an
+    # old-profile trials satisfy the new run — "nothing changed" as an
     # assumption instead of evidence.
     def completed_attempts(task, model)
-      @runs_dir.glob("*/result.json").count { same_wave?(_1, task, model) }
+      @runs_dir.glob("*/result.json").count { same_run?(_1, task, model) }
     end
 
-    def same_wave?(path, task, model)
+    def same_run?(path, task, model)
       result = JSON.parse(path.read, symbolize_names: true)
 
       result[:task] == task.name &&

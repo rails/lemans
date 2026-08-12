@@ -521,7 +521,7 @@ module Lemans
     end
 
     # The bundled registry ages faster than the gem: one live refresh is
-    # cheaper than a wave refused by accounting, and cost_source records it.
+    # cheaper than a run refused by accounting, and cost_source records it.
     def refresh_registry
       RubyLLM.models.refresh!
       @refreshed = true

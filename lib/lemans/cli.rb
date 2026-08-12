@@ -30,19 +30,19 @@ module Lemans
       say VERSION
     end
 
-    desc "tasks", "List the tasks in a corpus"
+    desc "tasks", "List the tasks in a bench"
     option :bench, default: ".", desc: "Directory holding bench.yml"
     def tasks
-      corpus = Corpus::Bench.load(options[:bench])
+      bench = Bench.load(options[:bench])
       print_table(
         [%w[task difficulty description]] +
-        corpus.tasks.map { [_1.name, _1.difficulty, _1.description] }
+        bench.tasks.map { [_1.name, _1.difficulty, _1.description] }
       )
     rescue ConfigError => e
       raise Thor::Error, "lemans: #{e.message}"
     end
 
-    map "run" => :run_wave
+    map "run" => :run_bench
     desc "run", "Run tasks and verify them"
     option :bench, default: ".", desc: "Directory holding bench.yml"
     option :task, desc: "Run one task by name"
@@ -53,16 +53,16 @@ module Lemans
     option :runs_dir, default: "runs", desc: "Where to write run directories"
     option :backend, default: "daytona", enum: Environments::BACKENDS.keys, desc: "Sandbox backend"
     option :resume, type: :boolean, default: false, desc: "Skip trials that already have a result"
-    def run_wave
-      corpus = Corpus::Bench.load(options[:bench])
-      tasks = corpus.tasks
+    def run_bench
+      bench = Bench.load(options[:bench])
+      tasks = bench.tasks
       tasks = tasks.select { _1.name == options[:task] } if options[:task]
       raise Thor::Error, "lemans: no task named #{options[:task].inspect}" if tasks.empty?
 
-      wave = Run.new(
-        bench: corpus,
+      run = Run.new(
+        bench: bench,
         tasks: tasks,
-        agent_name: options[:agent] || corpus.agent.name,
+        agent_name: options[:agent] || bench.agent.name,
         model: options[:model],
         backend: options[:backend],
         runs_dir: options[:runs_dir],
@@ -70,11 +70,11 @@ module Lemans
         concurrency: Integer(options[:concurrency]),
         resume: options[:resume]
       )
-      # The tasks are known before the wave starts, so the streaming progress
+      # The tasks are known before the run starts, so the streaming progress
       # lines can align into the columns the final table will have.
       task_width = tasks.map { _1.name.length }.max
       progress = Progress.new.start
-      summary = wave.call do |event, data|
+      summary = run.call do |event, data|
         progress.record(event) { announce(event, data, width: task_width) }
       end
       progress.stop
@@ -102,7 +102,7 @@ module Lemans
       clobber = Clobber.new(
         runs_dir: options[:runs_dir],
         tasks: options[:task],
-        ttl_sec: Corpus::Units.seconds(options[:ttl], field: "--ttl")
+        ttl_sec: Units.seconds(options[:ttl], field: "--ttl")
       )
       doomed = clobber.matches
       return say "lemans: nothing to clobber under #{options[:runs_dir]}" if doomed.empty?

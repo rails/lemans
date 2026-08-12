@@ -32,8 +32,8 @@ module Lemans
 
     attr_reader :commands, :task, :phase, :timeout_sec
 
-    # The corpus's own files and the task's, in one list; collisions are
-    # refused when the corpus loads.
+    # The bench's own files and the task's, in one list; collisions are
+    # refused when the bench loads.
     def files
       @files ||= from(bench.root, bench.setup_files(phase)) + from(task.dir, task.setup_files(phase))
     end

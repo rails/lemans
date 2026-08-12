@@ -7,7 +7,7 @@ require "tmpdir"
 require "yaml"
 
 class RunTest < Minitest::Test
-  include CorpusFixture
+  include BenchFixture
 
   def build_run(runs_dir, **)
     bench = load_bench
@@ -38,7 +38,7 @@ class RunTest < Minitest::Test
   end
 
   # Every result records what it measured; resume must consult it, or editing
-  # bench.yml and resuming lets old-profile trials satisfy the new wave.
+  # bench.yml and resuming lets old-profile trials satisfy the new run.
   def test_resume_does_not_count_a_trial_from_another_profile_or_task_version
     Dir.mktmpdir do |runs_dir|
       retire(runs_dir, scored: true, profile_digest: "0ld-pr0f1le-d1gest")
@@ -74,9 +74,9 @@ class RunTest < Minitest::Test
 
   def test_a_model_list_runs_the_whole_grid_once_per_model
     Dir.mktmpdir do |runs_dir|
-      config = YAML.safe_load_file(CorpusFixture::ROOT.join("bench.yml"), aliases: true)
+      config = YAML.safe_load_file(BenchFixture::ROOT.join("bench.yml"), aliases: true)
       config["agent"]["model"] = %w[model-a model-b]
-      bench = Lemans::Corpus::Bench.new(config, path: CorpusFixture::ROOT.join("bench.yml"))
+      bench = Lemans::Bench.new(config, path: BenchFixture::ROOT.join("bench.yml"))
       run = Lemans::Run.new(bench: bench, tasks: [bench.tasks.fetch(0)], agent_name: "oracle",
                             runs_dir: runs_dir, backend: "daytona", concurrency: 1)
 

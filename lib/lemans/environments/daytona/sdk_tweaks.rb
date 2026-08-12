@@ -19,7 +19,7 @@ module Lemans
         # long-polling server-side for SHORT_COMMAND_SEC, with the margin the
         # Python SDK uses (`timeout + 5`, generously). Known casualties, both
         # fine today: fs.upload_file/download_file share this cap (our files
-        # are scripts and logs — revisit for corpora with big artifacts), and
+        # are scripts and logs — revisit for benches with big artifacts), and
         # an exec with no timeout_sec is no longer unbounded.
         HTTP_TIMEOUT_SEC = Shell::SHORT_COMMAND_SEC + 30
 

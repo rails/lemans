@@ -5,20 +5,20 @@ require "tmpdir"
 require "yaml"
 
 class VerifierTest < Minitest::Test
-  include CorpusFixture
+  include BenchFixture
 
-  # A corpus root with shared verification files, borrowing the fixture's
+  # A bench root with shared verification files, borrowing the fixture's
   # profile and tasks: only the verification/ convention is under test.
   def in_corpus_with_verification
     Dir.mktmpdir do |dir|
       root = Pathname(dir)
       root.join("verification").mkpath
       root.join("verification/verify").write("#!/usr/bin/env ruby\nputs :graded\n")
-      root.join("verification/test.sh").write("echo corpus copy\n")
+      root.join("verification/test.sh").write("echo bench copy\n")
 
-      config = YAML.safe_load_file(CorpusFixture::ROOT.join("bench.yml"), aliases: true)
-      config["tasks"] = CorpusFixture::ROOT.join("tasks").to_s
-      yield Lemans::Corpus::Bench.new(config, path: root.join("bench.yml")), root
+      config = YAML.safe_load_file(BenchFixture::ROOT.join("bench.yml"), aliases: true)
+      config["tasks"] = BenchFixture::ROOT.join("tasks").to_s
+      yield Lemans::Bench.new(config, path: root.join("bench.yml")), root
     end
   end
 
@@ -64,8 +64,8 @@ class VerifierTest < Minitest::Test
       uploaded = env.uploads.to_h { |local, remote| [remote, local] }
 
       assert_equal root.join("verification/verify").to_s, uploaded["/tests/verify"]
-      # The task ships its own test.sh; the corpus copy must not shadow it.
-      assert_equal CorpusFixture::ROOT.join("tasks/hello-world/tests/test.sh").to_s, uploaded["/tests/test.sh"]
+      # The task ships its own test.sh; the bench copy must not shadow it.
+      assert_equal BenchFixture::ROOT.join("tasks/hello-world/tests/test.sh").to_s, uploaded["/tests/test.sh"]
       assert_includes env.commands, "chmod +x /tests/verify"
       # The shared files grade every trial, so they are part of the profile.
       assert bench.file_digests.key?("verification/verify")

@@ -5,7 +5,7 @@ require "json"
 require "tmpdir"
 
 class TrialTest < Minitest::Test
-  include CorpusFixture
+  include BenchFixture
 
   def with_trial(agent_name: "oracle")
     Dir.mktmpdir do |runs_dir|

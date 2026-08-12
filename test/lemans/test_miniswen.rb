@@ -231,7 +231,7 @@ class MiniswenTest < Minitest::Test
 end
 
 class MiniswenAdapterTest < Minitest::Test
-  include CorpusFixture
+  include BenchFixture
 
   SUBMIT = MiniswenTest::SUBMIT
 

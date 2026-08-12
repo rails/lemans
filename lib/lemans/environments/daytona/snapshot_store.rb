@@ -114,7 +114,7 @@ module Lemans
         end
 
         # A snapshot that exists may still be building for whoever won the race,
-        # or deactivated from disuse — a weekly wave will hit that.
+        # or deactivated from disuse — a weekly run will hit that.
         def await_ready(snapshot)
           deadline = now + build_timeout_sec
           activated = false

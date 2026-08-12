@@ -7,7 +7,7 @@ require "yaml"
 # The flat layout: four files, no task.yml, no single-file directories.
 # Metadata rides in instruction.md's frontmatter; the seed ships by existing.
 class TaskFlatLayoutTest < Minitest::Test
-  include CorpusFixture
+  include BenchFixture
 
   INSTRUCTION = <<~MARKDOWN
     ---
@@ -74,14 +74,14 @@ class TaskFlatLayoutTest < Minitest::Test
       }
       files.except(except).each { |name, content| dir.join(name).write(content) }
 
-      yield Lemans::Corpus::Task.load(dir, bench: shared_image_bench)
+      yield Lemans::Task.load(dir, bench: shared_image_bench)
     end
   end
 
-  # A flat task carries no Dockerfile, so its corpus must name the image.
+  # A flat task carries no Dockerfile, so its bench must name the image.
   def shared_image_bench
-    config = YAML.safe_load_file(CorpusFixture::ROOT.join("bench.yml"), aliases: true)
+    config = YAML.safe_load_file(BenchFixture::ROOT.join("bench.yml"), aliases: true)
     config["environment"]["image"] = "ghcr.io/example/base@sha256:#{"ab" * 32}"
-    Lemans::Corpus::Bench.new(config, path: CorpusFixture::ROOT.join("bench.yml"))
+    Lemans::Bench.new(config, path: BenchFixture::ROOT.join("bench.yml"))
   end
 end

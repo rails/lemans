@@ -14,10 +14,10 @@ require "minitest/mock"
 require_relative "support/fake_environment"
 require_relative "support/atif_schema"
 
-module CorpusFixture
-  ROOT = Pathname(File.expand_path("fixtures/corpus", __dir__))
+module BenchFixture
+  ROOT = Pathname(File.expand_path("fixtures/bench", __dir__))
 
-  def load_bench = Lemans::Corpus::Bench.load(CorpusFixture::ROOT)
+  def load_bench = Lemans::Bench.load(BenchFixture::ROOT)
 
   def load_task(bench = load_bench) = bench.tasks.fetch(0)
 end
