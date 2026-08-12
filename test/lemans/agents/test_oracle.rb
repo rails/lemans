@@ -22,13 +22,22 @@ class OracleTest < Minitest::Test
     end
   end
 
+  def test_a_solve_executable_wins_and_gets_its_mode_bit
+    with_solution("solve" => "#!/usr/bin/env ruby\nputs :solved\n", "solution.patch" => "diff\n") do |task, logs_dir|
+      fake = FakeEnvironment.new
+      Lemans::Agents::Oracle.new(profile: load_bench.agent).call(fake, task: task, logs_dir: logs_dir)
+
+      assert_equal "chmod +x /solution/solve && /solution/solve", fake.commands.fetch(0)
+    end
+  end
+
   def test_a_solution_with_neither_entrypoint_nor_patch_is_the_authors_bug
     with_solution("README.md" => "nothing runnable") do |task, logs_dir|
       error = assert_raises(Lemans::ConfigError) do
         Lemans::Agents::Oracle.new(profile: load_bench.agent).call(FakeEnvironment.new, task: task, logs_dir: logs_dir)
       end
 
-      assert_match(/neither solve.sh nor solution.patch/, error.message)
+      assert_match(/neither solve, solve.sh nor solution.patch/, error.message)
     end
   end
 

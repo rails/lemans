@@ -9,7 +9,6 @@ module Lemans
     # One task: an instruction, an environment, a verifier, a solution.
     # Anything lemans does not understand belongs under `metadata`, copied untouched.
     class Task
-      DEFAULT_FILENAME = "task.yml"
       INSTRUCTION = "instruction.md"
       ENVIRONMENT_DIR = "environment"
       TESTS_DIR = "tests"
@@ -21,8 +20,8 @@ module Lemans
       FLAT_SOLUTION = "solution.patch"
       FLAT_SEED = "environment.patch"
 
-      # instruction.md's frontmatter is the task.yml a task doesn't have to
-      # write: the name is the directory, the metadata rides with the story.
+      # instruction.md's frontmatter is the task's whole configuration: the
+      # name is the directory, the metadata rides with the story.
       FRONTMATTER = /\A---\n(.*?)\n---\n/m
 
       # An image, either already published or built from a task's Dockerfile.
@@ -64,10 +63,7 @@ module Lemans
 
       def self.load(dir, bench:)
         dir = Pathname(dir)
-        path = dir.join(DEFAULT_FILENAME)
-        config = path.file? ? YAML.safe_load_file(path, aliases: true) || {} : frontmatter(dir)
-
-        new(config, dir: dir, bench: bench)
+        new(frontmatter(dir), dir: dir, bench: bench)
       end
 
       def self.frontmatter(dir)
@@ -191,7 +187,7 @@ module Lemans
 
         declared = config["overrides"]
         named = declared.is_a?(Hash) && declared.any? ? " (#{declared.keys.join(", ")})" : ""
-        raise ConfigError, "#{dir}: task.yml cannot override the frozen profile#{named} — " \
+        raise ConfigError, "#{dir}: a task cannot override the frozen profile#{named} — " \
                            "what has to vary belongs in bench.yml, where it varies for every trial"
       end
 
