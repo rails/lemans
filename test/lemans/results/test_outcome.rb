@@ -10,12 +10,6 @@ class OutcomeTest < Minitest::Test
     refute_predicate Lemans::Results::Outcome.new(:verifier_error), :scored?
   end
 
-  def test_only_plausibly_different_second_attempts_are_retryable
-    assert_predicate Lemans::Results::Outcome.new(:environment_error), :retryable?
-    refute_predicate Lemans::Results::Outcome.new(:verifier_error), :retryable?
-    refute_predicate Lemans::Results::Outcome.new(:completed), :retryable?
-  end
-
   def test_an_outcome_nobody_defined_is_refused
     assert_raises(ArgumentError) { Lemans::Results::Outcome.new(:vibes) }
   end

@@ -27,7 +27,7 @@ class MiniswenTest < Minitest::Test
         thinking_tokens: @thinking ? 40 : 0, cost_usd: @cost_usd }
     end
 
-    def cost_source = Lemans::Results::CostSource.agent("scripted")
+    def cost_source = Lemans::Results::CostSource.new(name: :agent, model: "scripted", priced_as: nil, registry: nil)
   end
 
   # The loop with its model seam stubbed: `complete` reads from a script
