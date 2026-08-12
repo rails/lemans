@@ -36,7 +36,7 @@ class ShellTest < Minitest::Test
     assert(process.direct_commands.any? { _1.start_with?("rm -f /tmp/lemans-") })
   end
 
-  def test_a_command_that_outruns_its_budget_kills_the_session_and_reports_124
+  def test_a_command_that_outruns_its_budget_kills_the_session_and_reports_a_timeout
     process = FakeProcess.new(status_after: Float::INFINITY, log: "still going")
     shell = build_shell(process)
 
