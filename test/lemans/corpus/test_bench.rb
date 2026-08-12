@@ -20,7 +20,7 @@ class CorpusBenchTest < Minitest::Test
     assert_equal Lemans::Corpus::Bench::Resources.new(cpus: 2, memory_mb: 2048, storage_mb: 5120), bench.resources
     assert_equal 600.0, bench.build_timeout_sec
     assert_equal :allowlist, bench.setup.network.mode
-    assert_equal "mini-swe-agent", bench.agent.name
+    assert_equal "miniswen", bench.agent.name
     assert_equal 1800.0, bench.agent.timeout_sec
     assert_equal 100, bench.agent.step_limit
     assert_in_delta 5.0, bench.agent.cost_limit
