@@ -55,9 +55,7 @@ class DaytonaEnvironmentTest < Minitest::Test
   def test_a_poisoned_snapshot_is_thrown_away_and_built_again
     snapshots = FakeSnapshotService.new(answers: [failed_snapshot])
 
-    with_client(snapshots) do
-      environment_for(Lemans::Corpus::Task::ImageSpec.registry("ghcr.io/lemans/reference:1")).send(:ensure_snapshot)
-    end
+    store_for(reference_image, snapshots: snapshots).call
 
     assert_equal [failed_snapshot.name], snapshots.deleted.map(&:name)
     assert_equal 1, snapshots.created.size
@@ -66,11 +64,8 @@ class DaytonaEnvironmentTest < Minitest::Test
   def test_it_gives_up_rather_than_build_over_a_snapshot_that_will_not_go_away
     snapshots = FakeSnapshotService.new(answers: Array.new(50, failed_snapshot))
 
-    error = with_client(snapshots) do
-      assert_raises(Lemans::InfrastructureError) do
-        environment_for(Lemans::Corpus::Task::ImageSpec.registry("ghcr.io/lemans/reference:1"),
-                        build_timeout_sec: 0).send(:ensure_snapshot)
-      end
+    error = assert_raises(Lemans::InfrastructureError) do
+      store_for(reference_image, snapshots: snapshots, build_timeout_sec: 0).call
     end
 
     assert_match(/would not go away/, error.message)
@@ -79,7 +74,7 @@ class DaytonaEnvironmentTest < Minitest::Test
 
   def test_an_allowlist_mixing_domains_and_ips_is_refused
     policy = Lemans::Corpus::NetworkPolicy.new(mode: :allowlist, hosts: ["openrouter.ai", "10.0.0.0/8"])
-    environment = environment_for(Lemans::Corpus::Task::ImageSpec.registry("ghcr.io/lemans/reference:1"))
+    environment = environment_for(reference_image)
 
     assert_raises(Lemans::ConfigError) { environment.send(:network_kwargs, policy) }
   end
@@ -87,18 +82,31 @@ class DaytonaEnvironmentTest < Minitest::Test
   # timeout = 0 is libcurl's "no timeout": one silently dropped connection
   # would park a worker thread forever, unkillable even by Thread#kill.
   def test_every_generated_client_gets_a_real_http_deadline
-    [::DaytonaApiClient, ::DaytonaToolboxApiClient, ::DaytonaAnalyticsApiClient].each do |client_mod|
-      assert_equal Lemans::Environments::Daytona::HTTP_TIMEOUT_SEC, client_mod::Configuration.new.timeout
+    tweaks = Lemans::Environments::Daytona::SdkTweaks
+    tweaks::GENERATED_CLIENTS.each do |client_mod|
+      assert_equal tweaks::HTTP_TIMEOUT_SEC, client_mod::Configuration.new.timeout
     end
-    assert_operator Lemans::Environments::Daytona::HTTP_TIMEOUT_SEC, :>,
-                    Lemans::Environments::Daytona::SHORT_COMMAND_SEC
+    assert_operator tweaks::HTTP_TIMEOUT_SEC, :>, Lemans::Environments::Daytona::Shell::SHORT_COMMAND_SEC
+  end
+
+  def test_a_deliberately_configured_deadline_wins_over_the_default
+    config = ::DaytonaApiClient::Configuration.new
+    config.timeout = 7
+
+    assert_equal 7, config.timeout
+  end
+
+  def test_an_explicit_nil_deadline_is_respected_not_crashed_on
+    config = ::DaytonaApiClient::Configuration.new
+    config.timeout = nil
+
+    assert_nil config.timeout
   end
 
   def test_a_snapshot_lookup_survives_a_dropped_connection
     snapshots = FlakySnapshotService.new(failures: 2, snapshot: failed_snapshot)
-    environment = quiet(environment_for(Lemans::Corpus::Task::ImageSpec.registry("ghcr.io/lemans/reference:1")))
 
-    found = with_client(snapshots) { environment.send(:find_snapshot, "any") }
+    found = store_for(reference_image, snapshots: snapshots).send(:find, "any")
 
     assert_equal failed_snapshot, found
     assert_equal 3, snapshots.calls
@@ -106,11 +114,17 @@ class DaytonaEnvironmentTest < Minitest::Test
 
   def test_a_snapshot_lookup_does_not_retry_a_missing_snapshot
     snapshots = FlakySnapshotService.new(failures: 5, snapshot: failed_snapshot, status_code: 404)
-    environment = quiet(environment_for(Lemans::Corpus::Task::ImageSpec.registry("ghcr.io/lemans/reference:1")))
 
-    found = with_client(snapshots) { environment.send(:find_snapshot, "any") }
+    found = store_for(reference_image, snapshots: snapshots).send(:find, "any")
 
     assert_nil found
+    assert_equal 1, snapshots.calls
+  end
+
+  def test_a_snapshot_lookup_does_not_retry_a_caller_mistake
+    snapshots = FlakySnapshotService.new(failures: 5, snapshot: failed_snapshot, status_code: 403)
+
+    assert_raises(Lemans::InfrastructureError) { store_for(reference_image, snapshots: snapshots).send(:find, "any") }
     assert_equal 1, snapshots.calls
   end
 
@@ -180,18 +194,26 @@ class DaytonaEnvironmentTest < Minitest::Test
                                             "the registry blinked")
   end
 
-  def with_client(snapshots, &)
-    Lemans::Environments::Daytona.stub(:client, FakeClient.new(snapshots), &)
+  def reference_image
+    Lemans::Corpus::Task::ImageSpec.registry("ghcr.io/lemans/reference:1")
   end
 
-  # Retries back off for real; the test should not.
-  def quiet(environment)
-    def environment.sleep(_seconds) = nil
-    environment
+  def store_for(image, snapshots: nil, resources: resources_with, build_timeout_sec: 4)
+    store = Lemans::Environments::Daytona::SnapshotStore.new(
+      client: snapshots && FakeClient.new(snapshots),
+      image: image, resources: resources, build_timeout_sec: build_timeout_sec
+    )
+    quiet(store)
+  end
+
+  # Polls and retries back off for real; the tests should not.
+  def quiet(store)
+    def store.sleep(_seconds) = nil
+    store
   end
 
   def snapshot_name_for(image, resources: resources_with)
-    environment_for(image, resources: resources).send(:snapshot_name)
+    store_for(image, resources: resources).name
   end
 
   def environment_for(image, resources: resources_with, build_timeout_sec: 4)
