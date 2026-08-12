@@ -255,7 +255,7 @@ module Lemans
       response = complete(@messages)
       @steps += 1
       @totals.each_key { @totals[_1] += response[_1].to_i }
-      response[:cost_usd].nil? ? @cost_known = false : @cost_usd += response[:cost_usd]
+      track_cost(response)
 
       entry = { role: "assistant", content: response[:content].to_s, metrics: metrics_from(response) }
       # The model's reasoning, when the provider surfaces it. It rides along
@@ -276,6 +276,24 @@ module Lemans
       @consecutive_format_errors = 0
       entry[:tool_calls] = tool_calls
       tool_calls
+    end
+
+    # An unpriced completion under a cost ceiling is fatal on the spot: the
+    # trial would end as accounting_error anyway, and only failing fast
+    # actually stops the spend. Without a ceiling, unknown cost is just a
+    # fact to report.
+    def track_cost(response)
+      cost = response[:cost_usd]
+      if cost.nil?
+        if @cost_limit_usd
+          raise AccountingError,
+                "#{@model} returned an unpriced completion; cost_limit cannot be enforced"
+        end
+
+        @cost_known = false
+      else
+        @cost_usd += cost
+      end
     end
 
     # mini-swe-agent's parse_toolcall_actions: every call must be the bash

@@ -210,6 +210,16 @@ class MiniswenTest < Minitest::Test
     assert_includes observation, "Output too long."
   end
 
+  def test_an_unpriced_completion_under_a_cost_ceiling_stops_the_spend_immediately
+    llm = ScriptedLLM.new([answer("true"), SUBMIT], cost_usd: nil)
+
+    error = assert_raises(Lemans::AccountingError) do
+      build(llm, ScriptedShell.new, cost_limit_usd: 5.0).run("task")
+    end
+
+    assert_match(/cost_limit cannot be enforced/, error.message)
+  end
+
   def test_an_unpriced_model_is_reported_as_unknown_cost_not_as_free
     llm = ScriptedLLM.new([answer("true"), SUBMIT], cost_usd: nil)
 
