@@ -70,10 +70,17 @@ module Lemans
         concurrency: Integer(options[:concurrency]),
         resume: options[:resume]
       )
-      task_width = tasks.map { _1.name.length }.max
-      progress = Progress.new(total: run.total).start
-      summary = run.call do |event, data|
-        progress.record(event) { announce(event, data, width: task_width) }
+      # A tty gets the live board; a pipe gets plain streamed lines.
+      if $stderr.tty?
+        models = options[:model] || (bench.agent.models.empty? ? [bench.agent.model] : bench.agent.models)
+        progress = Board.new(tasks: tasks.map(&:name), models: models, attempts: Integer(options[:attempts])).start
+        summary = run.call { |event, data| progress.record(event, data) }
+      else
+        task_width = tasks.map { _1.name.length }.max
+        progress = Progress.new(total: run.total).start
+        summary = run.call do |event, data|
+          progress.record(event) { announce(event, data, width: task_width) }
+        end
       end
       progress.stop
 
