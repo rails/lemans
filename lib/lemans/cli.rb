@@ -73,9 +73,14 @@ module Lemans
       # The tasks are known before the wave starts, so the streaming progress
       # lines can align into the columns the final table will have.
       task_width = tasks.map { _1.name.length }.max
-      summary = wave.call { |event, data| announce(event, data, width: task_width) }
+      progress = Progress.new.start
+      summary = wave.call do |event, data|
+        progress.record(event) { announce(event, data, width: task_width) }
+      end
+      progress.stop
 
       say ""
+      say_status :report, "collecting results from #{options[:runs_dir]}", :cyan
       print_report Results::Report.load(options[:runs_dir])
       exit 130 if summary[:interrupted]
       exit 1 if summary[:invalid].positive?
@@ -84,6 +89,8 @@ module Lemans
     rescue Interrupt
       say ""
       exit 130
+    ensure
+      progress&.stop
     end
 
     desc "clobber", "Delete run results"
