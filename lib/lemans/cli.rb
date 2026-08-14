@@ -54,6 +54,10 @@ module Lemans
     option :backend, default: "daytona", enum: Environments::BACKENDS.keys, desc: "Sandbox backend"
     option :resume, type: :boolean, default: false, desc: "Skip trials that already have a result"
     def run_bench
+      # The bundled pricing registry ages faster than the gem: refresh once up
+      # front, so every trial prices completions against the same revision.
+      Miniswen.refresh_registry!
+
       bench = Bench.load(options[:bench])
       tasks = bench.tasks
       tasks = tasks.select { options[:task].include?(_1.name) } if options[:task]
@@ -120,9 +124,7 @@ module Lemans
 
       unless options[:force]
         print_in_columns(doomed.map { _1.basename.to_s })
-        unless yes?("Delete #{doomed.size} run(s) under #{options[:runs_dir]}? [y/N]")
-          return say "lemans: nothing deleted"
-        end
+        return say "lemans: nothing deleted" unless yes?("Delete #{doomed.size} run(s) under #{options[:runs_dir]}? [y/N]")
       end
 
       clobber.call

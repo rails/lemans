@@ -24,8 +24,8 @@ module Lemans
       return if commands.empty? && files.empty?
 
       files.each { |local, remote| environment.upload(local, remote) }
-      commands.each { environment.exec!(_1, timeout_sec: timeout_sec) }
-      environment.exec!("rm -rf #{Shellwords.escape(ROOT)}", timeout_sec: CLEANUP_TIMEOUT_SEC)
+      commands.each { environment.exec!(_1, timeout: timeout_sec) }
+      environment.exec!("rm -rf #{Shellwords.escape(ROOT)}", timeout: CLEANUP_TIMEOUT_SEC)
     end
 
     private

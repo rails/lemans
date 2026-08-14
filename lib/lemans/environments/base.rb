@@ -25,7 +25,7 @@ module Lemans
       # constructed with; a backend that cannot honour the policy must raise.
       def start = raise(NotImplementedError)
 
-      def exec(command, timeout_sec: nil, env: {}) = raise(NotImplementedError)
+      def exec(command, timeout: nil, env: {}) = raise(NotImplementedError)
 
       def upload(local_path, remote_path) = raise(NotImplementedError)
 

@@ -25,9 +25,7 @@ module Lemans
       relative = Pathname(path.to_s)
       resolved = root.join(relative).cleanpath
 
-      unless resolved.to_s.start_with?("#{root.cleanpath}/")
-        raise ConfigError, "#{label}: files.#{phase} entry #{path.inspect} points outside #{root}"
-      end
+      raise ConfigError, "#{label}: files.#{phase} entry #{path.inspect} points outside #{root}" unless resolved.to_s.start_with?("#{root.cleanpath}/")
       raise ConfigError, "#{label}: files.#{phase} names #{path}, which is not a file" unless resolved.file?
 
       relative

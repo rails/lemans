@@ -120,18 +120,14 @@ module Lemans
             state = snapshot.state
             return if state == ::DaytonaApiClient::SnapshotState::ACTIVE
 
-            if SNAPSHOT_FAILED.include?(state)
-              raise InfrastructureError, "daytona: snapshot #{name} is #{state}: #{snapshot.error_reason}"
-            end
+            raise InfrastructureError, "daytona: snapshot #{name} is #{state}: #{snapshot.error_reason}" if SNAPSHOT_FAILED.include?(state)
 
             if state == ::DaytonaApiClient::SnapshotState::INACTIVE && !activated
               client.snapshot.activate(snapshot)
               activated = true
             end
 
-            if now > deadline
-              raise InfrastructureError, "daytona: snapshot #{name} was still #{state} after #{build_timeout_sec}s"
-            end
+            raise InfrastructureError, "daytona: snapshot #{name} was still #{state} after #{build_timeout_sec}s" if now > deadline
 
             sleep POLL_INTERVAL_SEC
             snapshot = find(name)

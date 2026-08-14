@@ -12,6 +12,9 @@ Style/StringLiteralsInInterpolation:
 Metrics:
   Enabled: false
 
+Layout/LineLength:
+  Enabled: false
+
 Lint/UnusedMethodArgument:
   Exclude:
     - test/**/*

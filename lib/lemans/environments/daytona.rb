@@ -29,9 +29,7 @@ module Lemans
       def self.credentials
         config = ::Daytona::Config.new
         config.api_key ||= config.read_env("DAYTONA_TOKEN")
-        unless config.api_key || config.jwt_token
-          raise ConfigError, "no Daytona credentials: set DAYTONA_API_KEY or DAYTONA_TOKEN"
-        end
+        raise ConfigError, "no Daytona credentials: set DAYTONA_API_KEY or DAYTONA_TOKEN" unless config.api_key || config.jwt_token
 
         config
       end
@@ -54,8 +52,8 @@ module Lemans
         raise InfrastructureError, "daytona: could not start sandbox: #{e.message}"
       end
 
-      def exec(command, timeout_sec: nil, env: {})
-        @shell.exec(command, timeout_sec: timeout_sec, env: env)
+      def exec(command, timeout: nil, env: {})
+        @shell.exec(command, timeout: timeout, env: env)
       rescue ::Daytona::Sdk::Error => e
         raise InfrastructureError, "daytona: exec failed: #{e.message}"
       end
@@ -133,9 +131,7 @@ module Lemans
         when :public
           for_update ? { network_block_all: false } : {}
         when :allowlist
-          if policy.domains.any? && policy.ip_targets.any?
-            raise ConfigError, "daytona: an allowlist cannot mix domains and IP targets (#{policy.hosts.join(", ")})"
-          end
+          raise ConfigError, "daytona: an allowlist cannot mix domains and IP targets (#{policy.hosts.join(", ")})" if policy.domains.any? && policy.ip_targets.any?
 
           {
             network_block_all: false,

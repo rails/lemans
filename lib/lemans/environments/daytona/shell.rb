@@ -22,13 +22,13 @@ module Lemans
           sandbox.process.create_session(@session_id)
         end
 
-        def exec(command, timeout_sec: nil, env: {})
+        def exec(command, timeout: nil, env: {})
           started = now
           response =
-            if timeout_sec && timeout_sec > SHORT_COMMAND_SEC
-              exec_in_session(command, timeout_sec: timeout_sec, env: env)
+            if timeout && timeout > SHORT_COMMAND_SEC
+              exec_in_session(command, timeout: timeout, env: env)
             else
-              exec_directly(command, timeout_sec: timeout_sec, env: env)
+              exec_directly(command, timeout: timeout, env: env)
             end
 
           Base::ExecResult.new(command: command, duration_sec: (now - started).round(3), **response)
@@ -38,16 +38,16 @@ module Lemans
 
         attr_reader :sandbox
 
-        def exec_directly(command, timeout_sec:, env:)
+        def exec_directly(command, timeout:, env:)
           response = sandbox.process.exec(
             command: command,
             env: env.empty? ? nil : env,
-            timeout: timeout_sec&.to_i
+            timeout: timeout&.to_i
           )
           { exit_code: response.exit_code, output: response.result.to_s }
         end
 
-        def exec_in_session(command, timeout_sec:, env:)
+        def exec_in_session(command, timeout:, env:)
           run_id = SecureRandom.hex(6)
           status_file = "/tmp/lemans-#{run_id}.status"
           log_file = "/tmp/lemans-#{run_id}.log"
@@ -63,7 +63,7 @@ module Lemans
             )
           )
 
-          exit_code = await_status(status_file, timeout_sec)
+          exit_code = await_status(status_file, timeout)
           # A command that outran its budget is still running; the session dies
           # before anything downstream trusts the filesystem.
           terminate_session! if exit_code.nil?
@@ -76,7 +76,7 @@ module Lemans
         # Scratch files left in /tmp tell whatever runs next — the model — how
         # it is being run.
         def clear_scratch(*paths)
-          exec_directly("rm -f #{paths.map { Shellwords.escape(_1) }.join(" ")}", timeout_sec: 60, env: {})
+          exec_directly("rm -f #{paths.map { Shellwords.escape(_1) }.join(" ")}", timeout: 60, env: {})
         rescue ::Daytona::Sdk::Error => e
           warn "lemans: could not clear #{paths.join(", ")}: #{e.message}"
         end
@@ -94,10 +94,10 @@ module Lemans
           end
         end
 
-        def await_status(status_file, timeout_sec)
-          deadline = now + timeout_sec
+        def await_status(status_file, timeout)
+          deadline = now + timeout
           loop do
-            status = with_read_retries { exec_directly("cat #{status_file} 2>/dev/null", timeout_sec: 30, env: {}) }
+            status = with_read_retries { exec_directly("cat #{status_file} 2>/dev/null", timeout: 30, env: {}) }
             value = status[:output].to_s.strip
             return Integer(value) if value.match?(/\A\d+\z/)
             return nil if now > deadline
@@ -108,7 +108,7 @@ module Lemans
 
         def tail(log_file, bytes: MAX_OUTPUT_BYTES)
           with_read_retries do
-            exec_directly("tail -c #{bytes} #{log_file} 2>/dev/null", timeout_sec: 60, env: {})
+            exec_directly("tail -c #{bytes} #{log_file} 2>/dev/null", timeout: 60, env: {})
           end[:output].to_s
         end
 

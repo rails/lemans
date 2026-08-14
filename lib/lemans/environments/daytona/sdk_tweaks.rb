@@ -14,7 +14,7 @@ module Lemans
         ].freeze
 
         # Must clear the longest request: an exec long-polling server-side for SHORT_COMMAND_SEC.
-        # Also caps fs uploads/downloads and execs with no timeout_sec — fine for scripts and logs.
+        # Also caps fs uploads/downloads and execs with no timeout — fine for scripts and logs.
         HTTP_TIMEOUT_SEC = Shell::SHORT_COMMAND_SEC + 30
 
         # The clients default to timeout=0, libcurl's "never time out"; a dropped connection then

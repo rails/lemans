@@ -13,7 +13,7 @@ class ShellTest < Minitest::Test
     process = FakeProcess.new
     shell = build_shell(process)
 
-    result = shell.exec("ls", timeout_sec: 30, env: {})
+    result = shell.exec("ls", timeout: 30, env: {})
 
     assert_equal 0, result.exit_code
     assert_equal "ok", result.output
@@ -24,7 +24,7 @@ class ShellTest < Minitest::Test
     process = FakeProcess.new(status_after: 2, status: "3", log: "the suite ran")
     shell = build_shell(process)
 
-    result = shell.exec("bin/rails test", timeout_sec: SHORT + 1, env: { "K" => "v" })
+    result = shell.exec("bin/rails test", timeout: SHORT + 1, env: { "K" => "v" })
 
     assert_equal 3, result.exit_code
     assert_equal "the suite ran", result.output
@@ -40,7 +40,7 @@ class ShellTest < Minitest::Test
     process = FakeProcess.new(status_after: Float::INFINITY, log: "still going")
     shell = build_shell(process)
 
-    result = shell.exec("sleep 1000", timeout_sec: SHORT + 1, env: {})
+    result = shell.exec("sleep 1000", timeout: SHORT + 1, env: {})
 
     assert_equal 124, result.exit_code
     assert_equal "still going", result.output
@@ -54,7 +54,7 @@ class ShellTest < Minitest::Test
     process = FakeProcess.new(status_after: 1, status: "0", log: "fine", drop_polls: 2)
     shell = build_shell(process)
 
-    result = shell.exec("make", timeout_sec: SHORT + 1, env: {})
+    result = shell.exec("make", timeout: SHORT + 1, env: {})
 
     assert_equal 0, result.exit_code
   end

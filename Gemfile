@@ -3,7 +3,8 @@
 source "https://rubygems.org"
 
 # Specify your gem's dependencies in lemans.gemspec
-gemspec
+gemspec name: "miniswen"
+gemspec name: "lemans"
 
 gem "debug", platform: :mri unless ENV["CI"] == "true"
 gem "ruby-lsp", require: false unless ENV["CI"] == "true"

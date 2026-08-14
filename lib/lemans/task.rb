@@ -160,9 +160,7 @@ module Lemans
 
       refuse_bench_collisions!
 
-      unless bench.image || environment_dockerfile.file?
-        raise ConfigError, "#{dir}: #{ENVIRONMENT_DIR}/Dockerfile is required when bench.yml names no shared image"
-      end
+      raise ConfigError, "#{dir}: #{ENVIRONMENT_DIR}/Dockerfile is required when bench.yml names no shared image" unless bench.image || environment_dockerfile.file?
 
       if test_files.empty?
         raise ConfigError, "#{dir}: #{TESTS_DIR}/ or a flat #{FLAT_TEST} is required — " \

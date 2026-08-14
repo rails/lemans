@@ -21,7 +21,7 @@ class FakeEnvironment < Lemans::Environments::Base
 
   def start = self
 
-  def exec(command, timeout_sec: nil, env: {})
+  def exec(command, timeout: nil, env: {})
     @commands << command
     raise Lemans::InfrastructureError, "the sandbox went away" if @fails&.match?(command)
     return result(1, "no") if @refuses&.match?(command)

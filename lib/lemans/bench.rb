@@ -80,9 +80,7 @@ module Lemans
       # A step that is not a string is caught here rather than reaching a sandbox as the word "true".
       def commands(key)
         Array(self[key]).each_with_index.map do |step, index|
-          unless step.is_a?(String)
-            raise ConfigError, "#{dotted(key)}[#{index}] must be a command string, got #{step.inspect}"
-          end
+          raise ConfigError, "#{dotted(key)}[#{index}] must be a command string, got #{step.inspect}" unless step.is_a?(String)
 
           step
         end.freeze
