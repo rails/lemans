@@ -76,7 +76,7 @@ module Lemans
       end
 
       # A tty gets the live board; a pipe gets plain streamed lines.
-      if $stderr.tty?
+      if interactive?
         models = options[:model] || (bench.agent.models.empty? ? [bench.agent.model] : bench.agent.models)
         progress = Board.new(tasks: tasks.map(&:name), models: models, attempts: Integer(options[:attempts])).start
         summary = run.call { |event, data| progress.record(event, data) }
@@ -168,6 +168,21 @@ module Lemans
       print_table report.to_rows
       color = report.summary[:invalid].positive? ? :red : nil
       report.summary_lines.each { say _1, color }
+    end
+
+    def interactive?
+      return false unless $stderr.tty?
+
+      return true if ENV["FORCE_INTERACTIVE"] == "1"
+
+      # Check various env vars indicating non-interactive mode
+      if ENV["NONINTERACTIVE"] == "1" ||
+         ENV["CI"] == "true" ||
+         ENV["TERM"] == "dumb"
+        return false
+      end
+
+      true
     end
   end
 end
