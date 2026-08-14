@@ -6,6 +6,7 @@ source "https://rubygems.org"
 gemspec
 
 gem "debug", platform: :mri unless ENV["CI"] == "true"
+gem "ruby-lsp", require: false unless ENV["CI"] == "true"
 
 gem "irb"
 gem "rake", "~> 13.0"
