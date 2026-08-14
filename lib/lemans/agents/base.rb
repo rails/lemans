@@ -10,7 +10,8 @@ module Lemans
       REGISTRY = {
         "nop" => "Nop",
         "oracle" => "Oracle",
-        "miniswen" => "Miniswen"
+        "miniswen" => "Miniswen",
+        "miniswen-installed" => "MiniswenInstalled"
       }.freeze
 
       def self.build(name, profile:, model: nil)

@@ -26,7 +26,7 @@ module Lemans
       }.freeze
 
       def call(environment, task:, logs_dir:)
-        result = loop_for(environment).run(task.instruction)
+        result = obtain_result(environment, task: task, logs_dir: logs_dir)
         trajectory_path = write_trajectory(logs_dir, result)
 
         Result.new(
@@ -38,7 +38,11 @@ module Lemans
 
       private
 
-      def loop_for(environment)
+      def obtain_result(environment, task:, logs_dir:) # rubocop:disable Lint/UnusedMethodArgument
+        agent_for(environment).run(task.instruction)
+      end
+
+      def agent_for(environment)
         raise ConfigError, "miniswen needs a model to drive" if model.to_s.empty?
 
         ::Miniswen::Agent.new(
@@ -82,7 +86,7 @@ module Lemans
       def atif_document(result)
         {
           schema_version: "ATIF-v1.7",
-          agent: { name: NAME, version: VERSION, model_name: model },
+          agent: { name: name, version: VERSION, model_name: model },
           notes: "total_steps counts LLM calls; the steps array also carries system, task and observation messages",
           steps: atif_steps(result.messages),
           final_metrics: final_metrics(result),

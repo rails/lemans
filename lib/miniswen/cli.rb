@@ -149,15 +149,15 @@ module Miniswen
           options[:max_steps] = v
         end
 
-        opts.on("--max-cost=COST", Integer, "Max cost") do |v|
+        opts.on("--max-cost=COST", Float, "Max cost (USD)") do |v|
           options[:max_cost] = v
         end
 
-        opts.on("--max-time=TIME", Integer, "Max inference duration (seconds)") do |v|
+        opts.on("--max-time=TIME", Float, "Max inference duration (seconds)") do |v|
           options[:max_time] = v
         end
 
-        opts.on("--exec-timeout=TIMEOUT", Integer, "Tool execution timeout (seconds)") do |v|
+        opts.on("--exec-timeout=TIMEOUT", Float, "Tool execution timeout (seconds)") do |v|
           options[:exec_timeout] = v
         end
 

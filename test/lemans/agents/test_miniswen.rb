@@ -18,7 +18,7 @@ class MiniswenAdapterTest < Minitest::Test
     bench = load_bench
     agent = Lemans::Agents::Base.build("miniswen", profile: bench.agent)
     llm = MiniswenAgentTest::ScriptedLLM.new(responses, cost_usd: cost_usd, thinking: thinking)
-    agent.define_singleton_method(:loop_for) { |env| MiniswenAgentTest::ScriptedLoop.new(llm: llm, environment: env) }
+    agent.define_singleton_method(:agent_for) { |env| MiniswenAgentTest::ScriptedLoop.new(llm: llm, environment: env) }
     [agent, load_task(bench)]
   end
 
@@ -100,7 +100,7 @@ class MiniswenAdapterTest < Minitest::Test
   def test_the_profile_config_reaches_the_loop_mini_style
     bench = load_bench
     agent = Lemans::Agents::Base.build("miniswen", profile: bench.agent)
-    loop_config = agent.send(:loop_for, MiniswenAgentTest::ScriptedShell.new)
+    loop_config = agent.send(:agent_for, MiniswenAgentTest::ScriptedShell.new)
 
     assert_equal 100, loop_config.instance_variable_get(:@max_steps)
     assert_equal 300, loop_config.instance_variable_get(:@exec_timeout)
