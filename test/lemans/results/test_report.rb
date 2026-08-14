@@ -8,11 +8,12 @@ require "tmpdir"
 class ReportTest < Minitest::Test
   def write_result(runs_dir, trial:, task: "hello-world", agent: "miniswen", reward: 1.0,
                    outcome: "completed", scored: true, cost: 0.0001, detail: nil,
-                   model: "openrouter/deepseek/deepseek-v4-flash")
+                   model: "openrouter/deepseek/deepseek-v4-flash", tokens: { input_tokens: 900, output_tokens: 100 },
+                   duration: 9.8, steps: 2)
     result = {
       trial: trial, task: task, agent: agent, model: model,
       reward: reward, outcome: { name: outcome, scored: scored, detail: detail }.compact,
-      usage: { cost_usd: cost, steps: 2 }, duration_sec: 9.8,
+      usage: { cost_usd: cost, steps: steps }.merge(tokens || {}), duration_sec: duration,
       started_at: "2026-08-11T10:0#{trial.length % 10}:00Z"
     }
     dir = File.join(runs_dir, trial)
@@ -24,7 +25,7 @@ class ReportTest < Minitest::Test
     Dir.mktmpdir do |runs_dir|
       write_result(runs_dir, trial: "hello-world__aaa", reward: 1.0)
       write_result(runs_dir, trial: "hello-world__bbb", reward: nil, outcome: "environment_error",
-                             scored: false, cost: nil, detail: "the daemon is down")
+                             scored: false, cost: nil, detail: "the daemon is down", tokens: nil)
       write_result(runs_dir, trial: "other-task__ccc", task: "other-task", reward: 0.0)
       yield runs_dir
     end
@@ -35,14 +36,20 @@ class ReportTest < Minitest::Test
       report = Lemans::Results::Report.load(runs_dir)
       rows = report.to_rows
 
-      assert_equal %w[task agent model reward outcome cost_usd steps duration_sec trial], rows.first
+      assert_equal %w[task agent model reward outcome cost_usd steps tokens duration_sec trial], rows.first
       assert_includes rows.flatten, "hello-world__aaa"
+
+      solved = rows.find { _1.include?("hello-world__aaa") }
+
+      # Tokens sum input and output, leaving cache reads out.
+      assert_equal "1000", solved[rows.first.index("tokens")]
 
       invalid = rows.find { _1.include?("hello-world__bbb") }
 
       assert_includes invalid, "environment_error"
       # A missing reward reads as absent, not as zero.
       assert_equal "-", invalid[rows.first.index("reward")]
+      assert_equal "-", invalid[rows.first.index("tokens")]
       assert_includes report.summary_lines.join("\n"), "3 trials: 2 scored, 1 invalid, 1 solved (50%)"
     end
   end

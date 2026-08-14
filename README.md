@@ -120,6 +120,8 @@ lemans run --bench my-bench --agent nop      # every task must score 0 — verif
 ```bash
 lemans run --bench my-bench --attempts 5 --concurrency 4
 lemans report                                # table; --format csv for a spreadsheet
+lemans report -A                             # aggregate per task × model: solved/attempts, median time, mean cost
+lemans report -A model -S score              # leaderboard: one row per model, best score first
 ```
 
 Each trial writes `runs/<task>__<id>/` with `result.json` (reward, outcome, usage, digests), the agent's ATIF trajectory, and the verifier's output and logs. `lemans run --resume` skips trials that already have a scored result for the same agent and model.
@@ -130,7 +132,7 @@ Each trial writes `runs/<task>__<id>/` with `result.json` (reward, outcome, usag
 | --- | --- |
 | `lemans tasks` | List the tasks in a bench |
 | `lemans run` | Run tasks and grade them (`--task`, `--agent`, `--model`, `-k`, `-c`, `--resume`) |
-| `lemans report` | Summarize `runs/` as a table or CSV |
+| `lemans report` | Summarize `runs/` as a table or CSV (`-A [task-agent-model]` to aggregate, `-S <column>` to sort) |
 | `lemans clobber` | Delete run results (`--task`, `--ttl 10m\|2h\|1d`, `-f` to skip the confirmation) |
 
 Listing `model` in `bench.yml` as an array turns a run into a sweep: the whole task × attempt grid runs once per model.

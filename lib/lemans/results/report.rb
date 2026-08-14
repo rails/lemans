@@ -9,8 +9,9 @@ module Lemans
     # Reads a runs directory back as a table or CSV. The result files stay the
     # source of truth; unreadable ones are counted and said out loud.
     class Report
-      COLUMNS = %i[task agent model reward outcome scored cost_usd steps duration_sec started_at trial detail].freeze
-      TABLE_COLUMNS = %i[task agent model reward outcome cost_usd steps duration_sec trial].freeze
+      COLUMNS = %i[task agent model reward outcome scored cost_usd steps tokens duration_sec started_at trial detail].freeze
+      TABLE_COLUMNS = %i[task agent model reward outcome cost_usd steps tokens duration_sec trial].freeze
+      NUMERIC_COLUMNS = %i[reward cost_usd steps tokens duration_sec].freeze
 
       attr_reader :rows, :unreadable
 
@@ -40,11 +41,22 @@ module Lemans
           detail: result.dig("outcome", "detail"),
           cost_usd: result.dig("usage", "cost_usd"),
           steps: result.dig("usage", "steps"),
+          tokens: tokens_from(result),
           duration_sec: result["duration_sec"],
           started_at: result["started_at"],
           trial: result["trial"]
         }
       end
+
+      # Tokens the model actually consumed and produced; cache reads stay out,
+      # matching how providers meter a run.
+      def self.tokens_from(result)
+        input = result.dig("usage", "input_tokens")
+        output = result.dig("usage", "output_tokens")
+        input.nil? && output.nil? ? nil : input.to_i + output.to_i
+      end
+
+      def self.short_model(model) = model.to_s.split("/").last
 
       def initialize(rows:, unreadable: 0)
         @rows = rows
@@ -52,6 +64,15 @@ module Lemans
       end
 
       def empty? = rows.empty? && unreadable.zero?
+
+      # Numbers rank best-first the way a leaderboard reads; names sort A-Z.
+      # Trials that never measured the column sink to the bottom either way.
+      def order_by!(column)
+        column = Sorting.column(column, allowed: TABLE_COLUMNS)
+        descending = NUMERIC_COLUMNS.include?(column)
+        @rows = Sorting.call(rows, descending: descending) { _1[column] }
+        self
+      end
 
       def summary
         Tally.call(rows).merge(cost_usd: rows.sum { _1[:cost_usd].to_f })
@@ -97,7 +118,7 @@ module Lemans
           "#{totals[:solved]} solved#{rank} · $#{format("%.4f", totals[:cost_usd])}"
       end
 
-      def short_model(model) = model.to_s.split("/").last
+      def short_model(model) = self.class.short_model(model)
 
       def display(value)
         case value

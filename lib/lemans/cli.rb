@@ -45,7 +45,7 @@ module Lemans
     map "run" => :run_bench
     desc "run", "Run tasks and verify them"
     option :bench, default: ".", desc: "Directory holding bench.yml"
-    option :task, desc: "Run one task by name"
+    option :task, desc: "Run task(s) by name", repeatable: true
     option :agent, desc: "Override the agent from bench.yml (miniswen, oracle, nop)"
     option :model, type: :array, desc: "Override the model(s) from bench.yml (space-separated)"
     option :attempts, type: :numeric, default: 1, aliases: "-k", desc: "Trials per task"
@@ -56,7 +56,7 @@ module Lemans
     def run_bench
       bench = Bench.load(options[:bench])
       tasks = bench.tasks
-      tasks = tasks.select { _1.name == options[:task] } if options[:task]
+      tasks = tasks.select { options[:task].include?(_1.name) } if options[:task]
       raise Thor::Error, "lemans: no task named #{options[:task].inspect}" if tasks.empty?
 
       run = Run.new(
@@ -134,11 +134,18 @@ module Lemans
     desc "report", "Summarize run results as a table or CSV"
     option :runs_dir, default: "runs", desc: "Directory holding run directories"
     option :format, default: "table", enum: %w[table csv], desc: "Output format"
+    option :aggregate, aliases: "-A", banner: "COLUMNS", lazy_default: "task-model",
+                       desc: "Group results by 1-3 dash-joined columns (task, agent, model)"
+    option :sort, aliases: "-S", banner: "COLUMN", desc: "Sort by a column"
     def report
       results = Results::Report.load(options[:runs_dir])
       raise Thor::Error, "lemans: no results under #{options[:runs_dir]}" if results.empty?
 
+      results = Results::Aggregate.new(results, keys: Results::Aggregate.keys(options[:aggregate])) if options[:aggregate]
+      results.order_by!(options[:sort]) if options[:sort]
       options[:format] == "csv" ? say(results.to_csv) : print_report(results)
+    rescue ConfigError => e
+      raise Thor::Error, "lemans: #{e.message}"
     end
 
     private
