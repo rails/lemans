@@ -39,6 +39,9 @@ module Lemans
       "TQDM_DISABLE" => "1"
     }.freeze
 
+    # Providers that serve local inference
+    LOCAL_PROVIDERS = %i[ollama gpustack].freeze
+
     Result = Data.define(:status, :submission, :messages, :steps, :cost_source,
                          :input_tokens, :output_tokens, :cached_tokens, :thinking_tokens, :cost_usd)
 
@@ -404,6 +407,11 @@ module Lemans
     end
 
     def cost_source
+      if local?
+        return Results::CostSource.new(name: :local_provider, model: @model,
+                                       priced_as: "#{@provider || info&.provider}/#{@id} ($0.00, local)",
+                                       registry: nil)
+      end
       return nil unless info
 
       Results::CostSource.new(name: :model_registry, model: @model,
@@ -487,6 +495,8 @@ module Lemans
       [nil, model]
     end
 
+    def local? = LOCAL_PROVIDERS.include?(@provider || info&.provider&.to_sym)
+
     def info
       return @info if defined?(@info)
 
@@ -509,6 +519,8 @@ module Lemans
     end
 
     def price(response)
+      return 0.0 if local?
+
       input = info&.input_price_per_million
       output = info&.output_price_per_million
       return nil unless input.is_a?(Numeric) && output.is_a?(Numeric)

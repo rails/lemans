@@ -236,6 +236,17 @@ class MiniswenTest < Minitest::Test
     assert_equal :submitted, result.status
     assert_nil result.cost_usd
   end
+
+  def test_a_local_provider_completion_is_priced_at_zero_not_unknown
+    loop_config = Lemans::Miniswen.new(model: "ollama/qwen3:8b", environment: ScriptedShell.new)
+
+    assert_in_delta 0.0, loop_config.send(:price, nil)
+
+    source = loop_config.send(:cost_source)
+
+    assert_equal :local_provider, source.name
+    assert_equal "ollama/qwen3:8b ($0.00, local)", source.priced_as
+  end
 end
 
 class MiniswenAdapterTest < Minitest::Test
