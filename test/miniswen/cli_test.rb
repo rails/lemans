@@ -92,4 +92,28 @@ class MiniswenCLITest < Minitest::Test
     assert_includes io.string, "\e[36m●\e[0m"
     assert_includes io.string, "\e[36mdone\e[0m"
   end
+
+  def parse(*argv)
+    original = ARGV.dup
+    ARGV.replace(argv)
+    cli = Miniswen::CLI.new
+    cli.send(:parse_args!)
+    cli
+  ensure
+    ARGV.replace(original)
+  end
+
+  def test_parses_the_remote_run_switches
+    cli = parse("-q", "--no-refresh-registry", "--results-path=/tmp/result.json", "-m", "ollama/x", "-p", "task")
+
+    assert cli.instance_variable_get(:@quiet)
+    assert cli.instance_variable_get(:@skip_registry_refresh)
+    assert_equal "/tmp/result.json", cli.instance_variable_get(:@results_path)
+  end
+
+  def test_refresh_registry_needs_no_model_or_prompt
+    cli = parse("--refresh-registry")
+
+    assert cli.instance_variable_get(:@refresh_registry)
+  end
 end

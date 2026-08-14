@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "json"
+require "miniswen/version"
 require "miniswen/ruby_llm"
 
 module Miniswen
@@ -167,6 +168,37 @@ module Miniswen
     Result = Data.define(:status, :submission, :messages, :steps, :cost_source,
                          :input_tokens, :output_tokens, :cached_tokens, :thinking_tokens, :cost_usd) do
       def success? = status == :submitted
+
+      def to_h = super.merge(cost_source: cost_source&.to_h, version: Miniswen::VERSION)
+
+      def self.from_h(payload)
+        data = deep_symbolize(payload)
+        source = data[:cost_source]
+        new(
+          status: data[:status]&.to_sym,
+          submission: data[:submission],
+          messages: data[:messages] || [],
+          steps: data[:steps],
+          cost_source: source && CostSource.new(name: source[:name]&.to_sym, model: source[:model],
+                                                priced_as: source[:priced_as], registry: source[:registry]),
+          input_tokens: data[:input_tokens], output_tokens: data[:output_tokens],
+          cached_tokens: data[:cached_tokens], thinking_tokens: data[:thinking_tokens],
+          cost_usd: data[:cost_usd]
+        )
+      end
+
+      def self.deep_symbolize(value)
+        case value
+        when Hash
+          value.to_h do |key, item|
+            key = key.to_sym
+            # Tool-call arguments keep their provider-style string keys ("command").
+            [key, key == :arguments ? item : deep_symbolize(item)]
+          end
+        when Array then value.map { deep_symbolize(_1) }
+        else value
+        end
+      end
     end
 
     CostSource = Data.define(:name, :model, :priced_as, :registry) do
@@ -240,6 +272,14 @@ module Miniswen
           return finish(:submitted, submission: submission_from(result)) if submitted?(result)
         end
       end
+    end
+
+    # The env a remote miniswen needs to drive this model: the resolved
+    # provider's required config options, named the way ruby_llm.rb reads
+    # them back from ENV on boot (the option upcased).
+    def provider_env
+      _, provider = resolved
+      provider.configuration_requirements.to_h { [_1.to_s.upcase, RubyLLM.config.public_send(_1)] }.compact
     end
 
     private

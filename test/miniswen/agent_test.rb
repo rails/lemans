@@ -238,6 +238,35 @@ class MiniswenAgentTest < Minitest::Test
     assert_nil result.cost_usd
   end
 
+  def test_the_result_round_trips_through_json
+    llm = ScriptedLLM.new([answer("ls /app"), SUBMIT])
+    shell = ScriptedShell.new("ls /app" => [0, "hello.txt"])
+
+    result = build(llm, shell).run("task")
+    restored = Miniswen::Agent::Result.from_h(JSON.parse(JSON.generate(result.to_h)))
+
+    assert_equal result.status, restored.status
+    assert_equal result.submission, restored.submission
+    assert_equal result.steps, restored.steps
+    assert_equal result.cost_usd, restored.cost_usd
+    assert_equal result.cost_source, restored.cost_source
+    assert_equal result.input_tokens, restored.input_tokens
+    # Message keys come back as the loop produced them: symbols everywhere,
+    # except tool-call arguments, which keep their provider-style string keys.
+    assert_equal result.messages, restored.messages
+    assert_equal Miniswen::VERSION, result.to_h[:version]
+  end
+
+  def test_provider_env_maps_the_resolved_providers_credentials
+    original = RubyLLM.config.ollama_api_base
+    RubyLLM.configure { _1.ollama_api_base = "http://localhost:11434/v1" }
+    agent = Miniswen::Agent.new(model: "ollama/qwen3:8b", environment: ScriptedShell.new)
+
+    assert_equal({ "OLLAMA_API_BASE" => "http://localhost:11434/v1" }, agent.provider_env)
+  ensure
+    RubyLLM.configure { _1.ollama_api_base = original }
+  end
+
   def test_a_local_provider_completion_is_priced_at_zero_not_unknown
     agent = Miniswen::Agent.new(model: "ollama/qwen3:8b", environment: ScriptedShell.new)
 

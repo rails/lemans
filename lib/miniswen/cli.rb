@@ -90,6 +90,10 @@ module Miniswen
       @model = ENV.fetch("MINISWEN_MODEL", nil)
       @options = {}
       @verbose = false
+      @quiet = false
+      @results_path = nil
+      @refresh_registry = false
+      @skip_registry_refresh = false
     end
 
     def run
@@ -99,24 +103,34 @@ module Miniswen
       # so env flags kick in
       require "miniswen"
 
-      Miniswen.refresh_registry!
+      refresh_registry_and_exit if @refresh_registry
+
+      Miniswen.refresh_registry! unless @skip_registry_refresh
 
       require "miniswen/local"
 
-      reporter = Reporter.new(verbose: @verbose)
+      reporter = @quiet ? nil : Reporter.new(verbose: @verbose)
       agent = Agent.new(model:, reporter:, environment: Local.new, **options)
 
       result = agent.run(instruction)
 
+      File.write(@results_path, JSON.generate(result.to_h)) if @results_path
+
       if result.success?
-        reporter.print_summary(result)
+        reporter&.print_summary(result)
       else
-        reporter.print_failure(result)
+        reporter&.print_failure(result)
         Kernel.exit(1)
       end
     end
 
     private
+
+    def refresh_registry_and_exit
+      refreshed = Miniswen.refresh_registry!(persist: true)
+      $stdout.puts Miniswen.registry_revision if refreshed
+      Kernel.exit(refreshed ? 0 : 1)
+    end
 
     def parse_args!
       parser = OptionParser.new do |opts|
@@ -147,6 +161,22 @@ module Miniswen
           options[:exec_timeout] = v
         end
 
+        opts.on("-q", "--quiet", "Disable progress output") do
+          @quiet = true
+        end
+
+        opts.on("--results-path=PATH", String, "Write the run result as JSON to PATH") do |v|
+          @results_path = v
+        end
+
+        opts.on("--refresh-registry", "Refresh the model registry, persist it, and exit") do
+          @refresh_registry = true
+        end
+
+        opts.on("--no-refresh-registry", "Skip the model registry refresh on startup") do
+          @skip_registry_refresh = true
+        end
+
         opts.on("-v", "--version", "Print version") do
           $stdout.puts Miniswen::VERSION
           exit 0
@@ -160,6 +190,8 @@ module Miniswen
       end
 
       parser.parse!
+
+      return if @refresh_registry
 
       raise "Use -m to specify the model" unless @model
       raise "Please, provide instructions via -p option" unless @instruction
