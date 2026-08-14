@@ -82,12 +82,11 @@ module Lemans
         summary = run.call { |event, data| progress.record(event, data) }
       else
         task_width = tasks.map { _1.name.length }.max
-        progress = Progress.new(total: run.total).start
         summary = run.call do |event, data|
-          progress.record(event) { announce(event, data, width: task_width) }
+          announce(event, data, width: task_width)
         end
       end
-      progress.stop
+      progress&.stop
 
       say ""
       say_status :report, "collecting results from #{options[:runs_dir]}", :cyan
