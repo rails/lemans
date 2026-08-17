@@ -49,7 +49,6 @@ class TrialTest < Minitest::Test
       written = JSON.parse(runs_dir.join(trial.id, "result.json").read, symbolize_names: true)
 
       assert_equal "completed", written[:outcome][:name].to_s
-      assert_predicate trial, :complete?
     end
   end
 

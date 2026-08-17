@@ -11,7 +11,7 @@ class MiniswenAdapterTest < Minitest::Test
 
   def build_agent(*answers, model: "test", **overrides)
     bench = load_bench
-    agent = Lemans::Agents::Base.build("miniswen", profile: bench.agent, model: model)
+    agent = Lemans::Agents.build("miniswen", profile: bench.agent, model: model)
     stub_llm(*answers, **overrides)
     [agent, load_task(bench)]
   end
@@ -93,7 +93,7 @@ class MiniswenAdapterTest < Minitest::Test
 
   def test_the_profile_config_reaches_the_loop_mini_style
     bench = load_bench
-    agent = Lemans::Agents::Base.build("miniswen", profile: bench.agent)
+    agent = Lemans::Agents.build("miniswen", profile: bench.agent)
     loop_config = agent.send(:agent_for, FakeEnv.new)
 
     assert_equal 100, loop_config.instance_variable_get(:@max_steps)

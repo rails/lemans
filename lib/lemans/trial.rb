@@ -20,8 +20,6 @@ module Lemans
       @dir = Pathname(runs_dir).join(@id)
     end
 
-    def complete? = result_path.file?
-
     def run
       logs_dir.mkpath
       started_at = Time.now.utc
@@ -30,7 +28,7 @@ module Lemans
       outcome = Results::Outcome.new(:completed)
 
       begin
-        agent = Agents::Base.build(agent_name, profile: bench.agent, model: model)
+        agent = Agents.build(agent_name, profile: bench.agent, model: model)
 
         environment = start_environment
         prepare(environment)
@@ -137,7 +135,6 @@ module Lemans
       result
     end
 
-    # `complete?` (the --resume gate) and the write must agree forever.
     def result_path = dir.join("result.json")
 
     # --resume treats any result.json as a finished attempt, so the write must
