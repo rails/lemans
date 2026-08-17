@@ -62,9 +62,14 @@ module Lemans
 
     def self.frontmatter(dir)
       match = dir.join(INSTRUCTION).read.match(FRONTMATTER) or return {}
-      YAML.safe_load(match[1]) || {}
+      config = YAML.safe_load(match[1], aliases: true) || {}
+      raise ConfigError, "#{dir.join(INSTRUCTION)}: frontmatter must be a mapping" unless config.is_a?(Hash)
+
+      config
     rescue Errno::ENOENT
-      {} # validate! reports the missing instruction with its own message
+      {} # fallback to validate!
+    rescue Psych::Exception => e
+      raise ConfigError, "#{dir.join(INSTRUCTION)}: #{e.message}"
     end
 
     def initialize(config, dir:, bench:)
