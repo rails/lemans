@@ -53,7 +53,7 @@ module Lemans
       end
 
       def exec(command, timeout: nil, env: {})
-        @shell.exec(command, timeout: timeout, env: env)
+        @shell.exec(command, timeout: timeout || DEFAULT_TIMEOUT, env: env)
       rescue ::Daytona::Sdk::Error => e
         raise InfrastructureError, "daytona: exec failed: #{e.message}"
       end

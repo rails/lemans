@@ -11,8 +11,6 @@ module Lemans
     ROOT = "/lemans"
     DIR = "#{ROOT}/setup".freeze
 
-    CLEANUP_TIMEOUT_SEC = 60
-
     def initialize(commands:, task:, phase:, timeout_sec:)
       @commands = commands
       @task = task
@@ -26,7 +24,7 @@ module Lemans
       files.each { |local, remote| environment.upload(local, remote) }
       apply_seed(environment)
       commands.each { environment.exec!(_1, timeout: timeout_sec) }
-      environment.exec!("rm -rf #{Shellwords.escape(ROOT)}", timeout: CLEANUP_TIMEOUT_SEC)
+      environment.exec!("rm -rf #{Shellwords.escape(ROOT)}")
     end
 
     private
