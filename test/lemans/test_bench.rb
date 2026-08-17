@@ -5,7 +5,6 @@ require "test_helper"
 class BenchTest < Minitest::Test
   include BenchFixture
 
-  # The smallest profile that validates, deep-copied so a test can bend one key.
   def minimal_config
     {
       "environment" => { "network" => { "mode" => "none" } },
@@ -17,9 +16,9 @@ class BenchTest < Minitest::Test
   def test_the_fixture_profile_loads_the_way_it_reads
     bench = load_bench
 
-    assert_equal Lemans::Bench::Resources.new(cpus: 2, memory_mb: 2048, storage_mb: 5120), bench.resources
-    assert_equal 600.0, bench.build_timeout_sec
-    assert_equal :allowlist, bench.setup.network.mode
+    assert_equal Lemans::Bench::Resources.new(cpus: 2, memory_mb: 2048, storage_mb: 5120), bench.environment.resources
+    assert_equal 600.0, bench.environment.build_timeout_sec
+    assert_equal :allowlist, bench.environment.network.mode
     assert_equal "miniswen", bench.agent.name
     assert_equal 1800.0, bench.agent.timeout_sec
     assert_equal 100, bench.agent.step_limit
@@ -28,10 +27,16 @@ class BenchTest < Minitest::Test
     assert_equal "/logs/verifier/reward.txt", bench.verifier.reward_path
   end
 
+  def test_every_section_reader_is_validated
+    [Lemans::Bench::Environment, Lemans::Bench::Agent, Lemans::Bench::Verifier].each do |section|
+      assert_equal section.public_instance_methods(false).sort, section::VALIDATED.sort, section.name
+    end
+  end
+
   def test_the_fixture_leans_on_the_verifier_convention
     bench = load_bench
 
-    assert_equal "/app", bench.workdir
+    assert_equal "/app", bench.environment.workdir
     assert_empty bench.verifier.setup
     assert_equal Lemans::Bench::Verifier::DEFAULT_COMMAND, bench.verifier.command
     assert_includes bench.verifier.command, "bash /tests/test.sh"

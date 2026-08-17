@@ -15,6 +15,7 @@ module Lemans
         SHORT_COMMAND_SEC = 120
         POLL_INTERVAL_SEC = 2
         MAX_OUTPUT_BYTES = 200_000
+        HOUSEKEEPING_TIMEOUT = 60
 
         def initialize(sandbox)
           @sandbox = sandbox
@@ -73,10 +74,9 @@ module Lemans
           { exit_code: exit_code || 124, output: output }
         end
 
-        # Scratch files left in /tmp tell whatever runs next — the model — how
-        # it is being run.
         def clear_scratch(*paths)
-          exec_directly("rm -f #{paths.map { Shellwords.escape(_1) }.join(" ")}", timeout: 60, env: {})
+          command = "rm -f #{paths.map { Shellwords.escape(_1) }.join(" ")}"
+          exec_directly(command, timeout: HOUSEKEEPING_TIMEOUT, env: {})
         rescue ::Daytona::Sdk::Error => e
           warn "lemans: could not clear #{paths.join(", ")}: #{e.message}"
         end
@@ -108,7 +108,7 @@ module Lemans
 
         def tail(log_file, bytes: MAX_OUTPUT_BYTES)
           with_read_retries do
-            exec_directly("tail -c #{bytes} #{log_file} 2>/dev/null", timeout: 60, env: {})
+            exec_directly("tail -c #{bytes} #{log_file} 2>/dev/null", timeout: HOUSEKEEPING_TIMEOUT, env: {})
           end[:output].to_s
         end
 
