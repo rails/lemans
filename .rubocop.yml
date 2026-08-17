@@ -26,3 +26,10 @@ Style/Documentation:
 Style/FormatStringToken:
   Exclude:
     - test/**/*
+
+Style/FetchEnvVar:
+  Enabled: false
+
+Naming/FileName:
+  Exclude:
+    - "**/assets/**"

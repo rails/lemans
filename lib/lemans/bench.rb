@@ -144,12 +144,11 @@ module Lemans
     # The `verifier` section: how a finished trial is verified, in the same
     # sandbox the agent worked in, after Trial closes its network.
     class Verifier < Section
-      # Default when a bench declares no `command`. An executable /tests/verify picks its language
-      # via shebang; test.sh is the shell-era fallback a bench may still ship.
-      DEFAULT_COMMAND = 'cd "$WORKDIR" && if [ -x /tests/verify ]; then exec /tests/verify; ' \
+      DEFAULT_COMMAND = "if [ -x /tests/verify ]; then exec /tests/verify; " \
+                        "elif [ -f /tests/verification_test.rb ]; then exec ruby -report-lemans /tests/verification_test.rb; " \
                         "else exec bash /tests/test.sh; fi"
 
-      VALIDATED = %i[timeout_sec setup command restore_paths logs_dir reward_path].freeze
+      VALIDATED = %i[timeout_sec setup preverify command restore_paths logs_dir reward_path].freeze
 
       def initialize(config) = super(config, "verifier")
 
@@ -159,6 +158,13 @@ module Lemans
       def setup = commands("setup")
 
       def command = fetch("command", DEFAULT_COMMAND)
+
+      def preverify
+        self["preverify"].tap do |command|
+          raise ConfigError, "#{dotted("preverify")} must be a command string, got #{command.inspect}" unless
+            command.nil? || command.is_a?(String)
+        end
+      end
 
       # The graded surfaces restored from the pre-agent snapshot before the
       # command runs; a task may override the list in its frontmatter.
@@ -223,8 +229,6 @@ module Lemans
       end.freeze
     end
 
-    # Shared verification files ship to /tests after the task's own (a task wins a collision) and
-    # ride the verifier upload after the network seals, so the agent never reads the grading procedure.
     VERIFICATION_DIR = "verification"
 
     def verification_files

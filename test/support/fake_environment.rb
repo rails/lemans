@@ -7,12 +7,13 @@ require "fileutils"
 class FakeEnvironment < Lemans::Environments::Base
   attr_reader :files, :uploads, :commands, :stopped, :policies
 
-  def initialize(files: {}, on_command: nil, fails: nil, refuses: nil)
+  def initialize(files: {}, on_command: nil, fails: nil, refuses: nil, crashes: nil)
     super(image: nil, resources: nil, network: nil)
     @files = files
     @on_command = on_command
     @fails = fails
     @refuses = refuses
+    @crashes = crashes
     @uploads = []
     @commands = []
     @policies = []
@@ -25,11 +26,14 @@ class FakeEnvironment < Lemans::Environments::Base
     @commands << command
     raise Lemans::InfrastructureError, "the sandbox went away" if @fails&.match?(command)
     return result(1, "no") if @refuses&.match?(command)
+    return result(2, "it crashed") if @crashes&.match?(command)
 
     case command
     when /\Afind (\S+) -type f -print0\z/ then find(Regexp.last_match(1))
     when /\Acat (\S+)\z/ then read(Regexp.last_match(1))
     when /\Arm -f (\S+)\z/ then removed(Regexp.last_match(1))
+    when /\Atest -e (\S+)\z/ then present(Regexp.last_match(1))
+    when /\Atest -d (\S+)\z/ then directory(Regexp.last_match(1))
     else
       @on_command&.call(files)
       result(0, "the suite ran")
@@ -60,6 +64,10 @@ class FakeEnvironment < Lemans::Environments::Base
   end
 
   def read(path) = files.key?(path) ? result(0, files[path]) : result(1, "cat: #{path}: No such file")
+
+  def present(path) = files.key?(path) ? result(0, "") : result(1, "")
+
+  def directory(root) = files.keys.any? { _1.start_with?("#{root}/") } ? result(0, "") : result(1, "")
 
   def removed(path)
     files.delete(path)
