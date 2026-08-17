@@ -61,7 +61,17 @@ module Lemans
     end
 
     def self.frontmatter(dir)
-      match = dir.join(INSTRUCTION).read.match(FRONTMATTER) or return {}
+      content = dir.join(INSTRUCTION).read
+      match = content.match(FRONTMATTER)
+      unless match
+        # Opens like frontmatter but never matches: silently dropping every
+        # declared key (and leaking the raw block to the agent) is worse than
+        # refusing. CRLF endings and a missing final newline are the usual causes.
+        raise ConfigError, "#{dir.join(INSTRUCTION)}: frontmatter opens with --- but never closes" if
+          content.start_with?("---")
+
+        return {}
+      end
       config = YAML.safe_load(match[1], aliases: true) || {}
       raise ConfigError, "#{dir.join(INSTRUCTION)}: frontmatter must be a mapping" unless config.is_a?(Hash)
 
@@ -152,8 +162,10 @@ module Lemans
 
     private
 
+    # Dotfiles included, matching TreeDigest: the files a digest records are
+    # exactly the files that ship.
     def expand(root)
-      root.glob("**/*").select(&:file?).map { [_1, _1.relative_path_from(root).to_s] }
+      root.glob("**/*", File::FNM_DOTMATCH).select(&:file?).map { [_1, _1.relative_path_from(root).to_s] }
     end
 
     def flat(filename)

@@ -16,7 +16,7 @@ class OracleTest < Minitest::Test
 
       command = fake.commands.fetch(0)
 
-      assert_includes command, %(cd "/app" && git apply)
+      assert_includes command, "cd /app && git apply"
       assert_includes command, "/solution/solution.patch"
       assert_includes fake.uploads.map(&:last), "/solution/solution.patch"
     end

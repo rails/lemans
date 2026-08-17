@@ -260,7 +260,7 @@ module Lemans
       dir = root.join(VERIFICATION_DIR)
       return [] unless dir.directory?
 
-      dir.glob("**/*").select(&:file?).map { [_1, _1.relative_path_from(dir).to_s] }
+      dir.glob("**/*", File::FNM_DOTMATCH).select(&:file?).map { [_1, _1.relative_path_from(dir).to_s] }
     end
 
     def tasks_dir = root.join(@config.fetch("tasks", "tasks"))
