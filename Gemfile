@@ -16,3 +16,5 @@ gem "json_skooma", "~> 0.2"
 gem "minitest", "~> 6.0"
 gem "minitest-mock", "~> 5.27"
 gem "rubocop", "~> 1.89"
+
+gem "ruby_llm-test", "~> 0.2.0"

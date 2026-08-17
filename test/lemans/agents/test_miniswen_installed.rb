@@ -3,10 +3,11 @@
 require "test_helper"
 require "tmpdir"
 
-require_relative "../../miniswen/agent_test"
+require "miniswen/testing"
 
 class MiniswenInstalledTest < Minitest::Test
   include BenchFixture
+  include Miniswen::Testing
 
   def build_agent
     bench = load_bench
@@ -26,8 +27,8 @@ class MiniswenInstalledTest < Minitest::Test
   # A genuine remote payload: what the sandboxed CLI would leave behind
   # after a scripted run.
   def remote_result_json
-    llm = MiniswenAgentTest::ScriptedLLM.new([MiniswenAgentTest::SUBMIT])
-    loop_agent = MiniswenAgentTest::ScriptedLoop.new(llm: llm, environment: MiniswenAgentTest::ScriptedShell.new)
+    stub_llm(SUBMIT)
+    loop_agent = Miniswen::Agent.new(model: "test", environment: FakeEnv.new)
     JSON.generate(loop_agent.run("task").to_h)
   end
 
@@ -54,7 +55,7 @@ class MiniswenInstalledTest < Minitest::Test
       assert_predicate result.outcome, :completed?
       assert_predicate result.outcome, :scored?
       assert_in_delta 0.01, result.usage.cost_usd
-      assert_equal :agent, result.usage.cost_source.name
+      assert_equal :model_registry, result.usage.cost_source.name
 
       command = shell.commands.last
 
