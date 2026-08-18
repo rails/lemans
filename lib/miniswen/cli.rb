@@ -92,6 +92,7 @@ module Miniswen
       @verbose = false
       @quiet = false
       @results_path = nil
+      @atif_path = nil
       @refresh_registry = false
       @skip_registry_refresh = false
     end
@@ -115,6 +116,7 @@ module Miniswen
       result = agent.run(instruction)
 
       File.write(@results_path, JSON.generate(result.to_h)) if @results_path
+      write_atif(result) if @atif_path
 
       if result.success?
         reporter&.print_summary(result)
@@ -125,6 +127,11 @@ module Miniswen
     end
 
     private
+
+    def write_atif(result)
+      trajectory = Trajectory.from(result, model: model)
+      File.write(@atif_path, JSON.pretty_generate(trajectory.to_atif))
+    end
 
     def refresh_registry_and_exit
       refreshed = Miniswen.refresh_registry!(persist: true)
@@ -167,6 +174,10 @@ module Miniswen
 
         opts.on("--results-path=PATH", String, "Write the run result as JSON to PATH") do |v|
           @results_path = v
+        end
+
+        opts.on("--atif-path=PATH", String, "Write the ATIF trajectory to PATH") do |v|
+          @atif_path = v
         end
 
         opts.on("--refresh-registry", "Refresh the model registry, persist it, and exit") do
