@@ -18,6 +18,8 @@ module Lemans
         harness_crash: :invalid
       }.freeze
 
+      MAX_DETAIL_CHARS = 200
+
       def initialize(shell:, task_width:)
         @shell = shell
         @task_width = task_width
@@ -45,11 +47,15 @@ module Lemans
       end
 
       def finished(data)
-        detail = data[:scored] ? "reward=#{data[:reward].inspect}" : data[:outcome].to_s
+        status = data[:scored] ? "reward=#{data[:reward].inspect}" : data[:outcome].to_s
         @shell.say_status STATUS_VERBS.fetch(data[:outcome].to_sym, data[:outcome].to_sym),
-                          "#{data[:task].to_s.ljust(@task_width)}  #{detail.ljust(12)}  #{data[:duration_sec]}s",
+                          "#{data[:task].to_s.ljust(@task_width)}  #{status.ljust(12)}  #{data[:duration_sec]}s",
                           color(data)
+
+        @shell.say_status :error, first_line(data[:detail]), :red unless data[:scored] || data[:detail].nil?
       end
+
+      def first_line(detail) = detail.to_s.lines.first.to_s.strip[0, MAX_DETAIL_CHARS]
 
       def color(data)
         return :red unless data[:scored]

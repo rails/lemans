@@ -7,6 +7,7 @@ module Lemans
     class BoardReporter
       FRAMES = %w[⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏].freeze
       REDRAW_SEC = 0.1
+      MAX_DETAIL_CHARS = 200
 
       GREEN = "\e[32m"
       RED = "\e[31m"
@@ -50,6 +51,7 @@ module Lemans
             @in_flight -= 1
             @done += 1
             cell(data)[data[:index] - 1] = data
+            announce_error(data)
           when :interrupted
             erase
             @out.puts "#{YELLOW}^C — waiting for #{data[:in_flight]} in-flight trial(s), ^C again to abandon#{RESET}"
@@ -68,6 +70,15 @@ module Lemans
       end
 
       private
+
+      def announce_error(data)
+        return if data[:scored] || data[:detail].nil?
+
+        erase
+        @out.puts "\e[2K#{RED}#{data[:task]}: #{data[:outcome]} — " \
+                  "#{data[:detail].to_s.lines.first.to_s.strip[0, MAX_DETAIL_CHARS]}#{RESET}"
+        @drawn = 0
+      end
 
       def cell(data) = @cells[[data[:task], short(data[:model])]]
 

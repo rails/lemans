@@ -109,7 +109,7 @@ module Lemans
       return say "lemans: nothing to clobber under #{options[:runs_dir]}" if doomed.empty?
 
       unless options[:force]
-        print_in_columns(doomed.map { _1.basename.to_s })
+        doomed.each { say _1.to_s }
         return say "lemans: nothing deleted" unless yes?("Delete #{doomed.size} run(s) under #{options[:runs_dir]}? [y/N]")
       end
 

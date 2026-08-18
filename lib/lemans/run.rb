@@ -138,7 +138,8 @@ module Lemans
           outcome: result[:outcome][:name],
           scored: result[:outcome][:scored],
           reward: result[:reward],
-          duration_sec: result[:duration_sec]
+          duration_sec: result[:duration_sec],
+          detail: result[:outcome][:detail]
         }
       end
       result
