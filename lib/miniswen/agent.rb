@@ -307,8 +307,10 @@ module Miniswen
 
       entry = { role: "assistant", timestamp: Time.now.utc.iso8601, content: response[:content].to_s,
                 metrics: metrics_from(response) }
-      # Thinking rides along for the trajectory only; it is never sent back to the model.
       entry[:thinking] = response[:thinking] if response[:thinking]
+      # The provider's opaque handle on this turn's reasoning: replayed back to
+      # the provider only, never into the trajectory.
+      entry[:thinking_signature] = response[:thinking_signature] if response[:thinking_signature]
 
       observe_message entry
 
@@ -472,6 +474,8 @@ module Miniswen
       case entry[:role]
       when "assistant"
         RubyLLM::Message.new(role: :assistant, content: entry[:content],
+                             thinking: RubyLLM::Thinking.build(text: entry[:thinking],
+                                                               signature: entry[:thinking_signature]),
                              tool_calls: as_ruby_llm_tool_calls(entry[:tool_calls]))
       when "tool"
         RubyLLM::Message.new(role: :tool, content: entry[:content], tool_call_id: entry[:tool_call_id])
@@ -496,6 +500,7 @@ module Miniswen
       {
         content: response.content.to_s,
         thinking: response.thinking&.text,
+        thinking_signature: response.thinking&.signature,
         tool_calls: tool_calls_from(response),
         finish_reason: finish_reason_from(response),
         # ruby_llm's input_tokens is the cache-miss remainder only; the
