@@ -305,7 +305,8 @@ module Miniswen
       @totals.each_key { @totals[_1] += response[_1].to_i }
       track_cost(response)
 
-      entry = { role: "assistant", content: response[:content].to_s, metrics: metrics_from(response) }
+      entry = { role: "assistant", timestamp: Time.now.utc.iso8601, content: response[:content].to_s,
+                metrics: metrics_from(response) }
       # Thinking rides along for the trajectory only; it is never sent back to the model.
       entry[:thinking] = response[:thinking] if response[:thinking]
 

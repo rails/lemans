@@ -71,7 +71,7 @@ class MiniswenAdapterTest < Minitest::Test
 
     assert_equal "the task wants a date", agent_step["reasoning_content"]
     assert_equal 1, agent_step["llm_call_count"]
-    assert_equal 40, agent_step.dig("metrics", "extra", "reasoning_tokens")
+    assert_equal 40, agent_step.dig("metrics", "extra", "completion_tokens_details", "reasoning_tokens")
     assert_equal 80, trajectory.dig("final_metrics", "extra", "total_reasoning_tokens")
   end
 

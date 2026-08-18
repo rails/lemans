@@ -2,6 +2,7 @@
 
 require "miniswen/version"
 require "miniswen/agent"
+require "miniswen/trajectory"
 
 module Miniswen # :nodoc:
   class Error < StandardError; end
