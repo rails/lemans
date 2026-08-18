@@ -37,7 +37,7 @@ module Lemans
         raise ConfigError, "cannot use runs directory #{@runs_dir}: #{e.message}"
       end
       queue = Queue.new
-      pending.each { queue << _1 }
+      pending.shuffle.each { queue << _1 }
       queue.close
 
       results = Concurrent::Array.new
