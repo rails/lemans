@@ -65,7 +65,7 @@ class MiniswenInstalledTest < Minitest::Test
       assert_includes command, "--max-steps 100"
       assert_includes command, "--max-cost 5"
 
-      trajectory = JSON.parse(logs_dir.join("miniswen.trajectory.json").read)
+      trajectory = JSON.parse(logs_dir.join("trajectory.json").read)
 
       assert ATIFSchema.valid?(trajectory), ATIFSchema.errors(trajectory).join("\n")
       assert_equal "submitted", trajectory.dig("extra", "status")

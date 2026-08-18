@@ -56,7 +56,7 @@ class VerifierTest < Minitest::Test
       assert_includes env.uploads.map(&:last), "/tests/test.sh"
       assert_includes env.uploads.map(&:last), "/tests/eport-lemans.rb"
       # The evidence came out; the sandbox is the trial's to stop, not ours.
-      assert_equal "the checks ran", dir.join("verifier", "logs", "checks.txt").read
+      assert_equal "the checks ran", dir.join("checks.txt").read
       refute_predicate env, :stopped
     end
   end
@@ -139,7 +139,7 @@ class VerifierTest < Minitest::Test
       reward = verifier.call(sandbox)
 
       assert_in_delta 0.0, reward
-      assert_includes Pathname(dir).join("verifier", "output.txt").read, "scores 0"
+      assert_includes Pathname(dir).join("verifier.log").read, "scores 0"
     end
   end
 

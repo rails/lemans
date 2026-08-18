@@ -30,7 +30,7 @@ class TrialTest < Minitest::Test
   end
 
   def test_an_oracle_trial_scores_full_marks_and_writes_it_all_down
-    with_trial do |trial, runs_dir|
+    with_trial do |trial, _runs_dir|
       env = sandbox
       result = environment(env) { trial.run }
 
@@ -46,7 +46,7 @@ class TrialTest < Minitest::Test
       assert_equal %i[allowlist none], env.policies.map(&:mode)
       assert_predicate env, :stopped
 
-      written = JSON.parse(runs_dir.join(trial.id, "result.json").read, symbolize_names: true)
+      written = JSON.parse(trial.dir.join("result.json").read, symbolize_names: true)
 
       assert_equal "completed", written[:outcome][:name].to_s
     end
@@ -92,7 +92,7 @@ class TrialTest < Minitest::Test
   end
 
   def test_a_harness_bug_is_recorded_as_a_crash_not_lost
-    with_trial do |trial, runs_dir|
+    with_trial do |trial, _runs_dir|
       exploding = ->(*, **) { raise "the harness tripped over itself" }
       result = Lemans::Environments.stub(:build, exploding) { trial.run }
 
@@ -100,7 +100,7 @@ class TrialTest < Minitest::Test
       refute result[:outcome][:scored]
       assert_match(/RuntimeError: the harness tripped/, result[:outcome][:detail])
       # The crash left evidence a report can find, not just a console line.
-      assert_path_exists runs_dir.join(trial.id, "result.json").to_s
+      assert_path_exists trial.dir.join("result.json").to_s
     end
   end
 

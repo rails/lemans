@@ -87,7 +87,7 @@ class RunTest < Minitest::Test
 
       assert_equal 2, summary[:total]
 
-      models = Pathname(runs_dir).glob("*/result.json").map { JSON.parse(_1.read)["model"] }
+      models = Pathname(runs_dir).glob("**/result.json").map { JSON.parse(_1.read)["model"] }
 
       assert_equal %w[model-a model-b], models.sort
     end
@@ -111,7 +111,7 @@ class RunTest < Minitest::Test
 
       assert_equal 2, summary[:total]
 
-      models = Pathname(runs_dir).glob("*/result.json").map { JSON.parse(_1.read)["model"] }
+      models = Pathname(runs_dir).glob("**/result.json").map { JSON.parse(_1.read)["model"] }
 
       assert_equal %w[model-a model-b], models.sort
     end
@@ -178,7 +178,7 @@ class RunTest < Minitest::Test
 
       refute_nil finished
       assert_equal :harness_crash, finished.last[:outcome]
-      outcomes = Pathname(runs_dir).glob("*/result.json").map { JSON.parse(_1.read).dig("outcome", "name") }
+      outcomes = Pathname(runs_dir).glob("**/result.json").map { JSON.parse(_1.read).dig("outcome", "name") }
 
       assert_equal ["harness_crash"], outcomes
     end
@@ -195,7 +195,7 @@ class RunTest < Minitest::Test
       end
 
       # Nothing was recorded: the author's bug is not a measurement.
-      assert_empty Pathname(runs_dir).glob("*/result.json")
+      assert_empty Pathname(runs_dir).glob("**/result.json")
     end
   end
 end

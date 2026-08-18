@@ -17,7 +17,7 @@ module Lemans
       @model = model
       @backend = backend
       @id = "#{task.name}__#{SecureRandom.alphanumeric(7)}"
-      @dir = Pathname(runs_dir).join(@id)
+      @dir = Pathname(runs_dir).join(model_dir, @id)
     end
 
     def run
@@ -90,7 +90,11 @@ module Lemans
 
     private
 
-    def logs_dir = dir.join("agent")
+    def model_dir
+      (model || bench.agent.model || agent_name).to_s.split("/").last
+    end
+
+    def logs_dir = dir
 
     def over_ceiling(result)
       limit = bench.agent.cost_limit

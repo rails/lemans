@@ -27,7 +27,7 @@ module Lemans
         FileUtils.remove_entry(entry.to_s)
         true
       rescue SystemCallError => e
-        warn "lemans: could not delete #{entry.basename}: #{e.message}"
+        warn "lemans: could not delete #{entry}: #{e.message}"
         false
       end
     end
@@ -39,9 +39,7 @@ module Lemans
     def select_matches
       return [] unless runs_dir.directory?
 
-      runs_dir.children.sort.select do |entry|
-        next false unless entry.directory?
-
+      runs_dir.glob("**/").map(&:cleanpath).sort.select do |entry|
         task = task_name(entry)
         next false if task.nil?
 

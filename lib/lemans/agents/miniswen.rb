@@ -9,7 +9,7 @@ module Lemans
     # there is nothing to install and no model API in the sandbox allowlist.
     class Miniswen < Base
       NAME = "miniswen"
-      TRAJECTORY_FILENAME = "miniswen.trajectory.json"
+      TRAJECTORY_FILENAME = "trajectory.json"
 
       OUTCOME_FOR_STATUS = {
         submitted: :completed,
@@ -85,7 +85,7 @@ module Lemans
         path
       end
 
-      def session_id_for(logs_dir) = Pathname(logs_dir).dirname.basename.to_s
+      def session_id_for(logs_dir) = Pathname(logs_dir).basename.to_s
 
       # What the trajectory cannot be read without: the prompts the model saw
       # and the budget it worked under

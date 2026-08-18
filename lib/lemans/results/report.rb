@@ -17,7 +17,7 @@ module Lemans
       attr_reader :rows, :unreadable
 
       def self.load(runs_dir, tag: nil)
-        paths = Pathname(runs_dir).glob("*/result.json").sort
+        paths = Pathname(runs_dir).glob("**/result.json").sort
         rows = []
         unreadable = 0
 

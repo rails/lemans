@@ -82,7 +82,7 @@ module Lemans
     # Counts only attempts that measured the same thing (agent, model, digests, scored) — otherwise
     # editing bench.yml and resuming would let old-profile trials satisfy the new run.
     def completed_attempts(task, model)
-      @runs_dir.glob("*/result.json").count { same_run?(_1, task, model) }
+      @runs_dir.glob("**/result.json").count { same_run?(_1, task, model) }
     end
 
     def same_run?(path, task, model)
