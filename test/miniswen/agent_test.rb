@@ -325,6 +325,37 @@ class MiniswenAgentTest < Minitest::Test
                  provider.send(:format_thinking, collapsed))
   end
 
+  def test_a_transport_failure_becomes_an_infrastructure_error
+    stub_llm("true")
+    agent.stub(:resolved, proc { raise Faraday::SSLError, "SSL_connect returned=1 errno=107" }) do
+      error = assert_raises(Miniswen::InfrastructureError) { agent.run("task") }
+
+      assert_includes error.message, "the model call failed"
+      assert_includes error.message, "Faraday::SSLError"
+    end
+  end
+
+  def test_ssl_errors_join_the_transport_retry_list
+    assert_includes RubyLLM::Connection.allocate.retry_exceptions, Faraday::SSLError
+  end
+
+  def test_partial_result_preserves_the_transcript_and_totals
+    stub_llm("true")
+
+    assert_raises(RubyLLM::Test::Errors::NoResponseProvidedError) { agent.run("task") }
+
+    partial = agent.partial_result("the model went away")
+
+    assert_equal :error, partial.status
+    assert_equal "the model went away", partial.error
+    assert_equal 1, partial.steps
+    assert_equal 100, partial.input_tokens
+    assert_equal "tool", partial.messages.last[:role]
+    restored = Miniswen::Agent::Result.from_h(JSON.parse(JSON.generate(partial.to_h)))
+
+    assert_equal partial, restored
+  end
+
   private
 
   attr_reader :agent, :fake_env

@@ -2,9 +2,14 @@
 
 require_relative "../test_helper"
 require "miniswen/cli"
+require "miniswen/testing"
 require "stringio"
+require "tmpdir"
+require "json"
 
 class MiniswenCLITest < Minitest::Test
+  include Miniswen::Testing
+
   def build_reporter
     output = StringIO.new
     [Miniswen::CLI::Reporter.new(output), output]
@@ -135,5 +140,36 @@ class MiniswenCLITest < Minitest::Test
     cli = parse("--refresh-registry")
 
     assert cli.instance_variable_get(:@refresh_registry)
+  end
+
+  def run_cli(*argv)
+    original = ARGV.dup
+    ARGV.replace(argv)
+    Miniswen::CLI.new.run
+  ensure
+    ARGV.replace(original)
+  end
+
+  def test_a_crashed_run_still_writes_the_results_and_trajectory_files
+    Dir.mktmpdir do |dir|
+      results = File.join(dir, "result.json")
+      atif = File.join(dir, "trajectory.json")
+
+      assert_raises(RubyLLM::Test::Errors::NoResponseProvidedError) do
+        run_cli("-q", "--no-refresh-registry", "--results-path=#{results}",
+                "--atif-path=#{atif}", "-m", "test", "-p", "task")
+      end
+
+      payload = JSON.parse(File.read(results))
+
+      assert_equal "error", payload["status"]
+      assert_includes payload["error"], "NoResponseProvidedError"
+      assert_equal "system", payload.dig("messages", 0, "role")
+
+      trajectory = JSON.parse(File.read(atif))
+
+      assert_equal "error", trajectory.dig("extra", "status")
+      assert_includes trajectory.dig("extra", "error"), "NoResponseProvidedError"
+    end
   end
 end

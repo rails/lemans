@@ -25,6 +25,38 @@ class MiniswenAdapterTest < Minitest::Test
     end
   end
 
+  class TransportFailingMiniswen < Lemans::Agents::Miniswen
+    private
+
+    def agent_for(environment)
+      super.tap do |agent|
+        agent.define_singleton_method(:complete) do |_messages|
+          raise ::Miniswen::InfrastructureError,
+                "miniswen: the model call failed: Faraday::SSLError: SSL_connect returned=1 errno=107"
+        end
+      end
+    end
+  end
+
+  def test_a_model_call_failure_still_leaves_a_trajectory
+    bench = load_bench
+    agent = TransportFailingMiniswen.new(profile: bench.agent, model: "test")
+    task = load_task(bench)
+    Dir.mktmpdir do |dir|
+      logs_dir = Pathname(dir)
+      error = assert_raises(::Miniswen::InfrastructureError) do
+        agent.call(FakeEnv.new, task: task, logs_dir: logs_dir)
+      end
+
+      assert_includes error.message, "SSL_connect"
+      trajectory = JSON.parse(logs_dir.join("trajectory.json").read)
+
+      assert_equal "error", trajectory.dig("extra", "status")
+      assert_includes trajectory.dig("extra", "error"), "SSL_connect"
+      assert_equal "system", trajectory["steps"].first["source"]
+    end
+  end
+
   def test_a_submission_is_a_completed_scored_trial_with_priced_usage
     agent, task = build_agent({ cmd: "echo hello > /app/hello.txt", content: "I made the file." }, SUBMIT)
     result, trajectory = call(agent, task)

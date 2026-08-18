@@ -29,6 +29,14 @@ module Miniswen
       details && !details.empty? ? { reasoning_details: details } : super
     end
   end
+
+  # A handshake reset never sent the request, so retrying is as safe as the
+  # ConnectionFailed retries ruby_llm already does; it only lists SSL errors
+  # as fatal.
+  module RetryTransientSSL
+    def retry_exceptions = super + [Faraday::SSLError]
+  end
 end
 
 RubyLLM::Providers::OpenRouter.prepend(Miniswen::VerbatimReasoningDetails)
+RubyLLM::Connection.prepend(Miniswen::RetryTransientSSL)

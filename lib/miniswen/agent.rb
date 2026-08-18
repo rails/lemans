@@ -186,7 +186,8 @@ module Miniswen
     end
 
     Result = Data.define(:status, :submission, :messages, :steps, :cost_source,
-                         :input_tokens, :output_tokens, :cached_tokens, :thinking_tokens, :cost_usd) do
+                         :input_tokens, :output_tokens, :cached_tokens, :thinking_tokens, :cost_usd,
+                         :error) do
       def success? = status == :submitted
 
       def to_h = super.merge(cost_source: cost_source&.to_h, version: Miniswen::VERSION)
@@ -203,7 +204,8 @@ module Miniswen
                                                 priced_as: source[:priced_as], registry: source[:registry]),
           input_tokens: data[:input_tokens], output_tokens: data[:output_tokens],
           cached_tokens: data[:cached_tokens], thinking_tokens: data[:thinking_tokens],
-          cost_usd: data[:cost_usd]
+          cost_usd: data[:cost_usd],
+          error: data[:error]
         )
       end
 
@@ -295,6 +297,15 @@ module Miniswen
           return finish(:submitted, submission: submission_from(result)) if submitted?(result)
         end
       end
+    end
+
+    def partial_result(error)
+      Result.new(
+        status: :error, submission: nil, messages: @messages || [], steps: @steps.to_i,
+        cost_source: cost_source, cost_usd: @cost_known == false ? nil : @cost.to_f,
+        error: error,
+        **(@totals || { input_tokens: 0, output_tokens: 0, cached_tokens: 0, thinking_tokens: 0 })
+      )
     end
 
     # The env a remote miniswen needs to drive this model: the resolved
@@ -470,7 +481,7 @@ module Miniswen
     def finish(status, submission: nil)
       Result.new(
         status: status, submission: submission, messages: @messages, steps: @steps,
-        cost_source: cost_source, cost_usd: @cost_known ? @cost : nil, **@totals
+        cost_source: cost_source, cost_usd: @cost_known ? @cost : nil, error: nil, **@totals
       )
     end
 
@@ -487,6 +498,8 @@ module Miniswen
       payload(response)
     rescue RubyLLM::Error => e
       raise InfrastructureError, "miniswen: the model call failed: #{e.message}"
+    rescue Faraday::SSLError, Faraday::ConnectionFailed, Faraday::TimeoutError => e
+      raise InfrastructureError, "miniswen: the model call failed: #{e.class}: #{e.message}"
     end
 
     # Anthropic bills every token fresh unless the request marks explicit cache

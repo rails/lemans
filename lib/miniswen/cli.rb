@@ -113,10 +113,14 @@ module Miniswen
       reporter = @quiet ? nil : Reporter.new(verbose: @verbose)
       agent = Agent.new(model:, reporter:, environment: Local.new, **options)
 
-      result = agent.run(instruction)
+      begin
+        result = agent.run(instruction)
+      rescue StandardError => e
+        write_results(agent.partial_result(error_message(e)))
+        raise
+      end
 
-      File.write(@results_path, JSON.generate(result.to_h)) if @results_path
-      write_atif(result) if @atif_path
+      write_results(result)
 
       if result.success?
         reporter&.print_summary(result)
@@ -127,6 +131,15 @@ module Miniswen
     end
 
     private
+
+    def write_results(result)
+      File.write(@results_path, JSON.generate(result.to_h)) if @results_path
+      write_atif(result) if @atif_path
+    end
+
+    def error_message(error)
+      error.is_a?(Miniswen::Error) ? error.message : "#{error.class}: #{error.message}"
+    end
 
     def write_atif(result)
       trajectory = Trajectory.from(result, model: model)

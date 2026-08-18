@@ -32,7 +32,7 @@ module Miniswen
         steps: steps,
         notes: NOTES,
         final_metrics: final_metrics,
-        extra: { status: result.status, submission: result.submission }.compact
+        extra: { status: result.status, submission: result.submission, error: result.error }.compact
       }.compact
     end
 
