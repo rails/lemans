@@ -12,11 +12,11 @@ module Lemans
       dir.glob("**/*", File::FNM_DOTMATCH).sort.each do |entry|
         next unless entry.file?
 
-        # A NUL between path and contents, or file `ab` holding `c` and file
-        # `a` holding `bc` would digest identically; no legal path has a NUL.
-        sha << entry.relative_path_from(dir).to_s
-        sha << "\0"
-        sha << entry.binread
+        path = entry.relative_path_from(dir).to_s
+        contents = entry.binread
+        sha << [path.bytesize, contents.bytesize].pack("Q>Q>")
+        sha << path
+        sha << contents
       end
       sha.hexdigest
     end

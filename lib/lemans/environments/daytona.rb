@@ -68,7 +68,11 @@ module Lemans
 
       def upload(local_path, remote_path)
         transfer do
-          sandbox.fs.upload_file_stream(local_path.to_s, remote_path.to_s, timeout: TRANSFER_TIMEOUT)
+          # An open handle, not a path string: the SDK uploads a non-existent
+          # path AS ITS OWN BYTES, so a missing file must die here as ENOENT.
+          Pathname(local_path).open("rb") do |file|
+            sandbox.fs.upload_file_stream(file, remote_path.to_s, timeout: TRANSFER_TIMEOUT)
+          end
         end
       rescue *Retries::SDK_ERRORS => e
         raise InfrastructureError, "daytona: could not upload #{local_path}: #{e.message}"
@@ -82,7 +86,7 @@ module Lemans
             sandbox.fs.download_file_stream(remote_path.to_s, timeout: TRANSFER_TIMEOUT) { file.write(_1) }
           end
         end
-      rescue *Retries::SDK_ERRORS => e
+      rescue *Retries::SDK_ERRORS, SystemCallError => e
         raise InfrastructureError, "daytona: could not download #{remote_path}: #{e.message}"
       end
 

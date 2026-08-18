@@ -97,13 +97,15 @@ module Lemans
       result = environment.exec("cat #{Shellwords.escape(reward_path)}")
       raise VerifierError, "could not read #{reward_path}: #{result.output.to_s[0, 500]}" unless result.success?
 
-      value = Float(result.output.to_s.strip)
+      value = begin
+        Float(result.output.to_s.strip)
+      rescue ArgumentError
+        raise VerifierError, "verifier wrote #{result.output.to_s.strip.inspect}, which is not a reward"
+      end
       raise VerifierError, "verifier wrote a non-finite reward" unless value.finite?
       raise VerifierError, "reward #{value} is outside #{REWARD_RANGE}" unless REWARD_RANGE.cover?(value)
 
       value
-    rescue ArgumentError
-      raise VerifierError, "verifier wrote #{result.output.to_s.strip.inspect}, which is not a reward"
     end
 
     def reward_from_exit(command_result)

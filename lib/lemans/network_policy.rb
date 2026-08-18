@@ -25,13 +25,15 @@ module Lemans
               "#{field}.mode: #{mode.inspect} is not one of #{MODES.join(", ")}"
       end
 
-      hosts = validated(hosts, field)
+      raise ConfigError, "#{field}.hosts must be a list" unless hosts.is_a?(Array)
       if mode != :allowlist && !hosts.empty?
         raise ConfigError,
               "#{field}.hosts is only meaningful with mode: allowlist"
       end
 
       raise ConfigError, "#{field}.hosts cannot be empty with mode: allowlist" if mode == :allowlist && hosts.empty?
+
+      hosts = validated_hosts(hosts, field)
 
       @mode = mode
       @hosts = hosts.freeze
@@ -46,15 +48,11 @@ module Lemans
 
     private
 
-    # Every entry a non-empty string: a blank YAML list item would otherwise
-    # classify as a "domain", join to "", and silently drop the allowlist.
-    def validated(hosts, field)
-      raise ConfigError, "#{field}.hosts must be a list" unless hosts.is_a?(Array)
+    def validated_hosts(hosts, field)
+      hosts.map do |entry|
+        raise ConfigError, "#{field}.hosts entry #{entry.inspect} is not a host name, pattern, or IP range" unless entry.is_a?(String) && !entry.strip.empty?
 
-      hosts.each do |entry|
-        next if entry.is_a?(String) && !entry.strip.empty?
-
-        raise ConfigError, "#{field}.hosts entry #{entry.inspect} is not a host name, pattern, or IP range"
+        entry.strip
       end
     end
 

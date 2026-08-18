@@ -71,7 +71,8 @@ module Lemans
             req: ::Daytona::SessionExecuteRequest.new(
               # A subshell, not a brace group: `set -e`/`exit` would take the
               # session's own shell down and leave the status line unwritten.
-              command: "(\n#{exports}\n#{command}\n) > #{log_file} 2>&1\necho $? > #{status_file}",
+              command: "(\n#{exports}\n#{command}\n) > #{Shellwords.escape(log_file)} 2>&1\n" \
+                       "echo $? > #{Shellwords.escape(status_file)}",
               run_async: true
             )
           )

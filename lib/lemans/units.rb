@@ -13,7 +13,7 @@ module Lemans
     class << self
       def seconds(value, field:)
         return nil if value.nil?
-        return value.to_f if value.is_a?(Numeric)
+        return finite_nonnegative(value, field, "a duration") if value.is_a?(Numeric)
 
         match = DURATION.match(value.to_s.strip)
         raise ConfigError, "#{field}: cannot read #{value.inspect} as a duration (try 30m, 300s, 1h)" unless match
@@ -23,12 +23,21 @@ module Lemans
 
       def megabytes(value, field:)
         return nil if value.nil?
-        return value.to_i if value.is_a?(Numeric)
+        return finite_nonnegative(value, field, "a size").round if value.is_a?(Numeric)
 
         match = SIZE.match(value.to_s.strip)
         raise ConfigError, "#{field}: cannot read #{value.inspect} as a size (try 2GB, 512MB)" unless match
 
         (match[1].to_f * SIZE_FACTORS.fetch((match[2] || "mb").downcase)).round
+      end
+
+      private
+
+      def finite_nonnegative(value, field, noun)
+        number = value.to_f
+        raise ConfigError, "#{field}: cannot read #{value.inspect} as #{noun}" if number.negative? || !number.finite?
+
+        number
       end
     end
   end

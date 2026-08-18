@@ -21,9 +21,6 @@ module Lemans
       end.freeze
     end
 
-    # The same front door as RestorePaths: refuse the shapes outright instead
-    # of trusting a lexical check, and return the cleaned relative path — the
-    # raw declared spelling must never become an upload path or a digest key.
     def self.checked(path, phase, root:, label:)
       raise ConfigError, "#{label}: files.#{phase} entry #{path.inspect} is not a path" unless path.is_a?(String) && !path.empty?
       raise ConfigError, "#{label}: files.#{phase} entry #{path.inspect} must be relative to #{root}" if path.start_with?("/")
