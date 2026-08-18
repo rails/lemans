@@ -1,5 +1,5 @@
 AllCops:
-  TargetRubyVersion: 3.3
+  TargetRubyVersion: 3.4
   NewCops: enable
   SuggestExtensions: false
 
@@ -33,3 +33,6 @@ Style/FetchEnvVar:
 Naming/FileName:
   Exclude:
     - "**/assets/**"
+
+Style/ItBlockParameter:
+  Enabled: false

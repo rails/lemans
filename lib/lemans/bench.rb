@@ -39,8 +39,8 @@ module Lemans
         new(commit: commit, dirty: status.nil? ? nil : !status.empty?)
       end
 
-      def self.git(*args, dir:)
-        output, status = Open3.capture2e("git", "-C", dir.to_s, *args)
+      def self.git(*, dir:)
+        output, status = Open3.capture2e("git", "-C", dir.to_s, *)
         status.success? ? output.strip : nil
       rescue SystemCallError
         # No git on this machine. Recording nothing beats taking the run down.
