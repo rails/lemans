@@ -18,11 +18,12 @@ module Lemans
 
     desc "tasks", "List the tasks in a bench"
     option :bench, default: ".", desc: "Directory holding bench.yml"
+    option :tag, desc: "Only tasks carrying this tag"
     def tasks
       bench = Bench.load(options[:bench])
       print_table(
-        [%w[task difficulty description]] +
-        bench.tasks.map { [_1.name, _1.difficulty, _1.description] }
+        [%w[task difficulty tags description]] +
+        select_tasks(bench).map { [_1.name, _1.difficulty, _1.tags.join(","), _1.description] }
       )
     rescue ConfigError => e
       raise Thor::Error, "lemans: #{e.message}"
@@ -32,6 +33,7 @@ module Lemans
     desc "run", "Run tasks and verify them"
     option :bench, default: ".", desc: "Directory holding bench.yml"
     option :task, desc: "Run task(s) by name", repeatable: true
+    option :tag, desc: "Run every task carrying this tag"
     option :agent, desc: "Override the agent from bench.yml (miniswen, oracle, nop)"
     option :model, type: :array, desc: "Override the model(s) from bench.yml (space-separated)"
     option :attempts, type: :numeric, default: 1, aliases: "-k", desc: "Trials per task"
@@ -45,9 +47,7 @@ module Lemans
       Miniswen.refresh_registry!
 
       bench = Bench.load(options[:bench])
-      tasks = bench.tasks
-      tasks = tasks.select { options[:task].include?(_1.name) } if options[:task]
-      raise Thor::Error, "lemans: no task named #{options[:task].inspect}" if tasks.empty?
+      tasks = select_tasks(bench)
 
       run = Run.new(
         bench: bench,
@@ -121,13 +121,17 @@ module Lemans
 
     desc "report", "Summarize run results as a table or CSV"
     option :runs_dir, default: "runs", desc: "Directory holding run directories"
+    option :tag, desc: "Only runs whose result carries this tag"
     option :format, default: "table", enum: %w[table csv], desc: "Output format"
     option :aggregate, aliases: "-A", banner: "COLUMNS", lazy_default: "task-model",
                        desc: "Group results by 1-3 dash-joined columns (task, agent, model)"
     option :sort, aliases: "-S", banner: "COLUMN", desc: "Sort by a column"
     def report
-      results = Results::Report.load(options[:runs_dir])
-      raise Thor::Error, "lemans: no results under #{options[:runs_dir]}" if results.empty?
+      results = Results::Report.load(options[:runs_dir], tag: options[:tag])
+      if results.empty?
+        tagged = options[:tag] ? " tagged #{options[:tag].inspect}" : ""
+        raise Thor::Error, "lemans: no results#{tagged} under #{options[:runs_dir]}"
+      end
 
       results = Results::Aggregate.new(results, keys: Results::Aggregate.keys(options[:aggregate])) if options[:aggregate]
       results.order_by!(options[:sort]) if options[:sort]
@@ -137,6 +141,20 @@ module Lemans
     end
 
     private
+
+    # The one task filter for every command that walks a bench: an empty
+    # selection is an error, because running or listing nothing is never
+    # what a named task or tag meant.
+    def select_tasks(bench)
+      tasks = bench.tasks
+      tasks = tasks.select { options[:task].include?(_1.name) } if options[:task]
+      tasks = tasks.select { _1.tags.include?(options[:tag]) } if options[:tag]
+      return tasks unless tasks.empty?
+
+      wanted = [options[:task] && "task named #{options[:task].inspect}",
+                options[:tag] && "task tagged #{options[:tag].inspect}"].compact.join(" and no ")
+      raise Thor::Error, "lemans: no #{wanted.empty? ? "tasks in #{options[:bench]}" : wanted}"
+    end
 
     def print_report(report)
       print_table report.to_rows
