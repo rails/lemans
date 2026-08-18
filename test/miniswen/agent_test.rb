@@ -207,11 +207,86 @@ class MiniswenAgentTest < Minitest::Test
     assert_equal "ollama/qwen3:8b ($0.00, local)", source.priced_as
   end
 
+  # A refused turn arrives looking like a forgotten tool call — empty, and
+  # billed nothing — so only the finish reason can tell the run what stopped it.
+  def test_three_refused_turns_end_the_run_as_a_content_filter
+    stub_llm({ content: "stopped", finish_reason: "content_filter" },
+             { content: "stopped", finish_reason: "content_filter" },
+             { content: "stopped", finish_reason: "content_filter" })
+
+    result = agent.run("task")
+
+    assert_equal :content_filter, result.status
+    assert_equal 3, result.steps
+  end
+
+  def test_a_refusal_among_malformed_answers_names_the_run
+    stub_llm({ content: "nope" },
+             { content: "stopped", finish_reason: "content_filter" },
+             { content: "nope" })
+
+    result = agent.run("task")
+
+    assert_equal :content_filter, result.status
+  end
+
+  def test_a_recovered_refusal_leaves_a_later_strike_out_a_format_error
+    stub_llm({ content: "stopped", finish_reason: "content_filter" },
+             "true",
+             { content: "nope" }, { content: "nope" }, { content: "nope" })
+
+    result = agent.run("task")
+
+    assert_equal :format_error, result.status
+  end
+
+  def test_anthropic_over_openrouter_marks_cache_breakpoints
+    with_openrouter_key { build_agent(model: "openrouter/anthropic/test") }
+    stub_llm(SUBMIT)
+    agent.run("task")
+
+    contents = RubyLLM::Test.last_request.messages.map(&:content)
+    raw = contents.grep(RubyLLM::Content::Raw)
+
+    refute_empty raw
+    assert(raw.all? { _1.value.first[:cache_control] == { type: "ephemeral" } })
+  end
+
+  def test_a_plain_model_sends_no_cache_breakpoints
+    stub_llm(SUBMIT)
+    agent.run("task")
+
+    assert(RubyLLM::Test.last_request.messages.map(&:content).none?(RubyLLM::Content::Raw))
+  end
+
+  def test_provider_order_pins_openrouter_routing
+    with_openrouter_key { build_agent(model: "openrouter/anthropic/test") }
+    stub_llm(SUBMIT)
+    ENV["LEMANS_PROVIDER_ORDER"] = "Chutes, Io Net"
+    agent.run("task")
+
+    assert_equal({ provider: { order: ["Chutes", "Io Net"], allow_fallbacks: false } },
+                 RubyLLM::Test.last_request.params)
+  ensure
+    ENV.delete("LEMANS_PROVIDER_ORDER")
+  end
+
   private
 
   attr_reader :agent, :fake_env
 
   def build_agent(model: "test", **)
     @agent = Miniswen::Agent.new(model: model, environment: fake_env, **)
+  end
+
+  # The provider must construct before the test harness wraps it, and
+  # OpenRouter refuses to without a key.
+  def with_openrouter_key
+    original = RubyLLM.config.openrouter_api_key
+    RubyLLM.config.openrouter_api_key = "test-key"
+    yield
+    agent.send(:resolved)
+  ensure
+    RubyLLM.config.openrouter_api_key = original
   end
 end

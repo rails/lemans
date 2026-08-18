@@ -75,6 +75,8 @@ module Miniswen
         step[:metrics] = metrics_for(metrics)
         step[:llm_call_count] = 1
       end
+      # ATIF has no field for how a turn ended
+      step[:extra] = { finish_reason: message[:finish_reason] } if message[:finish_reason]
       step
     end
 

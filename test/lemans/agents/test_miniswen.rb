@@ -80,7 +80,7 @@ class MiniswenAdapterTest < Minitest::Test
     result, trajectory = call(agent, task)
 
     assert_predicate result.outcome, :completed?
-    assert_equal "three consecutive responses without a valid bash tool call", result.outcome.detail
+    assert_equal "3 consecutive responses without a valid bash tool call", result.outcome.detail
     assert_equal "format_error", trajectory.dig("extra", "status")
     assert ATIFSchema.valid?(trajectory), ATIFSchema.errors(trajectory).join("\n")
   end
