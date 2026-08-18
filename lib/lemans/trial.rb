@@ -26,33 +26,45 @@ module Lemans
       reward = nil
       usage = nil
       outcome = Results::Outcome.new(:completed)
+      @phases = {}
+      # Declared outside the phase blocks they are assigned in, or `ensure`
+      # could not stop a sandbox whose setup raised.
+      environment = nil
+      snapshot = nil
+      patch = nil
 
       begin
         agent = Agents.build(agent_name, profile: bench.agent, model: model)
 
-        environment = start_environment
-        prepare(environment)
+        phase(:environment_setup) do
+          environment = start_environment
+          prepare(environment)
 
-        snapshot = Snapshot.new(environment, bench: bench, task: task,
-                                             timeout: bench.environment.build_timeout_sec)
-        snapshot.capture!
+          snapshot = Snapshot.new(environment, bench: bench, task: task,
+                                               timeout: bench.environment.build_timeout_sec)
+          snapshot.capture!
 
-        patch = Patch.new(environment, bench: bench, dir: dir)
-        patch.seal!
+          patch = Patch.new(environment, bench: bench, dir: dir)
+          patch.seal!
 
-        agent.install(environment, task: task)
-        environment.network_policy = bench.agent.network
+          agent.install(environment, task: task)
+          environment.network_policy = bench.agent.network
+        end
 
-        agent_result = in_agent_phase { agent.call(environment, task: task, logs_dir: logs_dir) }
+        agent_result = phase(:agent) do
+          in_agent_phase { agent.call(environment, task: task, logs_dir: logs_dir) }
+        end
         usage = agent_result.usage
         outcome = over_ceiling(agent_result) || agent_result.outcome
 
         patch.collect!
 
         if outcome.scored?
-          # The sandbox is sealed before the tests arrive
-          environment.network_policy = NetworkPolicy.none
-          reward = Verifier.new(bench: bench, task: task, dir: dir, snapshot: snapshot).call(environment)
+          phase(:verifier) do
+            # The sandbox is sealed before the tests arrive
+            environment.network_policy = NetworkPolicy.none
+            reward = Verifier.new(bench: bench, task: task, dir: dir, snapshot: snapshot).call(environment)
+          end
         end
       rescue VerifierError => e
         outcome = Results::Outcome.new(:verifier_error, detail: e.message)
@@ -93,6 +105,13 @@ module Lemans
       ["#{error.class}: #{error.message}", *Array(error.backtrace).first(5)].join("\n")
     end
 
+    def phase(name)
+      @phases[name] = { started_at: Time.now.utc.iso8601(6) }
+      yield
+    ensure
+      @phases[name][:finished_at] = Time.now.utc.iso8601(6)
+    end
+
     def in_agent_phase
       @agent_phase = true
       result = yield
@@ -131,13 +150,18 @@ module Lemans
         outcome: outcome.to_h,
         usage: usage&.to_h,
         lemans_version: VERSION,
+        # The digest already hashes the bench's shipped files along with its
+        # config, so the per-file listing added bulk, not pinning.
         profile_digest: bench.digest,
-        profile_files: bench.file_digests,
         task_digest: task.digest,
         bench: bench.revision.to_h,
         started_at: started_at.iso8601,
         finished_at: finished_at.iso8601,
         duration_sec: (finished_at - started_at).round(1),
+        # Where the wall clock went: without this, a slow sandbox morning
+        # reads as a slow model.
+        phases: @phases,
+        tags: task.tags,
         metadata: task.metadata
       }
       atomic_write(result_path, "#{JSON.pretty_generate(result)}\n")
