@@ -20,8 +20,16 @@ module Lemans
       @matches ||= select_matches
     end
 
+    # Deletes everything it can, says what it could not, and returns what it
+    # actually removed — the caller's "deleted N" must not count survivors.
     def call
-      matches.each { FileUtils.remove_entry(_1.to_s) }
+      matches.select do |entry|
+        FileUtils.remove_entry(entry.to_s)
+        true
+      rescue SystemCallError => e
+        warn "lemans: could not delete #{entry.basename}: #{e.message}"
+        false
+      end
     end
 
     private

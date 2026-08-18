@@ -113,8 +113,8 @@ module Lemans
         return say "lemans: nothing deleted" unless yes?("Delete #{doomed.size} run(s) under #{options[:runs_dir]}? [y/N]")
       end
 
-      clobber.call
-      say "deleted #{doomed.size} run(s)"
+      removed = clobber.call
+      say "deleted #{removed.size} run(s)"
     rescue ConfigError => e
       raise Thor::Error, "lemans: #{e.message}"
     end
