@@ -18,3 +18,17 @@ RubyLLM.configure do |config|
     end
   end
 end
+
+module Miniswen
+  # OpenRouter requires reasoning_details replayed exactly as received; ruby_llm
+  # rebuilds them from its collapsed text+signature pair, and providers that
+  # sign each block separately reject that as a corrupted thought signature.
+  module VerbatimReasoningDetails
+    def format_thinking(msg)
+      details = msg.thinking.respond_to?(:details) ? msg.thinking.details : nil
+      details && !details.empty? ? { reasoning_details: details } : super
+    end
+  end
+end
+
+RubyLLM::Providers::OpenRouter.prepend(Miniswen::VerbatimReasoningDetails)

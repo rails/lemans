@@ -100,26 +100,30 @@ module Miniswen
         role: :assistant,
         content: answer.fetch(:content, "Let me try."),
         tool_calls: calls,
-        thinking: answer[:thinking] && RubyLLM::Thinking.new(text: answer[:thinking]),
+        thinking: answer[:thinking] && RubyLLM::Thinking.new(text: answer[:thinking],
+                                                             signature: answer[:thinking_signature]),
         input_tokens: answer.fetch(:input_tokens, 95),
         output_tokens: answer.fetch(:output_tokens, 20),
         cached_tokens: answer.fetch(:cached_tokens, 5),
         thinking_tokens: answer[:thinking] && 40,
-        raw: RawResponse.new(body: {
-                               "choices" => [{
-                                 "finish_reason" => answer.fetch(:finish_reason) { calls.empty? ? "stop" : "tool_calls" }
-                               }]
-                             })
+        raw: RawResponse.new(body: raw_body_for(answer, calls))
       )
     end
 
     private
 
+    def raw_body_for(answer, calls)
+      choice = { "finish_reason" => answer.fetch(:finish_reason) { calls.empty? ? "stop" : "tool_calls" } }
+      choice["message"] = { "reasoning_details" => answer[:reasoning_details] } if answer[:reasoning_details]
+      { "choices" => [choice] }
+    end
+
     def tool_calls_for(answer)
       calls = answer[:tool_calls] || Array(answer[:cmd]).map { { name: "bash", arguments: { "command" => _1 } } }
       calls.to_h do |call|
         id = call[:id] || "call_#{@llm_answer_ids = @llm_answer_ids.to_i + 1}"
-        [id, RubyLLM::ToolCall.new(id: id, name: call[:name], arguments: call[:arguments])]
+        [id, RubyLLM::ToolCall.new(id: id, name: call[:name], arguments: call[:arguments],
+                                   thought_signature: call[:thought_signature])]
       end
     end
   end

@@ -166,6 +166,16 @@ module Miniswen
       without any other command.
     MESSAGE
 
+    # Thinking that also carries the provider's reasoning_details for verbatim replay.
+    class VerbatimThinking < RubyLLM::Thinking
+      attr_reader :details
+
+      def initialize(text: nil, signature: nil, details: nil)
+        super(text: text, signature: signature)
+        @details = details
+      end
+    end
+
     # Only ever rendered into the request — the completion executes nothing — so no execute body.
     class BashTool < RubyLLM::Tool
       description "Execute a bash command"
@@ -202,8 +212,8 @@ module Miniswen
         when Hash
           value.to_h do |key, item|
             key = key.to_sym
-            # Tool-call arguments keep their provider-style string keys ("command").
-            [key, key == :arguments ? item : deep_symbolize(item)]
+            # Tool-call arguments and reasoning details keep their provider-style string keys.
+            [key, %i[arguments reasoning_details].include?(key) ? item : deep_symbolize(item)]
           end
         when Array then value.map { deep_symbolize(_1) }
         else value
@@ -328,9 +338,10 @@ module Miniswen
       # content, no tool call and no billed tokens.
       entry[:finish_reason] = response[:finish_reason] if response[:finish_reason]
       entry[:thinking] = response[:thinking] if response[:thinking]
-      # The provider's opaque handle on this turn's reasoning: replayed back to
-      # the provider only, never into the trajectory.
+      # The provider's opaque handles on this turn's reasoning: replayed back
+      # to the provider only, never into the trajectory.
       entry[:thinking_signature] = response[:thinking_signature] if response[:thinking_signature]
+      entry[:reasoning_details] = response[:reasoning_details] if response[:reasoning_details]
 
       observe_message entry
 
@@ -525,8 +536,7 @@ module Miniswen
       case entry[:role]
       when "assistant"
         RubyLLM::Message.new(role: :assistant, content: entry[:content],
-                             thinking: RubyLLM::Thinking.build(text: entry[:thinking],
-                                                               signature: entry[:thinking_signature]),
+                             thinking: as_ruby_llm_thinking(entry),
                              tool_calls: as_ruby_llm_tool_calls(entry[:tool_calls]))
       when "tool"
         RubyLLM::Message.new(role: :tool, content: entry[:content], tool_call_id: entry[:tool_call_id])
@@ -535,11 +545,21 @@ module Miniswen
       end
     end
 
+    def as_ruby_llm_thinking(entry)
+      details = entry[:reasoning_details]
+      if details && !details.empty?
+        VerbatimThinking.new(text: entry[:thinking], signature: entry[:thinking_signature], details: details)
+      else
+        RubyLLM::Thinking.build(text: entry[:thinking], signature: entry[:thinking_signature])
+      end
+    end
+
     def as_ruby_llm_tool_calls(tool_calls)
       return nil if tool_calls.nil? || tool_calls.empty?
 
       tool_calls.to_h do |call|
-        [call[:id], RubyLLM::ToolCall.new(id: call[:id], name: call[:name], arguments: call[:arguments])]
+        [call[:id], RubyLLM::ToolCall.new(id: call[:id], name: call[:name], arguments: call[:arguments],
+                                          thought_signature: call[:thought_signature])]
       end
     end
 
@@ -552,6 +572,7 @@ module Miniswen
         content: response.content.to_s,
         thinking: response.thinking&.text,
         thinking_signature: response.thinking&.signature,
+        reasoning_details: reasoning_details_from(response),
         tool_calls: tool_calls_from(response),
         finish_reason: finish_reason_from(response),
         # ruby_llm's input_tokens is the cache-miss remainder only; the
@@ -566,7 +587,9 @@ module Miniswen
 
     def tool_calls_from(response)
       Array(response.tool_calls&.values).map do |call|
-        { id: call.id, name: call.name, arguments: normalize_arguments(call.arguments) }
+        entry = { id: call.id, name: call.name, arguments: normalize_arguments(call.arguments) }
+        entry[:thought_signature] = call.thought_signature if call.thought_signature
+        entry
       end
     end
 
@@ -580,11 +603,19 @@ module Miniswen
     end
 
     def finish_reason_from(response)
+      body = raw_body(response)
+      body && (body.dig("choices", 0, "finish_reason") || body["stop_reason"])
+    end
+
+    def reasoning_details_from(response)
+      details = raw_body(response)&.dig("choices", 0, "message", "reasoning_details")
+      details.is_a?(Array) && !details.empty? ? details : nil
+    end
+
+    def raw_body(response)
       body = response.raw&.body
       body = JSON.parse(body) if body.is_a?(String)
-      return nil unless body.is_a?(Hash)
-
-      body.dig("choices", 0, "finish_reason") || body["stop_reason"]
+      body.is_a?(Hash) ? body : nil
     rescue JSON::ParserError
       nil
     end

@@ -271,9 +271,71 @@ class MiniswenAgentTest < Minitest::Test
     ENV.delete("LEMANS_PROVIDER_ORDER")
   end
 
+  def test_a_tool_call_thought_signature_is_replayed_on_the_next_turn
+    stub_llm({ content: "Running.",
+               tool_calls: [{ name: "bash", arguments: { "command" => "true" }, thought_signature: "tsig" }] },
+             SUBMIT)
+
+    result = agent.run("task")
+
+    assert_equal :submitted, result.status
+    replayed = RubyLLM::Test.last_request.messages.find { _1.role == :assistant }
+
+    assert_equal "tsig", replayed.tool_calls.values.first.thought_signature
+  end
+
+  def test_reasoning_details_are_replayed_verbatim_not_collapsed
+    details = [
+      { "type" => "reasoning.text", "text" => "one", "signature" => "sig-1" },
+      { "type" => "reasoning.text", "text" => "two", "signature" => "sig-2" }
+    ]
+    stub_llm({ cmd: "true", thinking: "onetwo", thinking_signature: "sig-1", reasoning_details: details },
+             SUBMIT)
+
+    result = agent.run("task")
+
+    assert_equal :submitted, result.status
+    replayed = RubyLLM::Test.last_request.messages.find { _1.role == :assistant }
+
+    assert_equal details, replayed.thinking.details
+    assert_equal "onetwo", replayed.thinking.text
+    assert_equal "sig-1", replayed.thinking.signature
+    restored = Miniswen::Agent::Result.from_h(JSON.parse(JSON.generate(result.to_h)))
+
+    assert_equal details, restored.messages[2][:reasoning_details]
+  end
+
+  def test_openrouter_sends_verbatim_details_instead_of_the_rebuilt_pair
+    details = [
+      { "type" => "reasoning.text", "text" => "one", "signature" => "sig-1" },
+      { "type" => "reasoning.text", "text" => "two", "signature" => "sig-2" }
+    ]
+    verbatim = RubyLLM::Message.new(
+      role: :assistant, content: "",
+      thinking: Miniswen::Agent::VerbatimThinking.new(text: "onetwo", signature: "sig-1", details: details)
+    )
+    collapsed = RubyLLM::Message.new(
+      role: :assistant, content: "",
+      thinking: RubyLLM::Thinking.new(text: "onetwo", signature: "sig-1")
+    )
+    provider = openrouter_provider
+
+    assert_equal({ reasoning_details: details }, provider.send(:format_thinking, verbatim))
+    assert_equal({ reasoning_details: [{ type: "reasoning.text", text: "onetwo", signature: "sig-1" }] },
+                 provider.send(:format_thinking, collapsed))
+  end
+
   private
 
   attr_reader :agent, :fake_env
+
+  def openrouter_provider
+    original = RubyLLM.config.openrouter_api_key
+    RubyLLM.config.openrouter_api_key = "test-key"
+    RubyLLM::Providers::OpenRouter.new(RubyLLM.config)
+  ensure
+    RubyLLM.config.openrouter_api_key = original
+  end
 
   def build_agent(model: "test", **)
     @agent = Miniswen::Agent.new(model: model, environment: fake_env, **)
