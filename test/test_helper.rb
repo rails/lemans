@@ -10,6 +10,7 @@ require "lemans"
 
 require "minitest/autorun"
 require "minitest/mock"
+require "tmpdir"
 
 require_relative "support/fake_environment"
 require_relative "support/atif_schema"
@@ -20,4 +21,16 @@ module BenchFixture
   def load_bench = Lemans::Bench.load(BenchFixture::ROOT)
 
   def load_task(bench = load_bench) = bench.tasks.fetch(0)
+
+  def with_task_dir(name)
+    Dir.mktmpdir do |dir|
+      task_dir = Pathname(dir).join(name)
+      task_dir.join("tests").mkpath
+      task_dir.join("tests/test.sh").write("exit 0\n")
+      task_dir.join("environment").mkpath
+      task_dir.join("environment/Dockerfile").write("FROM scratch\n")
+      task_dir.join("instruction.md").write("---\ndescription: #{name}\n---\nFix it.\n")
+      yield task_dir
+    end
+  end
 end

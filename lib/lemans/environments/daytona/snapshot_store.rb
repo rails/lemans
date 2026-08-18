@@ -25,7 +25,7 @@ module Lemans
         LOCKS = Concurrent::Map.new
 
         def self.lock(name)
-          LOCKS.compute_if_absent(name) { Concurrent::ReentrantReadWriteLock.new }
+          LOCKS.compute_if_absent(name) { Mutex.new }
         end
 
         def initialize(client:, image:, resources:, build_timeout_sec:, logger: nil)
@@ -37,7 +37,7 @@ module Lemans
         end
 
         def call
-          self.class.lock(name).with_write_lock do
+          self.class.lock(name).synchronize do
             existing = find(name)
             existing = discard(existing) if existing && SNAPSHOT_FAILED.include?(existing.state)
             existing ? await_ready(existing) : build(name)
@@ -71,6 +71,10 @@ module Lemans
           end
           nil
         rescue *SDK_ERRORS => e
+          # Another process discarding the same failed snapshot got there
+          # first: gone is the goal state, same as find's 404 policy.
+          return nil if status_code(e) == 404
+
           raise InfrastructureError, "daytona: could not remove failed snapshot #{name}: #{e.message}"
         end
 
@@ -120,18 +124,14 @@ module Lemans
             state = snapshot.state
             return if state == ::DaytonaApiClient::SnapshotState::ACTIVE
 
-            if SNAPSHOT_FAILED.include?(state)
-              raise InfrastructureError, "daytona: snapshot #{name} is #{state}: #{snapshot.error_reason}"
-            end
+            raise InfrastructureError, "daytona: snapshot #{name} is #{state}: #{snapshot.error_reason}" if SNAPSHOT_FAILED.include?(state)
 
             if state == ::DaytonaApiClient::SnapshotState::INACTIVE && !activated
               client.snapshot.activate(snapshot)
               activated = true
             end
 
-            if now > deadline
-              raise InfrastructureError, "daytona: snapshot #{name} was still #{state} after #{build_timeout_sec}s"
-            end
+            raise InfrastructureError, "daytona: snapshot #{name} was still #{state} after #{build_timeout_sec}s" if now > deadline
 
             sleep POLL_INTERVAL_SEC
             snapshot = find(name)

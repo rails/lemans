@@ -1,0 +1,17 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+lib_path = File.expand_path("../lib", __dir__)
+$LOAD_PATH.unshift(lib_path) unless $LOAD_PATH.include?(lib_path)
+
+require "miniswen/cli"
+
+begin
+  Miniswen::CLI.new.run
+rescue => e # rubocop:disable Style/RescueStandardError
+  raise e if $DEBUG
+
+  warn e.message
+  warn e.backtrace.take(10).join("\n") if ENV["MINISWEN_DEBUG"] == "1"
+  exit 1
+end

@@ -11,13 +11,16 @@ module Lemans
         def success? = exit_code.zero?
       end
 
-      attr_reader :image, :resources, :network, :env, :build_timeout_sec
+      attr_reader :image, :resources, :network, :env, :labels, :build_timeout_sec
 
-      def initialize(image:, resources:, network:, env: {}, build_timeout_sec: nil)
+      # `labels` is backend-agnostic trial metadata (task, trial id, phase);
+      # every backend receives it even if it has nowhere to put it.
+      def initialize(image:, resources:, network:, env: {}, labels: {}, build_timeout_sec: nil)
         @image = image
         @resources = resources
         @network = network
         @env = env
+        @labels = labels
         @build_timeout_sec = build_timeout_sec
       end
 
@@ -25,7 +28,9 @@ module Lemans
       # constructed with; a backend that cannot honour the policy must raise.
       def start = raise(NotImplementedError)
 
-      def exec(command, timeout_sec: nil, env: {}) = raise(NotImplementedError)
+      DEFAULT_TIMEOUT = 60
+
+      def exec(command, timeout: nil, env: {}) = raise(NotImplementedError)
 
       def upload(local_path, remote_path) = raise(NotImplementedError)
 

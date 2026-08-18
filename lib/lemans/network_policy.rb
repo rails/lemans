@@ -8,13 +8,13 @@ module Lemans
   class NetworkPolicy
     MODES = %i[none allowlist public].freeze
 
-    attr_reader :mode, :hosts
+    attr_reader :mode, :hosts, :domains, :ip_targets
 
     def self.from_config(config, field:)
       raise ConfigError, "#{field}: network policy is required" if config.nil?
 
       mode = config["mode"] or raise ConfigError, "#{field}.mode is required (#{MODES.join(", ")})"
-      new(mode: mode.to_sym, hosts: config["hosts"] || [], field: field)
+      new(mode: mode.to_s.to_sym, hosts: config["hosts"] || [], field: field)
     end
 
     def self.none = new(mode: :none)
@@ -25,6 +25,7 @@ module Lemans
               "#{field}.mode: #{mode.inspect} is not one of #{MODES.join(", ")}"
       end
 
+      raise ConfigError, "#{field}.hosts must be a list" unless hosts.is_a?(Array)
       if mode != :allowlist && !hosts.empty?
         raise ConfigError,
               "#{field}.hosts is only meaningful with mode: allowlist"
@@ -32,23 +33,31 @@ module Lemans
 
       raise ConfigError, "#{field}.hosts cannot be empty with mode: allowlist" if mode == :allowlist && hosts.empty?
 
+      hosts = validated_hosts(hosts, field)
+
       @mode = mode
       @hosts = hosts.freeze
-      @field = field
+      # Split once, at construction: backends allowlist domains and IP ranges
+      # through separate APIs, and a bad entry must fail here, loudly — a
+      # malformed allowlist must never launch a sandbox open.
+      @ip_targets, @domains = hosts.partition { ip_target?(_1) }.map(&:freeze)
       freeze
     end
-
-    # Backends allowlist domains and IP ranges through separate APIs; the split happens once here.
-    def domains = hosts.reject { ip_target?(_1) }
-
-    def ip_targets = hosts.select { ip_target?(_1) }
 
     def to_h = { mode: mode, hosts: hosts }
 
     private
 
+    def validated_hosts(hosts, field)
+      hosts.map do |entry|
+        raise ConfigError, "#{field}.hosts entry #{entry.inspect} is not a host name, pattern, or IP range" unless entry.is_a?(String) && !entry.strip.empty?
+
+        entry.strip
+      end
+    end
+
     def ip_target?(entry)
-      IPAddr.new(entry.to_s)
+      IPAddr.new(entry)
       true
     rescue IPAddr::Error
       false

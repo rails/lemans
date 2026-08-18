@@ -20,8 +20,18 @@ module Lemans
       @matches ||= select_matches
     end
 
+    # Deletes everything it can, says what it could not, and returns what it
+    # actually removed — the caller's "deleted N" must not count survivors.
     def call
-      matches.each { FileUtils.remove_entry(_1.to_s) }
+      deleted = matches.select do |entry|
+        FileUtils.remove_entry(entry.to_s)
+        true
+      rescue SystemCallError => e
+        warn "lemans: could not delete #{entry}: #{e.message}"
+        false
+      end
+      prune_emptied_parents(deleted)
+      deleted
     end
 
     private
@@ -31,15 +41,26 @@ module Lemans
     def select_matches
       return [] unless runs_dir.directory?
 
-      runs_dir.children.sort.select do |entry|
-        next false unless entry.directory?
-
+      runs_dir.glob("**/").map(&:cleanpath).sort.select do |entry|
         task = task_name(entry)
         next false if task.nil?
 
         (tasks.empty? || tasks.include?(task)) &&
           (ttl_sec.nil? || age_sec(entry) > ttl_sec) &&
           (!@invalid || invalid?(entry))
+      end
+    end
+
+    def prune_emptied_parents(deleted)
+      root = runs_dir.cleanpath
+      deleted.each do |entry|
+        dir = entry.parent
+        while dir != root && dir.children.empty?
+          dir.rmdir
+          dir = dir.parent
+        end
+      rescue SystemCallError
+        next
       end
     end
 

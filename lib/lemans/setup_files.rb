@@ -22,13 +22,12 @@ module Lemans
     end
 
     def self.checked(path, phase, root:, label:)
-      relative = Pathname(path.to_s)
-      resolved = root.join(relative).cleanpath
+      raise ConfigError, "#{label}: files.#{phase} entry #{path.inspect} is not a path" unless path.is_a?(String) && !path.empty?
+      raise ConfigError, "#{label}: files.#{phase} entry #{path.inspect} must be relative to #{root}" if path.start_with?("/")
 
-      unless resolved.to_s.start_with?("#{root.cleanpath}/")
-        raise ConfigError, "#{label}: files.#{phase} entry #{path.inspect} points outside #{root}"
-      end
-      raise ConfigError, "#{label}: files.#{phase} names #{path}, which is not a file" unless resolved.file?
+      relative = Pathname(path).cleanpath
+      raise ConfigError, "#{label}: files.#{phase} entry #{path.inspect} must name a file inside #{root}" if relative.each_filename.include?("..") || relative.to_s == "."
+      raise ConfigError, "#{label}: files.#{phase} names #{path}, which is not a file" unless root.join(relative).file?
 
       relative
     end

@@ -15,6 +15,7 @@ module Lemans
         SHORT_COMMAND_SEC = 120
         POLL_INTERVAL_SEC = 2
         MAX_OUTPUT_BYTES = 200_000
+        HOUSEKEEPING_TIMEOUT = 60
 
         def initialize(sandbox)
           @sandbox = sandbox
@@ -22,13 +23,14 @@ module Lemans
           sandbox.process.create_session(@session_id)
         end
 
-        def exec(command, timeout_sec: nil, env: {})
+        def exec(command, timeout: nil, env: {})
+          validate_env!(env)
           started = now
           response =
-            if timeout_sec && timeout_sec > SHORT_COMMAND_SEC
-              exec_in_session(command, timeout_sec: timeout_sec, env: env)
+            if timeout && timeout > SHORT_COMMAND_SEC
+              exec_in_session(command, timeout: timeout, env: env)
             else
-              exec_directly(command, timeout_sec: timeout_sec, env: env)
+              exec_directly(command, timeout: timeout, env: env)
             end
 
           Base::ExecResult.new(command: command, duration_sec: (now - started).round(3), **response)
@@ -38,16 +40,27 @@ module Lemans
 
         attr_reader :sandbox
 
-        def exec_directly(command, timeout_sec:, env:)
+        # Both transports must accept the same env: the session path serializes
+        # keys into `export` lines, where a key that is not a shell identifier
+        # would fail silently and run the command without its variable.
+        def validate_env!(env)
+          env.each_key do |key|
+            next if key.to_s.match?(/\A[A-Za-z_]\w*\z/)
+
+            raise ConfigError, "environment variable #{key.inspect} is not a shell identifier"
+          end
+        end
+
+        def exec_directly(command, timeout:, env:)
           response = sandbox.process.exec(
             command: command,
             env: env.empty? ? nil : env,
-            timeout: timeout_sec&.to_i
+            timeout: timeout&.to_i
           )
           { exit_code: response.exit_code, output: response.result.to_s }
         end
 
-        def exec_in_session(command, timeout_sec:, env:)
+        def exec_in_session(command, timeout:, env:)
           run_id = SecureRandom.hex(6)
           status_file = "/tmp/lemans-#{run_id}.status"
           log_file = "/tmp/lemans-#{run_id}.log"
@@ -58,26 +71,30 @@ module Lemans
             req: ::Daytona::SessionExecuteRequest.new(
               # A subshell, not a brace group: `set -e`/`exit` would take the
               # session's own shell down and leave the status line unwritten.
-              command: "(\n#{exports}\n#{command}\n) > #{log_file} 2>&1\necho $? > #{status_file}",
+              command: "(\n#{exports}\n#{command}\n) > #{Shellwords.escape(log_file)} 2>&1\n" \
+                       "echo $? > #{Shellwords.escape(status_file)}",
               run_async: true
             )
           )
 
-          exit_code = await_status(status_file, timeout_sec)
-          # A command that outran its budget is still running; the session dies
-          # before anything downstream trusts the filesystem.
-          terminate_session! if exit_code.nil?
-
-          output = tail(log_file)
-          clear_scratch(log_file, status_file)
-          { exit_code: exit_code || 124, output: output }
+          exit_code = nil
+          begin
+            exit_code = await_status(status_file, timeout)
+            { exit_code: exit_code || 124, output: tail(log_file) }
+          ensure
+            # On every exit path, including a poll that died: a command that
+            # outran its budget must not keep running, and the scratch files
+            # must not stay for the model to find. Session torn down first,
+            # for the best odds the command is dead before the rm runs.
+            terminate_session! if exit_code.nil?
+            clear_scratch(log_file, status_file)
+          end
         end
 
-        # Scratch files left in /tmp tell whatever runs next — the model — how
-        # it is being run.
         def clear_scratch(*paths)
-          exec_directly("rm -f #{paths.map { Shellwords.escape(_1) }.join(" ")}", timeout_sec: 60, env: {})
-        rescue ::Daytona::Sdk::Error => e
+          command = "rm -f #{paths.map { Shellwords.escape(_1) }.join(" ")}"
+          exec_directly(command, timeout: HOUSEKEEPING_TIMEOUT, env: {})
+        rescue *SDK_ERRORS => e
           warn "lemans: could not clear #{paths.join(", ")}: #{e.message}"
         end
 
@@ -94,10 +111,11 @@ module Lemans
           end
         end
 
-        def await_status(status_file, timeout_sec)
-          deadline = now + timeout_sec
+        def await_status(status_file, timeout)
+          deadline = now + timeout
+          poll = "cat #{Shellwords.escape(status_file)} 2>/dev/null"
           loop do
-            status = with_read_retries { exec_directly("cat #{status_file} 2>/dev/null", timeout_sec: 30, env: {}) }
+            status = with_read_retries { exec_directly(poll, timeout: HOUSEKEEPING_TIMEOUT, env: {}) }
             value = status[:output].to_s.strip
             return Integer(value) if value.match?(/\A\d+\z/)
             return nil if now > deadline
@@ -108,8 +126,11 @@ module Lemans
 
         def tail(log_file, bytes: MAX_OUTPUT_BYTES)
           with_read_retries do
-            exec_directly("tail -c #{bytes} #{log_file} 2>/dev/null", timeout_sec: 60, env: {})
-          end[:output].to_s
+            exec_directly("tail -c #{bytes} #{Shellwords.escape(log_file)} 2>/dev/null",
+                          timeout: HOUSEKEEPING_TIMEOUT, env: {})
+            # Scrubbed where bytes become a string: tail -c cuts on a byte
+            # boundary and can split a multibyte character.
+          end[:output].to_s.scrub
         end
 
         def fresh_session_id = "lemans-#{SecureRandom.hex(6)}"

@@ -30,11 +30,12 @@ module Lemans
           end
         end
 
-        # Transport failures carry no status, and throttling and server errors
-        # heal on their own; any other 4xx would fail the same way again.
+        # Transport failures surface as status 0 (libcurl stamps refused/reset/
+        # DNS with code 0) or none, and throttling and server errors heal on
+        # their own; any other 4xx would fail the same way again.
         def retryable?(error)
           status = status_code(error)
-          status.nil? || status == 429 || status >= 500
+          status.nil? || status.zero? || status == 429 || status >= 500
         end
 
         def status_code(error)
