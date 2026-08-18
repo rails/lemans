@@ -117,7 +117,7 @@ class BenchTest < Minitest::Test
                               root: BenchFixture::ROOT.join("tasks/hello-world"), label: "task.yml")
     end
 
-    assert_includes error.message, "points outside"
+    assert_includes error.message, "must name a file inside"
   end
 
   def test_a_setup_file_that_does_not_exist_is_caught_at_load_time

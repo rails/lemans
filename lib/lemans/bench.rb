@@ -266,6 +266,8 @@ module Lemans
     def tasks_dir = root.join(@config.fetch("tasks", "tasks"))
 
     def tasks
+      raise ConfigError, "no tasks directory at #{tasks_dir}" unless tasks_dir.directory?
+
       tasks_dir.children.select(&:directory?).sort.map { Task.load(_1, bench: self) }
     end
 

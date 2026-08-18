@@ -38,7 +38,8 @@ module LemansReport
 
     def graded?(result)
       dir = ENV["TESTS"]
-      dir && result.source_location.first.to_s.start_with?(dir)
+      # The trailing slash matters: /testsuite must not count as /tests.
+      dir && result.source_location.first.to_s.start_with?("#{dir.chomp("/")}/")
     end
 
     def existing

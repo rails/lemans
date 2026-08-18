@@ -35,7 +35,7 @@ class FakeEnvironment < Lemans::Environments::Base
     when /\Atest -e (\S+)\z/ then present(Regexp.last_match(1))
     when /\Atest -d (\S+)\z/ then directory(Regexp.last_match(1))
     else
-      @on_command&.call(files)
+      notify_on_command(command)
       result(0, "the suite ran")
     end
   end
@@ -55,6 +55,12 @@ class FakeEnvironment < Lemans::Environments::Base
   def stop = @stopped = true
 
   private
+
+  def notify_on_command(command)
+    return unless @on_command
+
+    @on_command.arity >= 2 ? @on_command.call(files, command) : @on_command.call(files)
+  end
 
   def find(root)
     matches = files.keys.select { _1.start_with?("#{root}/") }
