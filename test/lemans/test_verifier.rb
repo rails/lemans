@@ -126,6 +126,23 @@ class VerifierTest < Minitest::Test
     end
   end
 
+  def test_an_unrestorable_baseline_scores_zero_instead_of_invalidating_the_run
+    Dir.mktmpdir do |dir|
+      config = YAML.safe_load_file(BenchFixture::ROOT.join("bench.yml"), aliases: true)
+      config["verifier"]["restore"] = %w[test]
+      bench = Lemans::Bench.new(config, path: BenchFixture::ROOT.join("bench.yml"))
+      tampered = Class.new do
+        def restore! = false # rubocop:disable Naming/PredicateMethod
+      end.new
+      verifier = Lemans::Verifier.new(bench: bench, task: load_task(bench), dir: Pathname(dir), snapshot: tampered)
+
+      reward = verifier.call(sandbox)
+
+      assert_in_delta 0.0, reward
+      assert_includes Pathname(dir).join("verifier", "output.txt").read, "scores 0"
+    end
+  end
+
   def test_a_reward_that_exists_but_cannot_be_read_fails_closed
     with_verifier do |verifier, _dir|
       unreadable = sandbox(reward: "0.5", refuses: /\Acat /)
