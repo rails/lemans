@@ -3,7 +3,7 @@
 module Lemans
   class Config
     class Environment # :nodoc:
-      Resources = Struct.new(:cpus, :memory_mb, :storage_mb, keyword_init: true)
+      Resources = Struct.new(:cpus, :memory, :storage, keyword_init: true)
 
       class << self
         include Conversion
@@ -19,8 +19,8 @@ module Lemans
           conf.setup = Array(data["setup"]) if data["setup"]
 
           conf.resources.cpus = integer!(data.dig("resources", "cpus")) if data.dig("resources", "cpus")
-          conf.resources.memory_mb = megabytes!(data.dig("resources", "memory")) if data.dig("resources", "memory")
-          conf.resources.storage_mb = megabytes!(data.dig("resources", "storage")) if data.dig("resources", "storage")
+          conf.resources.memory = megabytes!(data.dig("resources", "memory")) if data.dig("resources", "memory")
+          conf.resources.storage = megabytes!(data.dig("resources", "storage")) if data.dig("resources", "storage")
 
           conf
         end
@@ -31,7 +31,7 @@ module Lemans
       def initialize
         @image = nil
         @workdir = "/app"
-        @resources = Resources.new(cpus: 2, memory_mb: 2048, storage_mb: 5120)
+        @resources = Resources.new(cpus: 2, memory: 2048, storage: 5120)
         @build_timeout = 10 * 60
         @network = NetworkPolicy.new
         @setup = []

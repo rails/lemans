@@ -21,7 +21,7 @@ class ConfigEnvironmentTest < Minitest::Test
 
     assert_equal "ruby:3.4", env.image
     assert_equal "/work", env.workdir
-    assert_equal Resources.new(cpus: 4, memory_mb: 2048, storage_mb: 5120), env.resources
+    assert_equal Resources.new(cpus: 4, memory: 2048, storage: 5120), env.resources
     assert_equal 600.0, env.build_timeout
     assert_equal "none", env.network.mode
     assert_equal ["bundle install"], env.setup
@@ -32,7 +32,7 @@ class ConfigEnvironmentTest < Minitest::Test
 
     assert_nil env.image
     assert_equal "/app", env.workdir
-    assert_equal Resources.new(cpus: 2, memory_mb: 2048, storage_mb: 5120), env.resources
+    assert_equal Resources.new(cpus: 2, memory: 2048, storage: 5120), env.resources
     assert_equal 600, env.build_timeout
     assert_equal "public", env.network.mode
     assert_empty env.setup
@@ -41,7 +41,7 @@ class ConfigEnvironmentTest < Minitest::Test
   def test_partial_resources
     env = Lemans::Config::Environment.from_config(full_config.merge("resources" => { "memory" => "4GB" }))
 
-    assert_equal Resources.new(cpus: 2, memory_mb: 4096, storage_mb: 5120), env.resources
+    assert_equal Resources.new(cpus: 2, memory: 4096, storage: 5120), env.resources
   end
 
   def test_relative_workdir

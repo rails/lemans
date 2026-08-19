@@ -12,7 +12,7 @@ class ConfigTest < Minitest::Test
     assert_equal "miniswen", config.agent_name
     assert_equal ["openrouter/z-ai/glm-5.2"], config.models
     assert_equal "allowlist", config.environment.network.mode
-    assert_equal 2048, config.environment.resources.memory_mb
+    assert_equal 2048, config.environment.resources.memory
     assert_equal "allowlist", config.agent.environment.network.mode
     assert_equal "/logs/verifier/reward.txt", config.verifier.reward_path
   end

@@ -59,7 +59,7 @@ module Lemans
           BoardReporter.new(tasks: tasks.map(&:name), models: config.models,
                             attempts: config.attempts)
         else
-          ProgressReporter.new(shell: shell, tasks: tasks.map(&:name))
+          ProgressReporter.new(shell:, tasks: tasks.map(&:name))
         end
 
       runner = Runner.new(config, tasks, runs_dir: options[:runs_dir], resume: options[:resume])
@@ -70,6 +70,8 @@ module Lemans
 
         return
       end
+
+      reporter.start
 
       summary = runner.run(reporter)
 
@@ -85,7 +87,7 @@ module Lemans
       say ""
       exit 130
     ensure
-      progress&.stop
+      reporter&.stop
     end
 
     desc "clobber", "Delete run results"

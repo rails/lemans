@@ -9,6 +9,7 @@ This file holds only lasting guidelines. Temporary or local instructions (work-i
 - Not defensive: assume user-provided values have sane types (strings where strings are expected). Validate semantics (unknown modes, relative vs absolute paths), never types.
 - No single-purpose helper modules (a module wrapping one validation is an anti-pattern) — make such helpers private methods of the class that uses them.
 - Prefer mutable value containers: `Struct.new(..., keyword_init: true)` updated via writers, not `Data` with `#with`.
+- No unit suffixes in names: `duration`, not `duration_sec` — the unit is implied by convention (seconds, megabytes).
 
 ## Tests
 
