@@ -48,7 +48,7 @@ require "timeout"
 require "tmpdir"
 require "openssl"
 
-module LemansRemote
+module LemansRemote # :nodoc: all
   LABEL = "lemans-remote"
   RUN_ID_LABEL = "lemans-remote/run-id"
   STATUS_LABEL = "lemans-remote/status"
@@ -112,7 +112,7 @@ module LemansRemote
       name
     end
 
-    def drop(target = name)
+    def drop(target = name) # rubocop:disable Naming/PredicateMethod
       existing = find(target)
       return false unless existing
 
@@ -385,7 +385,7 @@ module LemansRemote
     def mark_pulled(sandbox, run_id)
       code = 'require "json"; require "time"; ' \
              'path = File.join("/vault", ARGV[0], "manifest.json"); ' \
-             'data = JSON.parse(File.read(path)); ' \
+             "data = JSON.parse(File.read(path)); " \
              'data["pulled_at"] = Time.now.utc.iso8601; ' \
              "File.write(path, JSON.pretty_generate(data))"
       sandbox.process.exec(command: "ruby -e #{Shellwords.escape(code)} #{Shellwords.escape(run_id)}", timeout: 60)
@@ -734,9 +734,7 @@ module LemansRemote
       raise Thor::Error, "lemans-remote: no such task(s): #{unknown.join(", ")}" if unknown.any?
 
       provisioner = build_provisioner
-      unless provisioner.provisioned?
-        raise Thor::Error, "lemans-remote: snapshot #{provisioner.name} not found — run `lemans-remote provision` first"
-      end
+      raise Thor::Error, "lemans-remote: snapshot #{provisioner.name} not found — run `lemans-remote provision` first" unless provisioner.provisioned?
 
       attempts = options[:attempts].to_i
       raise Thor::Error, "lemans-remote: --attempts must be at least 1" if attempts < 1
@@ -786,7 +784,7 @@ module LemansRemote
         if filtered
           say "no #{options[:running] ? "running" : "complete"} lemans-remote runs"
         else
-          say "no lemans-remote runs#{options[:history] ? "" : " — try --history for completed ones"}"
+          say "no lemans-remote runs#{" — try --history for completed ones" unless options[:history]}"
         end
         return
       end
@@ -846,9 +844,7 @@ module LemansRemote
 
       live = Fleet.live
       if options[:all]
-        unless live.empty?
-          raise Thor::Error, "lemans-remote: #{live.size} run(s) still live (#{live.map(&:run_id).join(", ")}) — wait for them to finish"
-        end
+        raise Thor::Error, "lemans-remote: #{live.size} run(s) still live (#{live.map(&:run_id).join(", ")}) — wait for them to finish" unless live.empty?
         return unless options[:force] || yes?("Delete the whole #{Vault::NAME} volume and every stopped run sandbox? [y/N]")
 
         Fleet.rows.each { safe_delete_sandbox(_1.sandbox) }
@@ -895,13 +891,13 @@ module LemansRemote
       say Lemans::VERSION
     end
 
+    FANOUT_THREADS = 4
+
     private
 
     def build_provisioner
       Provisioner.new(cpus: options[:cpus].to_i, memory_gb: options[:memory].to_i, disk_gb: options[:disk].to_i)
     end
-
-    FANOUT_THREADS = 4
 
     def plan_batches(bench, tasks)
       return [tasks] if options[:sync] || options[:run_in_band]
@@ -975,9 +971,7 @@ module LemansRemote
 
     def with_vault(&block)
       provisioner = build_provisioner
-      unless provisioner.provisioned?
-        raise Thor::Error, "lemans-remote: snapshot #{provisioner.name} not found — run `lemans-remote provision` first"
-      end
+      raise Thor::Error, "lemans-remote: snapshot #{provisioner.name} not found — run `lemans-remote provision` first" unless provisioner.provisioned?
 
       vault = VaultClient.new(snapshot: provisioner.name)
       vault.with_helper { |sandbox| block.call(vault, sandbox) }
