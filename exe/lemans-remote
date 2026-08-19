@@ -13,8 +13,9 @@
 #     exe/lemans-remote provision
 #
 #   Fire-and-forget a bench run on remote Daytona sandboxes — one sandbox
-#   per task (--run-in-band for a single sandbox); results are archived to
-#   the lemans-remote-runs volume. Add --sync to wait for a single sandbox
+#   per task (--run-in-band for a single sandbox, --attempts N to repeat
+#   each task in N sandboxes); results are archived to the
+#   lemans-remote-runs volume. Add --sync to wait for a single sandbox
 #   and download into ./runs directly instead:
 #
 #     exe/lemans-remote run --bench ../ai-evals --task hello-world
@@ -22,7 +23,7 @@
 #
 #   Then watch, fetch, and clean up:
 #
-#     exe/lemans-remote status [--history]
+#     exe/lemans-remote status [--history] [--running | --complete]
 #     exe/lemans-remote pull-runs [RUN_ID ...] [--all]
 #     exe/lemans-remote clobber RUN_ID ... | --all
 #
@@ -722,6 +723,7 @@ module LemansRemote
     option :sync, type: :boolean, default: false, desc: "Wait for the run and download the results directly"
     option :run_in_band, type: :boolean, default: false, aliases: %w[--runInBand],
                          desc: "Async mode: run all tasks in one sandbox instead of one sandbox per task"
+    option :attempts, type: :numeric, default: 1, desc: "Async mode: repeat each task batch N times, one sandbox per attempt"
     option :keep, type: :boolean, default: false, desc: "Sync mode: leave the sandbox around for debugging"
     option :runs_dir, default: "runs", desc: "Sync mode: local directory to sync the results into"
     option :env, repeatable: true, desc: "Forward an extra host ENV variable by name"
@@ -736,19 +738,26 @@ module LemansRemote
         raise Thor::Error, "lemans-remote: snapshot #{provisioner.name} not found — run `lemans-remote provision` first"
       end
 
+      attempts = options[:attempts].to_i
+      raise Thor::Error, "lemans-remote: --attempts must be at least 1" if attempts < 1
+      raise Thor::Error, "lemans-remote: --attempts needs async mode — drop --sync" if options[:sync] && attempts > 1
+
       models = options[:model] || []
       batches = plan_batches(bench, tasks)
+      jobs = batches.flat_map { |batch| (1..attempts).map { [batch, attempts > 1 ? _1 : nil] } }
       Vault.ensure unless options[:sync]
 
-      if batches.size == 1
-        exit_code = launch_batch(bench, batches.first, models, provisioner)
+      if jobs.size == 1
+        batch, attempt = jobs.first
+        exit_code = launch_batch(bench, batch, models, provisioner, attempt:)
         say_status :detached, "`lemans-remote status` to watch, `lemans-remote pull-runs` to fetch results" unless options[:sync]
         exit exit_code unless exit_code.zero?
         return
       end
 
-      say_status :fanout, "#{batches.size} sandboxes, one per task"
-      failures = launch_batches(bench, batches, models, provisioner)
+      fanout = attempts > 1 ? "#{batches.size} task batch(es) × #{attempts} attempts" : "one per task"
+      say_status :fanout, "#{jobs.size} sandboxes, #{fanout}"
+      failures = launch_batches(bench, jobs, models, provisioner)
       say_status :detached, "`lemans-remote status` to watch, `lemans-remote pull-runs` to fetch results"
       raise Thor::Error, "lemans-remote: failed to launch: #{failures.join("; ")}" if failures.any?
     rescue Lemans::ConfigError, RuntimeError => e
@@ -757,6 +766,8 @@ module LemansRemote
 
     desc "status", "List lemans-remote runs (--history adds completed runs whose sandboxes are gone)"
     option :history, type: :boolean, default: false, desc: "Also read the vault manifests (spins a short-lived helper sandbox)"
+    option :running, type: :boolean, default: false, desc: "Only show runs still in flight"
+    option :complete, type: :boolean, default: false, desc: "Only show finished runs (success, failed, or stale)"
     def status
       rows = Fleet.rows.map { [_1.run_id, _1.status, _1.started_at || "?", _1.state, _1.sandbox.id] }
       if options[:history]
@@ -768,8 +779,15 @@ module LemansRemote
         end
       end
 
+      filtered = options[:running] ^ options[:complete]
+      rows.select! { (_1[1] == "running") == options[:running] } if filtered
+
       if rows.empty?
-        say "no lemans-remote runs#{options[:history] ? "" : " — try --history for completed ones"}"
+        if filtered
+          say "no #{options[:running] ? "running" : "complete"} lemans-remote runs"
+        else
+          say "no lemans-remote runs#{options[:history] ? "" : " — try --history for completed ones"}"
+        end
         return
       end
 
@@ -892,11 +910,11 @@ module LemansRemote
       expanded.map { [_1] }
     end
 
-    def launch_batch(bench, tasks, models, provisioner)
+    def launch_batch(bench, tasks, models, provisioner, attempt: nil)
       Runner.new(
         bench: bench,
         snapshot: provisioner.name,
-        run_id: build_run_id(bench, tasks, models),
+        run_id: build_run_id(bench, tasks, models, attempt),
         tasks: tasks,
         models: models,
         extra_args: options[:args].strip,
@@ -909,24 +927,26 @@ module LemansRemote
       ).call
     end
 
-    def launch_batches(bench, batches, models, provisioner)
+    def launch_batches(bench, jobs, models, provisioner)
       queue = Queue.new
-      batches.each { queue << _1 }
+      jobs.each { queue << _1 }
       failures = Queue.new
 
-      threads = [FANOUT_THREADS, batches.size].min.times.map do
+      threads = [FANOUT_THREADS, jobs.size].min.times.map do
         Thread.new do
           loop do
-            batch =
+            batch, attempt =
               begin
                 queue.pop(true)
               rescue ThreadError
                 break
               end
             begin
-              launch_batch(bench, batch, models, provisioner)
+              launch_batch(bench, batch, models, provisioner, attempt:)
             rescue StandardError => e
-              failures << "#{batch.join(",")} (#{e.message})"
+              label = batch.empty? ? "all" : batch.join(",")
+              label += "/a#{attempt}" if attempt
+              failures << "#{label} (#{e.message})"
             end
           end
         end
@@ -936,7 +956,7 @@ module LemansRemote
       Array.new(failures.size) { failures.pop }
     end
 
-    def build_run_id(bench, tasks, models)
+    def build_run_id(bench, tasks, models, attempt = nil)
       parts = [bench.root.basename.to_s]
       parts << (tasks.size == 1 ? tasks.first : "#{tasks.size}tasks") if tasks.any?
       if models.any?
@@ -944,6 +964,7 @@ module LemansRemote
         short += "+#{models.size - 1}" if models.size > 1
         parts << short
       end
+      parts << "a#{attempt}" if attempt
       parts << (ENV["LEMANS_REMOTE_USER"] || ENV["USER"] || "anon")
       parts << Time.now.utc.strftime("%Y%m%dT%H%M%S")
       parts << SecureRandom.alphanumeric(4).downcase

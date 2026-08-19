@@ -27,7 +27,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   spec.bindir = "exe"
-  spec.executables = ["lemans"]
+  spec.executables = %w[lemans lemans-remote]
 
   spec.add_dependency "concurrent-ruby", "~> 1.3"
   spec.add_dependency "csv", "~> 3.3"
