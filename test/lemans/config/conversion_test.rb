@@ -34,4 +34,22 @@ class ConfigConversionTest < Minitest::Test
     assert_includes error.message, "duration"
     assert_raises(Lemans::ConfigError) { seconds!(-1) }
   end
+
+  def test_megabytes
+    assert_equal 512, megabytes!(512)
+    assert_equal 512, megabytes!("512MB")
+    assert_equal 2048, megabytes!("2GB")
+    assert_equal 1_048_576, megabytes!("1TB")
+
+    error = assert_raises(Lemans::ConfigError) { megabytes!("big") }
+    assert_includes error.message, "size"
+    assert_raises(Lemans::ConfigError) { megabytes!(-1) }
+  end
+
+  def test_absolute_path
+    assert_equal "/app", absolute_path!("/app")
+
+    error = assert_raises(Lemans::ConfigError) { absolute_path!("app") }
+    assert_includes error.message, "absolute path"
+  end
 end

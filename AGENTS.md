@@ -6,6 +6,9 @@ This file holds only lasting guidelines. Temporary or local instructions (work-i
 
 - Ruby 3.4: use modern syntax — `it` block parameter, shorthand hash/kwarg notation (`config_path:`), endless methods for one-liners.
 - No explanatory comments. A comment is only warranted for a non-obvious constraint the code cannot express.
+- Not defensive: assume user-provided values have sane types (strings where strings are expected). Validate semantics (unknown modes, relative vs absolute paths), never types.
+- No single-purpose helper modules (a module wrapping one validation is an anti-pattern) — make such helpers private methods of the class that uses them.
+- Prefer mutable value containers: `Struct.new(..., keyword_init: true)` updated via writers, not `Data` with `#with`.
 
 ## Tests
 

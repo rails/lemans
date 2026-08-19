@@ -7,6 +7,8 @@ module Lemans
         include Conversion
 
         def from_config(data)
+          return if data.nil?
+
           name = data.fetch("name")
           model = data.fetch("model")
 
@@ -31,7 +33,7 @@ module Lemans
                     :step_limit, :cost_limit, :exec_timeout,
                     :environment
 
-      Environment = Data.define(:network)
+      Environment = Struct.new(:network, keyword_init: true)
 
       def initialize(name, model)
         @name = name

@@ -3,9 +3,20 @@
 module Lemans
   class Config
     class NetworkPolicy # :nodoc:
+      MODES = %w[none allowlist public].freeze
+
       class << self
         def from_config(data)
-          new(data.fetch("mode", "public"), data["hosts"])
+          return if data.nil?
+
+          mode = (data["mode"] || "public").to_s
+          raise ConfigError, "#{mode.inspect} is not a network mode (#{MODES.join(", ")})" unless MODES.include?(mode)
+
+          hosts = data["hosts"]
+          raise ConfigError, "network.hosts is only meaningful with mode: allowlist" if mode != "allowlist" && hosts
+          raise ConfigError, "network.hosts must be provided with mode: allowlist" if mode == "allowlist" && Array(hosts).empty?
+
+          new(mode, hosts)
         end
       end
 

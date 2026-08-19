@@ -1,9 +1,8 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "tmpdir"
 
-class TreeDigestTest < Minitest::Test
+class ConfigTreeDigestTest < Minitest::Test
   # Without a separator, file `ab` holding `c` and file `a` holding `bc` feed
   # the SHA the same bytes — and a colliding digest reuses the wrong snapshot.
   def test_path_and_contents_cannot_bleed_into_each_other
@@ -23,7 +22,7 @@ class TreeDigestTest < Minitest::Test
   def digest_of(files)
     Dir.mktmpdir do |dir|
       files.each { |path, content| File.binwrite(File.join(dir, path), content) }
-      break Lemans::TreeDigest.call(dir)
+      break Lemans::Config::TreeDigest.call(dir)
     end
   end
 end

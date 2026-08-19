@@ -38,7 +38,7 @@ module Lemans
         @dockerfile_path = dockerfile_path
         @slug = slug
         # Hashing the reference gives backends one answer to "is this the same image" either way.
-        @digest = built? ? TreeDigest.call(context_dir) : Digest::SHA256.hexdigest(reference.to_s)
+        @digest = built? ? Config::TreeDigest.call(context_dir) : Digest::SHA256.hexdigest(reference.to_s)
         freeze
       end
 
@@ -95,7 +95,7 @@ module Lemans
 
       validate!(config)
       # Recorded on every result: without it a reward cannot say which task version it measured.
-      @digest = TreeDigest.call(@dir)[0, 16]
+      @digest = Config::TreeDigest.call(@dir)[0, 16]
       freeze
     end
 
