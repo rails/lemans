@@ -25,6 +25,7 @@
 #
 #     exe/lemans-remote status [--history] [--running | --complete]
 #     exe/lemans-remote pull-runs [RUN_ID ...] [--all] [--dry-run]
+#     exe/lemans-remote drop-orphans [--min-age 10m]
 #     exe/lemans-remote clobber RUN_ID ... | --all
 #     exe/lemans-remote snapshots
 #     exe/lemans-remote deprovision [--name SNAPSHOT]
@@ -36,6 +37,7 @@ lib_path = File.expand_path("../lib", __dir__)
 $LOAD_PATH.unshift(lib_path) unless $LOAD_PATH.include?(lib_path)
 
 require "lemans"
+require "concurrent"
 require "daytona"
 require "digest"
 require "fileutils"
@@ -79,7 +81,19 @@ module LemansRemote # :nodoc: all
 
   Backend = Lemans::Environments::Daytona
 
+  # File transfers ride the SDK's typhoeus/libcurl stack, which segfaults the
+  # VM under concurrent easy_perform calls (see Backend::TRANSFER_SLOTS); the
+  # fan-out threads here move whole-bench archives, so the cap is tighter.
+  TRANSFER_SLOTS = Concurrent::Semaphore.new(2)
+
   def self.client = Backend.client
+
+  def self.transfer
+    TRANSFER_SLOTS.acquire
+    yield
+  ensure
+    TRANSFER_SLOTS.release
+  end
 
   class Provisioner
     include Backend::Retries
@@ -377,7 +391,7 @@ module LemansRemote # :nodoc: all
       Dir.mktmpdir("lemans-remote") do |tmp|
         local = File.join(tmp, "runs.tgz")
         File.open(local, "wb") do |file|
-          sandbox.fs.download_file_stream(remote, timeout: TRANSFER_TIMEOUT_SEC) { file.write(_1) }
+          LemansRemote.transfer { sandbox.fs.download_file_stream(remote, timeout: TRANSFER_TIMEOUT_SEC) { file.write(_1) } }
         end
         _, err, status = Open3.capture3("tar", "-xzf", local, "-C", runs_dir)
         raise "could not unpack #{run_id}: #{err}" unless status.success?
@@ -494,7 +508,7 @@ module LemansRemote # :nodoc: all
         archive = BenchArchive.new(bench: @bench, selected_tasks: @tasks.empty? ? nil : @tasks)
                               .pack(to: File.join(tmp, "bench.tgz"))
         File.open(archive, "rb") do |file|
-          sandbox.fs.upload_file_stream(file, REMOTE_BENCH_ARCHIVE, timeout: TRANSFER_TIMEOUT_SEC)
+          LemansRemote.transfer { sandbox.fs.upload_file_stream(file, REMOTE_BENCH_ARCHIVE, timeout: TRANSFER_TIMEOUT_SEC) }
         end
       end
       exec!(sandbox, "mkdir -p #{REMOTE_BENCH_DIR} && " \
@@ -532,7 +546,7 @@ module LemansRemote # :nodoc: all
     end
 
     def upload_blob(sandbox, content, remote_path)
-      sandbox.fs.upload_file_stream(StringIO.new(content), remote_path, timeout: TRANSFER_TIMEOUT_SEC)
+      LemansRemote.transfer { sandbox.fs.upload_file_stream(StringIO.new(content), remote_path, timeout: TRANSFER_TIMEOUT_SEC) }
     end
 
     def launch(sandbox)
@@ -666,7 +680,7 @@ module LemansRemote # :nodoc: all
       Dir.mktmpdir("lemans-remote") do |tmp|
         local = File.join(tmp, "runs.tgz")
         File.open(local, "wb") do |file|
-          sandbox.fs.download_file_stream(REMOTE_RUNS_ARCHIVE, timeout: TRANSFER_TIMEOUT_SEC) { file.write(_1) }
+          LemansRemote.transfer { sandbox.fs.download_file_stream(REMOTE_RUNS_ARCHIVE, timeout: TRANSFER_TIMEOUT_SEC) { file.write(_1) } }
         end
         _, err, status = Open3.capture3("tar", "-xzf", local, "-C", @runs_dir)
         raise "could not unpack the runs: #{err}" unless status.success?
@@ -893,6 +907,32 @@ module LemansRemote # :nodoc: all
       raise Thor::Error, "lemans-remote: #{e.message}"
     end
 
+    map "drop-orphans" => :drop_orphans
+    desc "drop-orphans", "Delete run sandboxes whose launch died mid-flight (forever running, nothing uploaded)"
+    option :min_age, default: "10m", desc: "Leave younger runs alone — they may still be uploading"
+    option :force, type: :boolean, default: false, aliases: "-f", desc: "Skip the confirmation"
+    def drop_orphans
+      cutoff = Time.now.utc - Lemans::Units.seconds(options[:min_age], field: "--min-age")
+      candidates = Fleet.live.select do |row|
+        row.status == "running" && row.started_at && Time.parse(row.started_at) <= cutoff
+      end
+      orphans = candidates.select { orphan?(_1.sandbox) }
+      if orphans.empty?
+        say_status :clean, "no orphaned run sandboxes", :green
+        return
+      end
+
+      orphans.each { say_status :orphan, "#{_1.run_id} (#{_1.sandbox.id}, started #{_1.started_at})", :yellow }
+      return unless options[:force] || yes?("Delete #{orphans.size} orphaned sandbox(es)? [y/N]")
+
+      orphans.each do |row|
+        safe_delete_sandbox(row.sandbox)
+        say_status :dropped, row.run_id, :green
+      end
+    rescue Lemans::ConfigError, RuntimeError => e
+      raise Thor::Error, "lemans-remote: #{e.message}"
+    end
+
     desc "snapshots", "List lemans-remote orchestrator snapshots"
     def snapshots
       current = build_provisioner.name
@@ -1037,6 +1077,15 @@ module LemansRemote # :nodoc: all
       sandbox.delete
     rescue StandardError => e
       warn "lemans-remote: could not delete sandbox #{sandbox.id}: #{e.message}"
+    end
+
+    # Every launched run extracts the bench into /task within minutes of
+    # creation (async ones also upload the wrapper); a sandbox whose launcher
+    # process died mid-flight has neither, forever.
+    def orphan?(sandbox)
+      !sandbox.process.exec(command: "test -d #{REMOTE_BENCH_DIR} -o -f #{REMOTE_WRAPPER}", timeout: 60).exit_code.zero?
+    rescue StandardError
+      false
     end
   end
 end
