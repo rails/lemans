@@ -751,6 +751,8 @@ module LemansRemote # :nodoc: all
     option :keep, type: :boolean, default: false, desc: "Sync mode: leave the sandbox around for debugging"
     option :runs_dir, default: "runs", desc: "Sync mode: local directory to sync the results into"
     option :env, repeatable: true, desc: "Forward an extra host ENV variable by name"
+    option :concurrency, type: :numeric, default: 4, aliases: "-C",
+                         desc: "Async mode: how many sandboxes to launch in parallel (1 to serialize)"
     def run_bench
       bench = Lemans::Bench.load(options[:bench])
       tasks = options[:task] || []
@@ -763,6 +765,7 @@ module LemansRemote # :nodoc: all
       attempts = options[:attempts].to_i
       raise Thor::Error, "lemans-remote: --attempts must be at least 1" if attempts < 1
       raise Thor::Error, "lemans-remote: --attempts needs async mode — drop --sync" if options[:sync] && attempts > 1
+      raise Thor::Error, "lemans-remote: --concurrency must be at least 1" if options[:concurrency].to_i < 1
 
       models = options[:model] || []
       batches = plan_batches(bench, tasks)
@@ -778,7 +781,7 @@ module LemansRemote # :nodoc: all
       end
 
       fanout = attempts > 1 ? "#{batches.size} task batch(es) × #{attempts} attempts" : "one per task"
-      say_status :fanout, "#{jobs.size} sandboxes, #{fanout}"
+      say_status :fanout, "#{jobs.size} sandboxes, #{fanout}, #{options[:concurrency].to_i} at a time"
       failures = launch_batches(bench, jobs, models, provisioner)
       say_status :detached, "`lemans-remote status` to watch, `lemans-remote pull-runs` to fetch results"
       raise Thor::Error, "lemans-remote: failed to launch: #{failures.join("; ")}" if failures.any?
@@ -974,8 +977,6 @@ module LemansRemote # :nodoc: all
       say Lemans::VERSION
     end
 
-    FANOUT_THREADS = 4
-
     private
 
     def build_provisioner
@@ -1011,7 +1012,7 @@ module LemansRemote # :nodoc: all
       jobs.each { queue << _1 }
       failures = Queue.new
 
-      threads = [FANOUT_THREADS, jobs.size].min.times.map do
+      threads = [options[:concurrency].to_i, jobs.size].min.times.map do
         Thread.new do
           loop do
             batch, attempt =
