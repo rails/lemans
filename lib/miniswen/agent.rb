@@ -497,7 +497,9 @@ module Miniswen
       )
       payload(response)
     rescue RubyLLM::Error => e
-      raise InfrastructureError, "miniswen: the model call failed: #{e.message}"
+      body = e.response&.body.to_s
+      detail = body.empty? ? e.message : "#{e.message}: #{body[0, 1000]}"
+      raise InfrastructureError, "miniswen: the model call failed: #{detail}"
     rescue Faraday::SSLError, Faraday::ConnectionFailed, Faraday::TimeoutError => e
       raise InfrastructureError, "miniswen: the model call failed: #{e.class}: #{e.message}"
     end
