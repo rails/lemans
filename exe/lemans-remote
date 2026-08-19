@@ -24,8 +24,10 @@
 #   Then watch, fetch, and clean up:
 #
 #     exe/lemans-remote status [--history] [--running | --complete]
-#     exe/lemans-remote pull-runs [RUN_ID ...] [--all]
+#     exe/lemans-remote pull-runs [RUN_ID ...] [--all] [--dry-run]
 #     exe/lemans-remote clobber RUN_ID ... | --all
+#     exe/lemans-remote snapshots
+#     exe/lemans-remote deprovision [--name SNAPSHOT]
 #
 #   Credentials come from the host ENV: DAYTONA_API_KEY (or DAYTONA_TOKEN),
 #   OPENROUTER_API_KEY, LEMANS_PROVIDER_ORDER; forward extras with --env KEY.
@@ -349,13 +351,21 @@ module LemansRemote # :nodoc: all
     end
 
     def manifests(sandbox)
-      code = 'require "json"; puts Dir.glob("/vault/*/manifest.json")' \
+      code = 'require "json"; puts Dir.glob("/vault/*/manifest.json", File::FNM_DOTMATCH)' \
              ".filter_map { |f| JSON.parse(File.read(f)) rescue nil }.to_json"
       response = sandbox.process.exec(command: "ruby -e #{Shellwords.escape(code)}", timeout: 120)
       raise "could not read the vault manifests: #{response.result}" unless response.exit_code.zero?
 
       body = response.result.to_s.strip
       body.empty? ? [] : JSON.parse(body)
+    end
+
+    def archive_size(sandbox, run_id)
+      remote = "/vault/#{run_id}/runs.tar.gz"
+      response = sandbox.process.exec(command: "du -h #{Shellwords.escape(remote)}", timeout: 60)
+      return nil unless response.exit_code.zero?
+
+      response.result.to_s.split.first
     end
 
     def download_runs(sandbox, run_id, runs_dir)
@@ -538,7 +548,7 @@ module LemansRemote # :nodoc: all
     def run_metadata(sandbox)
       {
         "run_id" => @run_id,
-        "bench" => @bench.root.basename.to_s,
+        "bench" => @bench.root.expand_path.basename.to_s,
         "tasks" => @tasks,
         "models" => @models,
         "args" => @extra_args,
@@ -799,6 +809,7 @@ module LemansRemote # :nodoc: all
     map "pull-runs" => :pull_runs
     desc "pull-runs [RUN_IDS...]", "Download archived runs from the vault into the local runs directory"
     option :all, type: :boolean, default: false, desc: "Pull every completed run, even ones already pulled"
+    option :dry_run, type: :boolean, default: false, desc: "Preview what would be downloaded without pulling anything"
     option :runs_dir, default: "runs", desc: "Local directory to sync the results into"
     def pull_runs(*run_ids)
       pulled = []
@@ -819,6 +830,16 @@ module LemansRemote # :nodoc: all
         say_status :pull, "nothing new to pull (use --all to re-pull)", :yellow if targets.empty?
 
         targets.each do |run_id|
+          if options[:dry_run]
+            size = vault.archive_size(sandbox, run_id)
+            if size
+              say_status :would_pull, "#{run_id} (#{size})", :cyan
+            else
+              say_status :missing, "#{run_id} has no runs.tar.gz (still running?)", :yellow
+            end
+            next
+          end
+
           results = vault.download_runs(sandbox, run_id, options[:runs_dir])
           if results
             vault.mark_pulled(sandbox, run_id)
@@ -868,6 +889,28 @@ module LemansRemote # :nodoc: all
           say_status :clobbered, run_id, :green
         end
       end
+    rescue Lemans::ConfigError, RuntimeError => e
+      raise Thor::Error, "lemans-remote: #{e.message}"
+    end
+
+    desc "snapshots", "List lemans-remote orchestrator snapshots"
+    def snapshots
+      current = build_provisioner.name
+      rows = all_snapshots.select { _1.name.start_with?("#{LABEL}-") }.map do |snap|
+        shape = "#{snap.cpu.to_i}cpu/#{snap.mem.to_i}gb/#{snap.disk.to_i}gb"
+        [snap.name, snap.state, shape, snap.created_at.to_s[0, 19], snap.last_used_at.to_s[0, 19],
+         snap.name == current ? "current" : "-"]
+      end
+
+      if rows.empty?
+        say "no lemans-remote snapshots — run `lemans-remote provision` first"
+        return
+      end
+
+      rows.sort_by! { _1[3].to_s }
+      rows.reverse!
+      print_table([%w[snapshot state shape created last-used note]] + rows)
+      say "delete old ones with `lemans-remote deprovision --name SNAPSHOT`"
     rescue Lemans::ConfigError, RuntimeError => e
       raise Thor::Error, "lemans-remote: #{e.message}"
     end
@@ -953,7 +996,7 @@ module LemansRemote # :nodoc: all
     end
 
     def build_run_id(bench, tasks, models, attempt = nil)
-      parts = [bench.root.basename.to_s]
+      parts = [bench.root.expand_path.basename.to_s]
       parts << (tasks.size == 1 ? tasks.first : "#{tasks.size}tasks") if tasks.any?
       if models.any?
         short = models.first.split("/").last
@@ -967,7 +1010,20 @@ module LemansRemote # :nodoc: all
       parts.map { name_part(_1) }.reject(&:empty?).join("-")
     end
 
-    def name_part(value) = value.to_s.downcase.gsub(/[^a-z0-9._+]+/, "-").gsub(/\A-+|-+\z/, "")
+    def name_part(value) = value.to_s.downcase.gsub(/[^a-z0-9._+]+/, "-").gsub(/\A[-.]+|[-.]+\z/, "")
+
+    def all_snapshots
+      items = []
+      page = 1
+      loop do
+        result = LemansRemote.client.snapshot.list(page: page, limit: 200)
+        items.concat(result.items)
+        break if page >= result.total_pages.to_i
+
+        page += 1
+      end
+      items
+    end
 
     def with_vault(&block)
       provisioner = build_provisioner
