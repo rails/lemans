@@ -12,10 +12,18 @@
 #
 #     exe/lemans-remote provision
 #
-#   Run a bench on a remote Daytona sandbox and sync the results into ./runs:
+#   Fire-and-forget a bench run on a remote Daytona sandbox (results are
+#   archived to the lemans-remote-runs volume; add --sync to wait and
+#   download into ./runs directly instead):
 #
 #     exe/lemans-remote run --bench ../ai-evals --task hello-world
 #     exe/lemans-remote run --bench ../ai-evals --model openrouter/z-ai/glm-5.2 --args="-k 2 -c 8"
+#
+#   Then watch, fetch, and clean up:
+#
+#     exe/lemans-remote status [--history]
+#     exe/lemans-remote pull-runs [RUN_ID ...] [--all]
+#     exe/lemans-remote clobber RUN_ID ... | --all
 #
 #   Credentials come from the host ENV: DAYTONA_API_KEY (or DAYTONA_TOKEN),
 #   OPENROUTER_API_KEY, LEMANS_PROVIDER_ORDER; forward extras with --env KEY.
@@ -27,10 +35,13 @@ require "lemans"
 require "daytona"
 require "digest"
 require "fileutils"
+require "json"
 require "open3"
 require "securerandom"
 require "shellwords"
+require "stringio"
 require "thor"
+require "time"
 require "timeout"
 require "tmpdir"
 require "openssl"
@@ -38,6 +49,11 @@ require "openssl"
 module LemansRemote
   LABEL = "lemans-remote"
   RUN_ID_LABEL = "lemans-remote/run-id"
+  STATUS_LABEL = "lemans-remote/status"
+  STARTED_AT_LABEL = "lemans-remote/started-at"
+  HELPER_LABEL = "lemans-remote-helper"
+
+  REAP_MINUTES = 1440
 
   BASE_IMAGE = "ruby:3.4-slim"
   SETUP_COMMANDS = [
@@ -51,6 +67,9 @@ module LemansRemote
   REMOTE_RUNS_ARCHIVE = "/tmp/runs.tgz"
   REMOTE_LOG = "/tmp/lemans-remote-run.log"
   REMOTE_STATUS = "/tmp/lemans-remote-run.status"
+  REMOTE_WRAPPER = "/tmp/lemans-remote-wrapper.sh"
+  REMOTE_HOOKS = "/tmp/lemans-remote-hooks.rb"
+  REMOTE_META = "/tmp/lemans-remote-run.json"
 
   ENV_ALLOWLIST = %w[OPENROUTER_API_KEY LEMANS_PROVIDER_ORDER].freeze
 
@@ -206,6 +225,175 @@ module LemansRemote
     end
   end
 
+  class Vault
+    NAME = "lemans-remote-runs"
+    MOUNT = "/vault"
+    READY_TIMEOUT_SEC = 180
+    POLL_INTERVAL_SEC = 2
+
+    BAD_STATES = [
+      DaytonaApiClient::VolumeState::ERROR,
+      DaytonaApiClient::VolumeState::PENDING_DELETE,
+      DaytonaApiClient::VolumeState::DELETING,
+      DaytonaApiClient::VolumeState::DELETED
+    ].freeze
+
+    class << self
+      def ensure
+        volume = client.volume.get(NAME, create: true)
+        deadline = now + READY_TIMEOUT_SEC
+        until volume.state == DaytonaApiClient::VolumeState::READY
+          raise "volume #{NAME} is #{volume.state}: #{volume.error_reason}" if BAD_STATES.include?(volume.state)
+          raise "volume #{NAME} was not ready after #{READY_TIMEOUT_SEC}s" if now > deadline
+
+          sleep POLL_INTERVAL_SEC
+          volume = client.volume.get(NAME)
+        end
+        volume
+      end
+
+      def mount_param(volume)
+        DaytonaApiClient::SandboxVolume.new(volume_id: volume.id, mount_path: MOUNT)
+      end
+
+      def drop
+        volume = client.volume.get(NAME)
+        attempts = 0
+        begin
+          client.volume.delete(volume)
+        rescue DaytonaApiClient::ApiError => e
+          raise unless e.code == 409 && (attempts += 1) < 10
+
+          sleep POLL_INTERVAL_SEC
+          retry
+        end
+        true
+      rescue DaytonaApiClient::ApiError => e
+        return false if e.code == 404
+
+        raise
+      end
+
+      private
+
+      def client = LemansRemote.client
+
+      def now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    end
+  end
+
+  class Fleet
+    LIVE_STATES = [
+      DaytonaApiClient::SandboxState::CREATING,
+      DaytonaApiClient::SandboxState::PENDING_BUILD,
+      DaytonaApiClient::SandboxState::PULLING_SNAPSHOT,
+      DaytonaApiClient::SandboxState::RESTORING,
+      DaytonaApiClient::SandboxState::STARTING,
+      DaytonaApiClient::SandboxState::STARTED,
+      DaytonaApiClient::SandboxState::RESUMING
+    ].freeze
+
+    Row = Struct.new(:run_id, :status, :started_at, :state, :sandbox, keyword_init: true)
+
+    class << self
+      def rows
+        sandboxes.map do |sandbox|
+          labels = sandbox.labels || {}
+          status = labels[STATUS_LABEL] || "running"
+          status = "stale" if status == "running" && !LIVE_STATES.include?(sandbox.state)
+          Row.new(run_id: labels[RUN_ID_LABEL] || "?", status: status,
+                  started_at: labels[STARTED_AT_LABEL], state: sandbox.state, sandbox: sandbox)
+        end
+      end
+
+      def live = rows.select { LIVE_STATES.include?(_1.state) }
+
+      private
+
+      def sandboxes
+        LemansRemote.client.list(::Daytona::ListSandboxesQuery.new(labels: { LABEL => "1" })).to_a
+      end
+    end
+  end
+
+  class VaultClient
+    HELPER_TTL_MINUTES = 30
+    TRANSFER_TIMEOUT_SEC = 900
+
+    def initialize(snapshot:)
+      @snapshot = snapshot
+    end
+
+    def with_helper
+      volume = Vault.ensure
+      params = ::Daytona::CreateSandboxFromSnapshotParams.new(
+        snapshot: @snapshot,
+        labels: { HELPER_LABEL => "1" },
+        auto_stop_interval: 0,
+        auto_delete_interval: 0,
+        ttl_minutes: HELPER_TTL_MINUTES,
+        volumes: [Vault.mount_param(volume)]
+      )
+      sandbox = LemansRemote.client.create(params)
+      begin
+        yield sandbox
+      ensure
+        begin
+          sandbox.delete
+        rescue StandardError => e
+          warn "lemans-remote: helper sandbox #{sandbox.id} delete failed: #{e.message}"
+        end
+      end
+    end
+
+    def manifests(sandbox)
+      code = 'require "json"; puts Dir.glob("/vault/*/manifest.json")' \
+             ".filter_map { |f| JSON.parse(File.read(f)) rescue nil }.to_json"
+      response = sandbox.process.exec(command: "ruby -e #{Shellwords.escape(code)}", timeout: 120)
+      raise "could not read the vault manifests: #{response.result}" unless response.exit_code.zero?
+
+      body = response.result.to_s.strip
+      body.empty? ? [] : JSON.parse(body)
+    end
+
+    def download_runs(sandbox, run_id, runs_dir)
+      remote = "/vault/#{run_id}/runs.tar.gz"
+      probe = sandbox.process.exec(command: "test -f #{Shellwords.escape(remote)}", timeout: 60)
+      return nil unless probe.exit_code.zero?
+
+      FileUtils.mkdir_p(runs_dir)
+      Dir.mktmpdir("lemans-remote") do |tmp|
+        local = File.join(tmp, "runs.tgz")
+        File.open(local, "wb") do |file|
+          sandbox.fs.download_file_stream(remote, timeout: TRANSFER_TIMEOUT_SEC) { file.write(_1) }
+        end
+        _, err, status = Open3.capture3("tar", "-xzf", local, "-C", runs_dir)
+        raise "could not unpack #{run_id}: #{err}" unless status.success?
+
+        listing, err, status = Open3.capture3("tar", "-tzf", local)
+        raise "could not list #{run_id}: #{err}" unless status.success?
+
+        listing.lines(chomp: true)
+               .select { _1.end_with?("/result.json") }
+               .map { File.join(runs_dir, _1.delete_prefix("./")) }
+               .sort
+      end
+    end
+
+    def mark_pulled(sandbox, run_id)
+      code = 'require "json"; require "time"; ' \
+             'path = File.join("/vault", ARGV[0], "manifest.json"); ' \
+             'data = JSON.parse(File.read(path)); ' \
+             'data["pulled_at"] = Time.now.utc.iso8601; ' \
+             "File.write(path, JSON.pretty_generate(data))"
+      sandbox.process.exec(command: "ruby -e #{Shellwords.escape(code)} #{Shellwords.escape(run_id)}", timeout: 60)
+    end
+
+    def clobber(sandbox, run_id)
+      sandbox.process.exec(command: "rm -rf /vault/#{Shellwords.escape(run_id)}", timeout: 60)
+    end
+  end
+
   class Runner
     POLL_INTERVAL_SEC = 3
     LOG_CHUNK_BYTES = 262_144
@@ -214,7 +402,7 @@ module LemansRemote
     TIMED_OUT = 124
 
     def initialize(bench:, snapshot:, run_id:, tasks:, models:, extra_args:, extra_env:,
-                   timeout_sec:, runs_dir:, keep:, shell:)
+                   timeout_sec:, runs_dir:, keep:, sync:, shell:)
       @bench = bench
       @snapshot = snapshot
       @run_id = run_id
@@ -225,10 +413,16 @@ module LemansRemote
       @timeout_sec = timeout_sec
       @runs_dir = runs_dir
       @keep = keep
+      @sync = sync
       @shell = shell
+      @started_at = Time.now.utc.iso8601
     end
 
-    def call
+    def call = @sync ? call_sync : call_async
+
+    private
+
+    def call_sync
       sandbox = create_sandbox
       say :sandbox, "#{sandbox.id} (run #{@run_id})"
       begin
@@ -241,16 +435,37 @@ module LemansRemote
       end
     end
 
-    private
+    def call_async
+      volume = Vault.ensure
+      sandbox = create_sandbox(volume)
+      say :sandbox, "#{sandbox.id} (run #{@run_id})"
+      launched = false
+      begin
+        upload_bench(sandbox)
+        upload_control_files(sandbox)
+        launch(sandbox)
+        launched = true
+      ensure
+        teardown(sandbox) unless launched
+      end
+      say :detached, "`lemans-remote status` to watch, `lemans-remote pull-runs` to fetch results"
+      0
+    end
 
-    def create_sandbox
+    def create_sandbox(volume = nil)
       params = ::Daytona::CreateSandboxFromSnapshotParams.new(
         snapshot: @snapshot,
         env_vars: env_vars,
-        labels: { LABEL => "1", RUN_ID_LABEL => @run_id },
+        labels: {
+          LABEL => "1",
+          RUN_ID_LABEL => @run_id,
+          STATUS_LABEL => "running",
+          STARTED_AT_LABEL => @started_at
+        },
         auto_stop_interval: 0,
-        auto_delete_interval: 60,
-        ttl_minutes: (@timeout_sec / 60.0).ceil + 60
+        auto_delete_interval: volume ? REAP_MINUTES : 60,
+        ttl_minutes: (@timeout_sec / 60.0).ceil + 60,
+        volumes: volume ? [Vault.mount_param(volume)] : nil
       )
       LemansRemote.client.create(params)
     end
@@ -297,6 +512,99 @@ module LemansRemote
       command = command.shelljoin
       command += " #{@extra_args}" unless @extra_args.empty?
       command
+    end
+
+    def upload_control_files(sandbox)
+      upload_blob(sandbox, JSON.pretty_generate(run_metadata(sandbox)), REMOTE_META)
+      upload_blob(sandbox, hooks_script, REMOTE_HOOKS)
+      upload_blob(sandbox, wrapper_script, REMOTE_WRAPPER)
+    end
+
+    def upload_blob(sandbox, content, remote_path)
+      sandbox.fs.upload_file_stream(StringIO.new(content), remote_path, timeout: TRANSFER_TIMEOUT_SEC)
+    end
+
+    def launch(sandbox)
+      say :run, remote_command
+      session = "lemans-remote-#{SecureRandom.hex(4)}"
+      sandbox.process.create_session(session)
+      sandbox.process.execute_session_command(
+        session_id: session,
+        req: ::Daytona::SessionExecuteRequest.new(command: "bash #{REMOTE_WRAPPER}", run_async: true)
+      )
+    end
+
+    def run_metadata(sandbox)
+      {
+        "run_id" => @run_id,
+        "bench" => @bench.root.basename.to_s,
+        "tasks" => @tasks,
+        "models" => @models,
+        "args" => @extra_args,
+        "lemans_version" => Lemans::VERSION,
+        "snapshot" => @snapshot,
+        "sandbox_id" => sandbox.id,
+        "started_at" => @started_at,
+        "timeout_sec" => @timeout_sec
+      }
+    end
+
+    def wrapper_script
+      vault_dir = "#{Vault::MOUNT}/#{@run_id}"
+      <<~BASH
+        #!/bin/bash
+        set -u
+        ruby #{REMOTE_HOOKS} start
+        (cd #{REMOTE_BENCH_DIR} && #{remote_command}) > #{REMOTE_LOG} 2>&1
+        status=$?
+        cp #{REMOTE_LOG} #{vault_dir}/run.log || true
+        if [ -d #{REMOTE_BENCH_DIR}/runs ]; then
+          tar -czf #{vault_dir}/runs.tar.gz -C #{REMOTE_BENCH_DIR}/runs .
+        fi
+        (cd #{REMOTE_BENCH_DIR} && lemans report --format csv > #{vault_dir}/report.csv 2>/dev/null) || true
+        ruby #{REMOTE_HOOKS} finish "$status"
+      BASH
+    end
+
+    def hooks_script
+      <<~RUBY
+        require "json"
+        require "time"
+        require "fileutils"
+
+        META = JSON.parse(File.read("#{REMOTE_META}"))
+        VAULT_DIR = File.join("#{Vault::MOUNT}", META.fetch("run_id"))
+        MANIFEST = File.join(VAULT_DIR, "manifest.json")
+
+        def write_manifest(extra)
+          base = File.exist?(MANIFEST) ? JSON.parse(File.read(MANIFEST)) : META
+          File.write(MANIFEST, JSON.pretty_generate(base.merge(extra)))
+        end
+
+        case ARGV.fetch(0)
+        when "start"
+          FileUtils.mkdir_p(VAULT_DIR)
+          write_manifest("status" => "running")
+        when "finish"
+          exit_code = Integer(ARGV.fetch(1, "1"))
+          status = exit_code.zero? ? "success" : "failed"
+          write_manifest("status" => status, "exit_code" => exit_code, "finished_at" => Time.now.utc.iso8601)
+          begin
+            require "openssl"
+            require "daytona"
+            sandbox = Daytona::Daytona.new.get(META.fetch("sandbox_id"))
+            sandbox.labels = {
+              "#{LABEL}" => "1",
+              "#{RUN_ID_LABEL}" => META.fetch("run_id"),
+              "#{STATUS_LABEL}" => status,
+              "#{STARTED_AT_LABEL}" => META.fetch("started_at")
+            }
+            sandbox.stop
+          rescue StandardError => e
+            warn "finalize: \#{e.class}: \#{e.message}"
+          end
+        end
+      RUBY
     end
 
     def stream_until_done(sandbox)
@@ -405,14 +713,15 @@ module LemansRemote
     end
 
     map "run" => :run_bench
-    desc "run", "Run a bench on a remote Daytona sandbox and download the results"
+    desc "run", "Run a bench on a remote Daytona sandbox (fire-and-forget; --sync to wait and download)"
     option :bench, default: ".", desc: "Directory holding bench.yml"
     option :task, repeatable: true, desc: "Run task(s) by name (default: all)"
     option :model, repeatable: true, desc: "Override the model(s) from bench.yml"
     option :args, default: "", desc: "Extra `lemans run` options, passed through verbatim"
     option :timeout, default: "6h", desc: "Give up on the remote run after this long"
-    option :keep, type: :boolean, default: false, desc: "Leave the sandbox around for debugging"
-    option :runs_dir, default: "runs", desc: "Local directory to sync the results into"
+    option :sync, type: :boolean, default: false, desc: "Wait for the run and download the results directly"
+    option :keep, type: :boolean, default: false, desc: "Sync mode: leave the sandbox around for debugging"
+    option :runs_dir, default: "runs", desc: "Sync mode: local directory to sync the results into"
     option :env, repeatable: true, desc: "Forward an extra host ENV variable by name"
     def run_bench
       bench = Lemans::Bench.load(options[:bench])
@@ -425,7 +734,7 @@ module LemansRemote
         raise Thor::Error, "lemans-remote: snapshot #{provisioner.name} not found — run `lemans-remote provision` first"
       end
 
-      run_id = "#{bench.root.basename}-#{Time.now.utc.strftime("%Y%m%dT%H%M%S")}-#{SecureRandom.alphanumeric(4).downcase}"
+      run_id = build_run_id(bench, tasks, options[:model] || [])
       exit_code = Runner.new(
         bench: bench,
         snapshot: provisioner.name,
@@ -437,10 +746,114 @@ module LemansRemote
         timeout_sec: Lemans::Units.seconds(options[:timeout], field: "--timeout").to_i,
         runs_dir: options[:runs_dir],
         keep: options[:keep],
+        sync: options[:sync],
         shell: shell
       ).call
 
       exit exit_code unless exit_code.zero?
+    rescue Lemans::ConfigError, RuntimeError => e
+      raise Thor::Error, "lemans-remote: #{e.message}"
+    end
+
+    desc "status", "List lemans-remote runs (--history adds completed runs whose sandboxes are gone)"
+    option :history, type: :boolean, default: false, desc: "Also read the vault manifests (spins a short-lived helper sandbox)"
+    def status
+      rows = Fleet.rows.map { [_1.run_id, _1.status, _1.started_at || "?", _1.state, _1.sandbox.id] }
+      if options[:history]
+        seen = rows.map(&:first)
+        manifests = with_vault { |vault, sandbox| vault.manifests(sandbox) }
+        manifests.reject { seen.include?(_1["run_id"]) }.each do |manifest|
+          note = manifest["pulled_at"] ? "pulled" : "-"
+          rows << [manifest["run_id"], manifest["status"], manifest["started_at"] || "?", "gone", note]
+        end
+      end
+
+      if rows.empty?
+        say "no lemans-remote runs#{options[:history] ? "" : " — try --history for completed ones"}"
+        return
+      end
+
+      rows.sort_by! { _1[2].to_s }
+      rows.reverse!
+      print_table([%w[run status started sandbox id]] + rows)
+    rescue Lemans::ConfigError, RuntimeError => e
+      raise Thor::Error, "lemans-remote: #{e.message}"
+    end
+
+    map "pull-runs" => :pull_runs
+    desc "pull-runs [RUN_IDS...]", "Download archived runs from the vault into the local runs directory"
+    option :all, type: :boolean, default: false, desc: "Pull every completed run, even ones already pulled"
+    option :runs_dir, default: "runs", desc: "Local directory to sync the results into"
+    def pull_runs(*run_ids)
+      pulled = []
+      with_vault do |vault, sandbox|
+        manifests = vault.manifests(sandbox)
+        known = manifests.map { _1["run_id"] }
+        targets =
+          if run_ids.any?
+            missing = run_ids - known
+            raise Thor::Error, "lemans-remote: no such run(s) in the vault: #{missing.join(", ")}" if missing.any?
+
+            run_ids
+          else
+            manifests.select { %w[success failed].include?(_1["status"]) }
+                     .reject { !options[:all] && _1["pulled_at"] }
+                     .map { _1["run_id"] }
+          end
+        say_status :pull, "nothing new to pull (use --all to re-pull)", :yellow if targets.empty?
+
+        targets.each do |run_id|
+          results = vault.download_runs(sandbox, run_id, options[:runs_dir])
+          if results
+            vault.mark_pulled(sandbox, run_id)
+            pulled << run_id
+            say_status :pulled, "#{run_id} (#{results.size} result(s))", :green
+            results.take(10).each { say "           #{_1}" }
+            say "           … and #{results.size - 10} more" if results.size > 10
+          else
+            say_status :missing, "#{run_id} has no runs.tar.gz (still running?)", :yellow
+          end
+        end
+      end
+      say_status :done, "#{pulled.size} run(s) synced into #{options[:runs_dir]}/", :green if pulled.any?
+    rescue Lemans::ConfigError, RuntimeError => e
+      raise Thor::Error, "lemans-remote: #{e.message}"
+    end
+
+    desc "clobber [RUN_IDS...]", "Delete archived runs from the vault (--all wipes the whole volume)"
+    option :all, type: :boolean, default: false, desc: "Delete every archived run and the volume itself"
+    option :force, type: :boolean, default: false, aliases: "-f", desc: "Skip the confirmation"
+    def clobber(*run_ids)
+      raise Thor::Error, "lemans-remote: pass run id(s) or --all" if run_ids.empty? && !options[:all]
+
+      live = Fleet.live
+      if options[:all]
+        unless live.empty?
+          raise Thor::Error, "lemans-remote: #{live.size} run(s) still live (#{live.map(&:run_id).join(", ")}) — wait for them to finish"
+        end
+        return unless options[:force] || yes?("Delete the whole #{Vault::NAME} volume and every stopped run sandbox? [y/N]")
+
+        Fleet.rows.each { safe_delete_sandbox(_1.sandbox) }
+        if Vault.drop
+          say_status :clobbered, "volume #{Vault::NAME} deleted (recreated on the next run)", :green
+        else
+          say_status :absent, "volume #{Vault::NAME} does not exist", :yellow
+        end
+        return
+      end
+
+      still_live = live.select { run_ids.include?(_1.run_id) }
+      raise Thor::Error, "lemans-remote: still live: #{still_live.map(&:run_id).join(", ")}" if still_live.any?
+      return unless options[:force] || yes?("Delete #{run_ids.join(", ")} from the vault? [y/N]")
+
+      rows = Fleet.rows
+      with_vault do |vault, sandbox|
+        run_ids.each do |run_id|
+          vault.clobber(sandbox, run_id)
+          rows.select { _1.run_id == run_id }.each { safe_delete_sandbox(_1.sandbox) }
+          say_status :clobbered, run_id, :green
+        end
+      end
     rescue Lemans::ConfigError, RuntimeError => e
       raise Thor::Error, "lemans-remote: #{e.message}"
     end
@@ -468,6 +881,38 @@ module LemansRemote
 
     def build_provisioner
       Provisioner.new(cpus: options[:cpus].to_i, memory_gb: options[:memory].to_i, disk_gb: options[:disk].to_i)
+    end
+
+    def build_run_id(bench, tasks, models)
+      parts = [bench.root.basename.to_s]
+      parts << (tasks.size == 1 ? tasks.first : "#{tasks.size}tasks") if tasks.any?
+      if models.any?
+        short = models.first.split("/").last
+        short += "+#{models.size - 1}" if models.size > 1
+        parts << short
+      end
+      parts << (ENV["LEMANS_REMOTE_USER"] || ENV["USER"] || "anon")
+      parts << Time.now.utc.strftime("%Y%m%dT%H%M%S")
+      parts << SecureRandom.alphanumeric(4).downcase
+      parts.map { name_part(_1) }.reject(&:empty?).join("-")
+    end
+
+    def name_part(value) = value.to_s.downcase.gsub(/[^a-z0-9._+]+/, "-").gsub(/\A-+|-+\z/, "")
+
+    def with_vault(&block)
+      provisioner = build_provisioner
+      unless provisioner.provisioned?
+        raise Thor::Error, "lemans-remote: snapshot #{provisioner.name} not found — run `lemans-remote provision` first"
+      end
+
+      vault = VaultClient.new(snapshot: provisioner.name)
+      vault.with_helper { |sandbox| block.call(vault, sandbox) }
+    end
+
+    def safe_delete_sandbox(sandbox)
+      sandbox.delete
+    rescue StandardError => e
+      warn "lemans-remote: could not delete sandbox #{sandbox.id}: #{e.message}"
     end
   end
 end
