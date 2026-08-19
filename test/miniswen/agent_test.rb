@@ -96,6 +96,16 @@ class MiniswenAgentTest < Minitest::Test
     assert(result.messages.any? { _1[:content].include?("Missing 'command' argument") })
   end
 
+  def test_a_command_with_a_null_byte_is_bounced_back_and_the_model_may_recover
+    stub_llm({ cmd: "sed -i 's/a/b\0c/' file.rb" }, "true", SUBMIT)
+
+    result = agent.run("task")
+
+    assert_equal :submitted, result.status
+    assert(result.messages.any? { _1[:content].include?("contains a null byte") })
+    refute(fake_env.commands.any? { _1.include?("\0") })
+  end
+
   def test_the_step_limit_stops_the_loop_before_the_next_paid_call
     build_agent(max_steps: 2)
     stub_llm("true", "true", "true")

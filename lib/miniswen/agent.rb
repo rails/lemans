@@ -400,7 +400,14 @@ module Miniswen
         error = +""
         error << "Unknown tool '#{call[:name]}'." if call[:name] != "bash"
         arguments = call[:arguments]
-        error << "Missing 'command' argument in bash tool call." unless arguments.is_a?(Hash) && arguments["command"]
+        if !arguments.is_a?(Hash) || !arguments["command"]
+          error << "Missing 'command' argument in bash tool call."
+        elsif arguments["command"].to_s.include?("\0")
+          # Process.spawn rejects strings with NUL bytes, so the command could
+          # never reach a shell.
+          error << "The 'command' argument contains a null byte (\\x00) and cannot be executed. " \
+                   "Resend the command without null bytes."
+        end
         return error unless error.empty?
       end
       nil
