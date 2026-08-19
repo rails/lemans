@@ -716,8 +716,8 @@ module LemansRemote # :nodoc: all
 
     def self.exit_on_failure? = true
 
-    class_option :cpus, type: :numeric, default: 4, desc: "Orchestrator vCPUs (part of the snapshot identity)"
-    class_option :memory, type: :numeric, default: 8, desc: "Orchestrator memory, GiB"
+    class_option :cpus, type: :numeric, default: 2, desc: "Orchestrator vCPUs (part of the snapshot identity)"
+    class_option :memory, type: :numeric, default: 4, desc: "Orchestrator memory, GiB"
     class_option :disk, type: :numeric, default: 10, desc: "Orchestrator disk, GiB"
 
     desc "provision", "Build the orchestrator snapshot (lemans #{Lemans::VERSION} preinstalled)"
