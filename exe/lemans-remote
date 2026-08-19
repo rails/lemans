@@ -12,9 +12,10 @@
 #
 #     exe/lemans-remote provision
 #
-#   Fire-and-forget a bench run on a remote Daytona sandbox (results are
-#   archived to the lemans-remote-runs volume; add --sync to wait and
-#   download into ./runs directly instead):
+#   Fire-and-forget a bench run on remote Daytona sandboxes — one sandbox
+#   per task (--run-in-band for a single sandbox); results are archived to
+#   the lemans-remote-runs volume. Add --sync to wait for a single sandbox
+#   and download into ./runs directly instead:
 #
 #     exe/lemans-remote run --bench ../ai-evals --task hello-world
 #     exe/lemans-remote run --bench ../ai-evals --model openrouter/z-ai/glm-5.2 --args="-k 2 -c 8"
@@ -448,7 +449,6 @@ module LemansRemote
       ensure
         teardown(sandbox) unless launched
       end
-      say :detached, "`lemans-remote status` to watch, `lemans-remote pull-runs` to fetch results"
       0
     end
 
@@ -720,6 +720,8 @@ module LemansRemote
     option :args, default: "", desc: "Extra `lemans run` options, passed through verbatim"
     option :timeout, default: "6h", desc: "Give up on the remote run after this long"
     option :sync, type: :boolean, default: false, desc: "Wait for the run and download the results directly"
+    option :run_in_band, type: :boolean, default: false, aliases: %w[--runInBand],
+                         desc: "Async mode: run all tasks in one sandbox instead of one sandbox per task"
     option :keep, type: :boolean, default: false, desc: "Sync mode: leave the sandbox around for debugging"
     option :runs_dir, default: "runs", desc: "Sync mode: local directory to sync the results into"
     option :env, repeatable: true, desc: "Forward an extra host ENV variable by name"
@@ -734,23 +736,21 @@ module LemansRemote
         raise Thor::Error, "lemans-remote: snapshot #{provisioner.name} not found — run `lemans-remote provision` first"
       end
 
-      run_id = build_run_id(bench, tasks, options[:model] || [])
-      exit_code = Runner.new(
-        bench: bench,
-        snapshot: provisioner.name,
-        run_id: run_id,
-        tasks: tasks,
-        models: options[:model] || [],
-        extra_args: options[:args].strip,
-        extra_env: options[:env] || [],
-        timeout_sec: Lemans::Units.seconds(options[:timeout], field: "--timeout").to_i,
-        runs_dir: options[:runs_dir],
-        keep: options[:keep],
-        sync: options[:sync],
-        shell: shell
-      ).call
+      models = options[:model] || []
+      batches = plan_batches(bench, tasks)
+      Vault.ensure unless options[:sync]
 
-      exit exit_code unless exit_code.zero?
+      if batches.size == 1
+        exit_code = launch_batch(bench, batches.first, models, provisioner)
+        say_status :detached, "`lemans-remote status` to watch, `lemans-remote pull-runs` to fetch results" unless options[:sync]
+        exit exit_code unless exit_code.zero?
+        return
+      end
+
+      say_status :fanout, "#{batches.size} sandboxes, one per task"
+      failures = launch_batches(bench, batches, models, provisioner)
+      say_status :detached, "`lemans-remote status` to watch, `lemans-remote pull-runs` to fetch results"
+      raise Thor::Error, "lemans-remote: failed to launch: #{failures.join("; ")}" if failures.any?
     rescue Lemans::ConfigError, RuntimeError => e
       raise Thor::Error, "lemans-remote: #{e.message}"
     end
@@ -881,6 +881,59 @@ module LemansRemote
 
     def build_provisioner
       Provisioner.new(cpus: options[:cpus].to_i, memory_gb: options[:memory].to_i, disk_gb: options[:disk].to_i)
+    end
+
+    FANOUT_THREADS = 4
+
+    def plan_batches(bench, tasks)
+      return [tasks] if options[:sync] || options[:run_in_band]
+
+      expanded = tasks.any? ? tasks : bench.tasks.map(&:name)
+      expanded.map { [_1] }
+    end
+
+    def launch_batch(bench, tasks, models, provisioner)
+      Runner.new(
+        bench: bench,
+        snapshot: provisioner.name,
+        run_id: build_run_id(bench, tasks, models),
+        tasks: tasks,
+        models: models,
+        extra_args: options[:args].strip,
+        extra_env: options[:env] || [],
+        timeout_sec: Lemans::Units.seconds(options[:timeout], field: "--timeout").to_i,
+        runs_dir: options[:runs_dir],
+        keep: options[:keep],
+        sync: options[:sync],
+        shell: shell
+      ).call
+    end
+
+    def launch_batches(bench, batches, models, provisioner)
+      queue = Queue.new
+      batches.each { queue << _1 }
+      failures = Queue.new
+
+      threads = [FANOUT_THREADS, batches.size].min.times.map do
+        Thread.new do
+          loop do
+            batch =
+              begin
+                queue.pop(true)
+              rescue ThreadError
+                break
+              end
+            begin
+              launch_batch(bench, batch, models, provisioner)
+            rescue StandardError => e
+              failures << "#{batch.join(",")} (#{e.message})"
+            end
+          end
+        end
+      end
+      threads.each(&:join)
+
+      Array.new(failures.size) { failures.pop }
     end
 
     def build_run_id(bench, tasks, models)
