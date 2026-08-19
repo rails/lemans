@@ -21,10 +21,7 @@ module Lemans
 
       def start
         @pool = Array.new(concurrency) do
-          Thread.new(queue, results) do |q, r|
-            Thread.current.abort_on_exception = false
-            drain(q, r)
-          end
+          Thread.new { drain }
         end
         results
       end
@@ -34,23 +31,33 @@ module Lemans
       end
 
       def terminate
-        pool.each { it.raise(Shutdown) }
+        queue.clear
+        queue.close
+        pool.each { it.raise(Shutdown) if it.alive? }
+        pool.each(&:join)
       end
 
       def shutdown
-        concurrency.times { queue << nil }
         queue.close
         pool.each(&:join)
+        raise @abort if @abort
       end
 
       private
 
-      def drain(from, where)
-        while (task = from.pop)
-          break unless task
-
-          where << task.run
+      def drain
+        Thread.current.report_on_exception = false
+        while (task = queue.pop)
+          begin
+            results.buffer << task.run
+          rescue StandardError => e
+            @abort ||= e
+            queue.clear
+            queue.close
+          end
         end
+      rescue Shutdown
+        # ignore: our own stop signal coming back
       end
     end
   end

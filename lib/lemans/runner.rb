@@ -5,6 +5,10 @@ require "pathname"
 module Lemans
   # Runner orchestrates tasks execution
   class Runner
+    # Injected into workers to abandon in-flight tasks on ^C: an Exception,
+    # not a StandardError, so task-level rescues cannot swallow it.
+    class Shutdown < Exception; end # rubocop:disable Lint/InheritException
+
     attr_reader :config, :tasks, :runs_dir, :reporter
 
     private attr_reader :resuming
@@ -38,16 +42,14 @@ module Lemans
         raise ConfigError, "cannot use runs directory #{runs_dir}: #{e.message}"
       end
 
-      results_handle = executor.start(reporter)
+      results_handle = executor.start
       begin
-        attempts.each { executor << it.with_reporter(reporter) }
+        attempts.shuffle.each { executor << it.with_reporter(reporter) }
+        executor.shutdown
       rescue Interrupt
         warn "Interrupted. Exiting..."
         executor.terminate
-      rescue Shutdown
-        # ignore: it's we reraising from workers
       end
-      executor.shutdown
 
       results_handle.results
     end

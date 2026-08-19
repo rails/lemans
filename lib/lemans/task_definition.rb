@@ -47,11 +47,9 @@ module Lemans
       end
     end
 
-    attr_reader :name, :dir
+    attr_reader :config, :name, :dir
 
     attr_accessor :difficulty, :tags, :description, :metadata
-
-    private attr_reader :config
 
     def initialize(config, name, dir: nil)
       @config = config
