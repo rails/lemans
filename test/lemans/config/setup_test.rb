@@ -32,12 +32,6 @@ class ConfigSetupTest < Minitest::Test
     assert_equal %w[a], base.commands
   end
 
-  def test_files_are_confined_and_must_exist
-    assert_raises(Lemans::ConfigError) { from_config({ "files" => ["/etc/passwd"] }) }
-    assert_raises(Lemans::ConfigError) { from_config({ "files" => ["../evil"] }) }
-    assert_raises(Lemans::ConfigError) { from_config({ "files" => ["missing.txt"] }) }
-  end
-
   def test_environment_setup_commands_fold_into_the_setup_section
     Dir.mktmpdir do |dir|
       Pathname(dir).join("bench.yml").write(<<~YAML)

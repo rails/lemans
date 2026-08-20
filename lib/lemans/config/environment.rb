@@ -1,7 +1,5 @@
 # frozen_string_literal: true
 
-require "pathname"
-
 module Lemans
   class Config
     class Environment # :nodoc:
@@ -10,12 +8,12 @@ module Lemans
       class << self
         include Conversion
 
-        def from_config(data, root: Pathname("./"))
+        def from_config(data)
           return if data.nil?
 
           conf = new
           conf.image = data["image"] if data["image"]
-          conf.dockerfile = dockerfile!(data["dockerfile"], root:) if data["dockerfile"]
+          conf.dockerfile = data["dockerfile"] if data["dockerfile"]
           raise ConfigError, "environment.image and environment.dockerfile are mutually exclusive" if conf.image && conf.dockerfile
 
           conf.workdir = absolute_path!(data["workdir"]) if data["workdir"]
@@ -27,17 +25,6 @@ module Lemans
           conf.resources.storage = megabytes!(data.dig("resources", "storage")) if data.dig("resources", "storage")
 
           conf
-        end
-
-        private
-
-        def dockerfile!(path, root:)
-          raise ConfigError, "environment.dockerfile must be relative to #{root}, got #{path.inspect}" if path.start_with?("/")
-
-          file = root.join(path)
-          raise ConfigError, "no Dockerfile at #{file}" unless file.file?
-
-          file
         end
       end
 

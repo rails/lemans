@@ -49,6 +49,11 @@ class ConfigTest < Minitest::Test
       config = Lemans::Config.load_file(dir)
 
       assert_nil config.environment.dockerfile
+
+      root.join("bench.yml").write("environment:\n  dockerfile: environment/Dockerfile\n")
+      config = Lemans::Config.load_file(dir)
+
+      assert_equal root.join("environment/Dockerfile"), config.environment.dockerfile
     end
   end
 

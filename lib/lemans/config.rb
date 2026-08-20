@@ -34,7 +34,7 @@ module Lemans
         sections[:tasks_dir] = contents["tasks"]
         sections[:setup] = Setup.from_config(contents["setup"], root:)
         sections[:agent] = Agent.from_config(contents["agent"])
-        sections[:environment] = Environment.from_config(contents["environment"], root:)
+        sections[:environment] = Environment.from_config(contents["environment"])
         sections[:verifier] = Verifier.from_config(contents["verifier"], root:)
         sections.compact!
 
@@ -60,6 +60,7 @@ module Lemans
       @setup = setup || Setup.new
       @agent = agent
       @environment = environment
+      @environment.dockerfile = root.join(@environment.dockerfile) if @environment.dockerfile
       @environment.dockerfile ||= default_dockerfile unless @environment.image
       @verifier = verifier
       @verifier.root = root

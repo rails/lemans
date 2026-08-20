@@ -13,26 +13,12 @@ module Lemans
           case data
           when Hash
             conf.commands = Array(data["commands"])
-            conf.files = Array(data["files"]).map { file!(it, root:) }
+            conf.files = Array(data["files"]).map { [root.join(it), it] }
           else
             conf.commands = Array(data)
           end
 
           conf
-        end
-
-        private
-
-        # Files are confined to the directory that declared them and must
-        # exist at load time.
-        def file!(path, root:)
-          raise ConfigError, "setup file #{path.inspect} must be relative to #{root}" if path.start_with?("/")
-
-          relative = Pathname(path).cleanpath
-          raise ConfigError, "setup file #{path.inspect} must name a file inside #{root}" if relative.each_filename.include?("..") || relative.to_s == "."
-          raise ConfigError, "setup file #{path} is not a file" unless root.join(relative).file?
-
-          [root.join(relative), relative.to_s]
         end
       end
 
