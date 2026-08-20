@@ -5,8 +5,13 @@ module Lemans
   # task. The name-to-class registry lives on the Agents module.
   class Agent
     # What one run of an agent produced. Outcome and usage are the core
-    # Result's parts; trajectory is optional.
-    Response = Data.define(:outcome, :usage, :trajectory)
+    # Result's parts; trajectory, the raw self-reported result, and the error
+    # are optional — the trial persists them, agents only carry them.
+    Response = Data.define(:outcome, :usage, :trajectory, :error, :raw_result) do
+      def initialize(outcome: nil, usage: nil, trajectory: nil, error: nil, raw_result: nil) = super
+
+      def error? = !error.nil?
+    end
 
     attr_reader :profile, :model
 
@@ -23,8 +28,7 @@ module Lemans
     def install(_task, _environment) = nil
 
     # Run the task.
-    # Optional store and result object could be used to collect logs, etc.
-    def run(task, environment, result: nil, store: nil)
+    def run(task, environment)
       raise NotImplementedError
     end
 

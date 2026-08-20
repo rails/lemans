@@ -46,10 +46,8 @@ class MiniswenInstalledTest < Minitest::Test
   def test_a_remote_run_is_downloaded_and_reported_through_the_shared_atif_tail
     agent, task = build_agent
     shell = TestEnvironment.new(files: { Lemans::Agents::MiniswenInstalled::RESULTS_PATH => remote_result_json })
-    store = TestStore.new
-    result = Lemans::Result.new(task: task.name, agent: agent.name, model: "openrouter/z-ai/glm-5.2")
 
-    response = with_openrouter_key { agent.run(task, shell, result:, store:) }
+    response = with_openrouter_key { agent.run(task, shell) }
 
     assert_predicate response.outcome, :completed?
     assert_predicate response.outcome, :scored?
@@ -64,14 +62,14 @@ class MiniswenInstalledTest < Minitest::Test
     assert_includes command, "--max-steps 100"
     assert_includes command, "--max-cost 5"
 
-    response.trajectory.session_id = result.id
+    response.trajectory.session_id = "test-session"
     trajectory = JSON.parse(JSON.generate(response.trajectory.to_atif))
 
     assert ATIFSchema.valid?(trajectory), ATIFSchema.errors(trajectory).join("\n")
     assert_equal "submitted", trajectory.dig("extra", "status")
     assert_equal "miniswen-installed", trajectory.dig("agent", "name")
-    # The raw remote result stays behind as a store artifact.
-    assert store.artifacts.key?("miniswen.result.json")
+    # The raw remote result rides the response, for the trial to keep.
+    assert_equal "submitted", JSON.parse(response.raw_result)["status"]
   end
 
   def test_a_missing_result_file_is_an_infrastructure_failure_with_the_runs_output

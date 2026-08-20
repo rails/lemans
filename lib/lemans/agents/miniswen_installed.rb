@@ -13,7 +13,6 @@ module Lemans
     class MiniswenInstalled < Miniswen
       NAME = "miniswen-installed"
       RESULTS_PATH = "/tmp/lemans-miniswen.result.json"
-      RESULT_FILENAME = "miniswen.result.json"
       INSTALL_TIMEOUT_SEC = 300
       # The CLI enforces max-time itself; the slack only covers process
       # startup, so the results file exists before the outer exec expires.
@@ -31,16 +30,15 @@ module Lemans
 
       # An in-sandbox run self-reports: everything but the verifier's reward
       # comes from a file the sandbox wrote.
-      def obtain_result(task, environment, result: nil, store: nil)
+      def obtain_result(task, environment)
         run = environment.exec(command_for(task), timeout: profile.timeout + EXEC_SLACK_SEC,
                                                   env: provider_env(environment))
 
         begin
           Tempfile.create(%w[miniswen .result.json]) do |file|
             environment.download(RESULTS_PATH, file.path)
-            contents = File.read(file.path)
-            store.save_artifact(result, contents, path: RESULT_FILENAME) if store && result
-            ::Miniswen::Agent::Result.from_h(JSON.parse(contents))
+            @raw_result = File.read(file.path)
+            ::Miniswen::Agent::Result.from_h(JSON.parse(@raw_result))
           end
         rescue StandardError => e
           raise InfrastructureError,
@@ -48,6 +46,8 @@ module Lemans
                 "#{run.output.to_s[0, 2000]}"
         end
       end
+
+      attr_reader :raw_result
 
       # A missing credential fails the run before the sandbox executes
       # anything: it is the operator's configuration to fix, not a trial result.

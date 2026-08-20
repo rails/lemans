@@ -35,21 +35,18 @@ class MiniswenAdapterTest < Minitest::Test
     end
   end
 
-  def test_a_model_call_failure_still_leaves_a_trajectory
+  def test_a_model_call_failure_returns_the_trajectory_as_evidence
     config = load_config
     agent = TransportFailingMiniswen.new(profile: config.agent, model: "test")
     task = load_task(config)
-    store = TestStore.new
-    result = Lemans::Result.new(task: task.name, agent: "miniswen", model: "test")
 
-    error = assert_raises(::Miniswen::InfrastructureError) do
-      agent.run(task, FakeEnv.new, result:, store:)
-    end
+    response = agent.run(task, FakeEnv.new)
 
-    assert_includes error.message, "SSL_connect"
-    trajectory = JSON.parse(store.artifacts.fetch("trajectory.json"))
+    assert_predicate response, :error?
+    assert_includes response.error, "SSL_connect"
+    response.trajectory.session_id = "test-session"
+    trajectory = JSON.parse(JSON.generate(response.trajectory.to_atif))
 
-    assert_equal result.id, trajectory["session_id"]
     assert_equal "error", trajectory.dig("extra", "status")
     assert_includes trajectory.dig("extra", "error"), "SSL_connect"
     assert_equal "system", trajectory["steps"].first["source"]

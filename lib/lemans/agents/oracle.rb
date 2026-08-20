@@ -13,7 +13,7 @@ module Lemans
       ENTRYPOINT = "solve.sh"
       PATCH = "solution.patch"
 
-      def run(task, environment, **)
+      def run(task, environment)
         raise ConfigError, "#{task.name}: no solution/ to run — the oracle has nothing to prove" unless task.solution?
 
         upload_solution(environment, task)
@@ -25,7 +25,7 @@ module Lemans
                 "#{outcome.output.to_s[0, 500]}"
         end
 
-        Response.new(outcome: Result::Outcome.new(:completed), usage: Result::Usage.zero, trajectory: nil)
+        Response.new(outcome: Result::Outcome.new(:completed), usage: Result::Usage.zero)
       end
 
       private

@@ -67,18 +67,25 @@ module Lemans
         environment.switch_network_policy!(config.agent.environment.network)
       end
 
-      agent_result =
+      response =
         phase(:agent) do
-          agent.run(task, environment, result:, store:)
+          agent.run(task, environment)
         rescue InfrastructureError, ::Miniswen::InfrastructureError => e
           # Mark the failure here, where the agent phase is still known
           result.failed!(:agent_error, e.message)
           raise
         end
 
-      save_trajectory(agent_result.trajectory)
+      # Whatever the agent brought back is evidence, a failed run's included
+      save_trajectory(response.trajectory)
+      store&.save_artifact(result, response.raw_result, path: "agent.result.json") if response.raw_result
 
-      result.completed!(agent_result.outcome, agent_result.usage)
+      if response.error?
+        result.failed!(:agent_error, response.error)
+        return result
+      end
+
+      result.completed!(response.outcome, response.usage)
 
       check_cost_limit!
 
