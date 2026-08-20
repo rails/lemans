@@ -704,6 +704,8 @@ module LemansRemote # :nodoc: all
   end
 
   class CLI < Thor
+    include Lemans::Config::Conversion
+
     check_unknown_options!
 
     def self.exit_on_failure? = true
@@ -902,7 +904,7 @@ module LemansRemote # :nodoc: all
     option :min_age, default: "10m", desc: "Leave younger runs alone — they may still be uploading"
     option :force, type: :boolean, default: false, aliases: "-f", desc: "Skip the confirmation"
     def drop_orphans
-      cutoff = Time.now.utc - Lemans::Units.seconds(options[:min_age], field: "--min-age")
+      cutoff = Time.now.utc - seconds!(options[:min_age])
       candidates = Fleet.live.select do |row|
         row.status == "running" && row.started_at && Time.parse(row.started_at) <= cutoff
       end
@@ -1017,7 +1019,7 @@ module LemansRemote # :nodoc: all
         models: models,
         extra_args: options[:args].strip,
         extra_env: options[:env] || [],
-        timeout_sec: Lemans::Units.seconds(options[:timeout], field: "--timeout").to_i,
+        timeout_sec: seconds!(options[:timeout]).to_i,
         runs_dir: options[:runs_dir],
         keep: options[:keep],
         sync: options[:sync],
