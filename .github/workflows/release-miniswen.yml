@@ -1,0 +1,26 @@
+name: Release miniswen
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.4"
+          bundler-cache: true
+      - name: Run tests and lint
+        run: bundle exec rake
+      - name: Configure RubyGems Credentials
+        uses: rubygems/configure-rubygems-credentials@main
+      - name: Publish to RubyGems
+        run: |
+          gem install gem-release
+          gem release miniswen
