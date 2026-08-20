@@ -12,7 +12,7 @@ require "minitest/autorun"
 require "minitest/mock"
 require "tmpdir"
 
-require_relative "support/fake_environment"
+require_relative "support/adapters"
 require_relative "support/atif_schema"
 
 module BenchFixture

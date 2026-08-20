@@ -13,11 +13,9 @@ class BoardReporterTest < Minitest::Test
   end
 
   def result(status: :completed, reward: 1.0, detail: nil)
-    raw = Lemans::Trial::Result.new(agent: "oracle", model: "m/model-a")
-    raw.status = status
-    raw.reward = reward
-    raw.detail = detail
-    Lemans::Runner::Result.new(task: "hello-world", model: "m/model-a", index: 1, id: "hello-world__abc1234", raw:)
+    Lemans::Result.new(task: "hello-world", agent: "oracle", model: "m/model-a", index: 1)
+                  .completed!(Lemans::Result::Outcome.new(status, detail))
+                  .graded!(reward)
   end
 
   def test_draws_the_final_board

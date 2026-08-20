@@ -1,6 +1,8 @@
 # frozen_string_literal: true
 
+require "json"
 require "pathname"
+require "securerandom"
 
 module Lemans
   module Stores
@@ -11,7 +13,7 @@ module Lemans
       private attr_reader :root
 
       def initialize(root)
-        super
+        super()
         @root = Pathname(root)
       end
 
@@ -33,7 +35,18 @@ module Lemans
       end
 
       def save_artifact(result, contents, path:)
-        # TODO: contents could be eiher IO (file) or text
+        destination = result_dir(result).join(path)
+        if destination.exist?
+          warn "lemans: artifact #{path} collides with an existing file and was dropped"
+          return
+        end
+
+        destination.dirname.mkpath
+        contents.is_a?(String) ? destination.write(contents) : IO.copy_stream(contents, destination)
+        destination
+      rescue SystemCallError => e
+        warn "lemans: could not save artifact #{path} for #{result.id}: #{e.message}"
+        nil
       end
 
       private
@@ -46,6 +59,8 @@ module Lemans
         nil
       end
 
+      # --resume treats any result.json as a finished attempt, so the write must
+      # be atomic: a rename is either all there or not there at all.
       def atomic_write(path, content)
         path.dirname.mkpath
         tmp = path.dirname.join(".#{path.basename}.#{Process.pid}.#{SecureRandom.hex(4)}")
@@ -55,9 +70,9 @@ module Lemans
         tmp&.delete if tmp&.exist?
       end
 
-      # result.json is stored at <root>/<model-short>/<task-id>
+      # result.json is stored at <root>/<model-short>/<result-id>
       def result_dir(result)
-        root.join(result.model.split("/").last).join(result.id)
+        root.join((result.model || result.agent).to_s.split("/").last, result.id)
       end
     end
   end

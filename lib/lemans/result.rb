@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "securerandom"
+require "time"
 
 module Lemans
   # A single trial result record
@@ -34,14 +35,14 @@ module Lemans
         @scored = SCORED.include?(status)
       end
 
-      def invalid? = INVALID.include?(status)
+      def invalid? = !scored
 
       def as_json(**)
         {
           name:,
           scored:,
           detail:
-        }
+        }.compact
       end
 
       def self.from_json(data)
@@ -56,7 +57,13 @@ module Lemans
       :input_tokens, :output_tokens,
       :cached_tokens, :steps,
       :cost_usd, :cost_source
-    )
+    ) do
+      def as_json(**) = to_h.merge(cost_source: cost_source&.to_h).compact
+    end
+
+    def Usage.zero
+      new(input_tokens: 0, output_tokens: 0, cached_tokens: 0, steps: 0, cost_usd: 0.0, cost_source: nil)
+    end
 
     def Usage.from_json(data)
       cost_source = CostSource.new(**data[:cost_source]) if data[:cost_source]
@@ -76,19 +83,20 @@ module Lemans
       alias finished? finished_at
 
       def initialize(name, started_at: nil, finished_at: nil)
-        @name = name
-        @started_at = started_at || now
+        @name = name.to_sym
+        @started_at = started_at || Time.now.utc
         @finished_at = finished_at
       end
 
       def finish!(time = nil)
-        @finished_at = time || now
+        @finished_at = time || Time.now.utc
       end
 
       def as_json(**)
         {
-          started_at: Time.at(started_at).utc.iso8601,
-          finished_at: finished_at && Time.at(finished_at).utc.iso8601
+          name:,
+          started_at: started_at.iso8601(6),
+          finished_at: finished_at&.iso8601(6)
         }
       end
 
@@ -100,29 +108,29 @@ module Lemans
 
         new(name, started_at:, finished_at:)
       end
-
-      private
-
-      def now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
-    Revision = Data.define(:commit, :dirty)
+    Revision = Data.define(:commit, :dirty) do
+      def as_json(**) = to_h
+    end
 
     # attributes that must be initialized/specified during construction
-    attr_reader :id, :task, :agent, :model,
-                :profile_digest, :task_digest,
-                :tags, :metadata, :phases, :revision
+    attr_reader :id, :task, :agent, :model, :index,
+                :profile_digest, :task_digest, :revision
+
+    attr_accessor :tags, :metadata
+
+    attr_reader :phases
 
     # outcome-related attributes (we use setter-like methods, not accessors)
-    attr_reader :reward, :outcome, :usage, :duration
+    attr_reader :reward, :outcome, :usage
 
-    private attr_reader :finalized
-
-    def initialize(task:, agent:, model:, id: nil, profile_digest: nil, task_digest: nil, revision: nil)
-      @id = id || "#{task}__#{SecureRandom.alphanumeric(7)}"
+    def initialize(task:, agent:, model:, id: nil, index: nil,
+                   profile_digest: nil, task_digest: nil, revision: nil)
       @task = task
       @agent = agent
       @model = model
+      @index = index
       @profile_digest = profile_digest
       @task_digest = task_digest
       @revision = revision
@@ -131,6 +139,7 @@ module Lemans
       @metadata = {}
       @phases = []
 
+      @id = id || "#{task}__#{SecureRandom.alphanumeric(7)}"
       @outcome = Outcome.new(:pending)
     end
 
@@ -151,7 +160,17 @@ module Lemans
 
     def finished_at = phases.last&.finished_at
 
+    def status = outcome.status
+
+    def detail = outcome.detail
+
     def scored? = outcome.scored?
+
+    def invalid? = outcome.invalid?
+
+    def duration
+      finished_at && started_at && (finished_at - started_at).round(1)
+    end
 
     def completed!(outcome, usage = nil)
       @outcome = outcome.is_a?(Outcome) ? outcome : Outcome.new(outcome)
@@ -167,7 +186,7 @@ module Lemans
     def failed!(reason, detail)
       # do not override already stored error
       # (in case we have rescue cascades)
-      return if outcome.invalid?
+      return self if outcome.invalid? && !outcome.pending?
 
       @outcome = Outcome.new(reason, detail)
       @reward = nil
@@ -176,40 +195,63 @@ module Lemans
 
     def as_json(**)
       {
-        trial: id, task:, agent:, model:,
-        profile_digest:, task_digest:, revision:,
-        tags:, metadata:, phases:,
-        reward:, outcome:, usage:, duration:,
-        started_at: started_at && Time.at(started_at).utc.iso8601,
-        finished_at: finished_at && Time.at(finished_at).utc.iso8601
-      }
+        trial: id, task:, agent:, model:, index:,
+        profile_digest:, task_digest:, revision: revision&.as_json,
+        lemans_version: VERSION,
+        tags:, metadata:, phases: phases.map(&:as_json),
+        reward:, outcome: outcome.as_json, usage: usage&.as_json, duration:,
+        started_at: started_at&.iso8601,
+        finished_at: finished_at&.iso8601
+      }.compact
     end
 
-    def self.from_json(data)
-      new(
-        **data.slice(
-          :task, :agent,
-          :model, :profile_digest, :task_digest,
-          :tags, :metadata,
-          :reward, :duration
-        ),
-        id: data[:trial],
-        revision: data[:revision] && Revision.new(**data[:revision]),
-        outcome: data[:outcome] && Outcome.from_json(data[:outcome]),
-        phases: data[:phases]&.map { Phase.from_json(it) },
-        usage: Usage.from_json(data[:usage])
-      )
-    end
+    class << self
+      def from_json(data)
+        result = new(
+          **data.slice(:task, :agent, :model, :index, :profile_digest, :task_digest),
+          id: data[:trial],
+          revision: revision_from(data)
+        )
+        result.tags = data[:tags] || []
+        result.metadata = data[:metadata] || {}
+        phases_from(data).each { result.phases << it }
+        result.completed!(Outcome.from_json(data[:outcome]), data[:usage] && Usage.from_json(data[:usage])) if data[:outcome]
+        result.graded!(data[:reward]) unless data[:reward].nil?
+        result
+      end
 
-    def self.from_task(definition, **)
-      new(
-        task: definition.name,
-        agent: definition.config.agent_name,
-        model: definition.config.models.first,
-        profile_digest: definition.config.digest,
-        task_digest: definition.digest,
-        **
-      )
+      def from_task(definition, **)
+        config = definition.config
+        result = new(
+          task: definition.name,
+          agent: config.agent_name,
+          model: config.models.first,
+          profile_digest: config.digest,
+          task_digest: definition.digest,
+          revision: config.revision,
+          **
+        )
+        result.tags = definition.tags
+        result.metadata = definition.metadata
+        result
+      end
+
+      private
+
+      # Legacy files spell revision `bench:`.
+      def revision_from(data)
+        raw = data[:revision] || data[:bench]
+        raw && Revision.new(commit: raw[:commit], dirty: raw[:dirty])
+      end
+
+      # Legacy files record phases as a name-keyed mapping.
+      def phases_from(data)
+        case (raw = data[:phases])
+        when Hash then raw.map { |name, times| Phase.from_json({ name: }.merge(times)) }
+        when Array then raw.map { Phase.from_json(it) }
+        else []
+        end
+      end
     end
   end
 end

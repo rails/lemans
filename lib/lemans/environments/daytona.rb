@@ -8,7 +8,7 @@ module Lemans
   module Environments
     # Daytona sandboxes. Daytona builds images server-side into reusable content-named
     # snapshots and enforces the network policy itself.
-    class Daytona < Base
+    class Daytona < Environment
       TTL_MINUTES = 120
 
       DEFAULT_BUILD_TIMEOUT = 600

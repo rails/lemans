@@ -57,39 +57,6 @@ module Lemans
 
         value
       end
-
-      def restore_path!(path)
-        raise ConfigError, "restore path must be workdir-relative, got #{path.inspect}" if path.start_with?("/")
-        raise ConfigError, "restore path must not escape the workdir: #{path.inspect}" if path.split("/").include?("..")
-        raise ConfigError, "restore path must name something inside the workdir, got #{path.inspect}" if Pathname(path).cleanpath.to_s == "."
-
-        path
-      end
-
-      SETUP_PHASES = %i[environment verifier].freeze
-
-      # Setup files are confined to the directory that declared them and must
-      # exist at load time.
-      def setup_files!(declared, root:)
-        declared ||= {}
-        unknown = declared.keys.map(&:to_sym) - SETUP_PHASES
-        raise ConfigError, "files.#{unknown.first} is not a phase (#{SETUP_PHASES.join(", ")})" if unknown.any?
-
-        root = Pathname(root)
-        SETUP_PHASES.to_h do |phase|
-          [phase, Array(declared[phase.to_s]).map { setup_file!(it, phase, root:) }]
-        end
-      end
-
-      def setup_file!(path, phase, root:)
-        raise ConfigError, "files.#{phase} entry #{path.inspect} must be relative to #{root}" if path.start_with?("/")
-
-        relative = Pathname(path).cleanpath
-        raise ConfigError, "files.#{phase} entry #{path.inspect} must name a file inside #{root}" if relative.each_filename.include?("..") || relative.to_s == "."
-        raise ConfigError, "files.#{phase} names #{path}, which is not a file" unless root.join(relative).file?
-
-        relative
-      end
     end
   end
 end

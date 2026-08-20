@@ -8,8 +8,8 @@ class TestLemans < Minitest::Test
   end
 
   def test_the_loader_finds_every_seam
-    assert Lemans::Environments::Base
+    assert Lemans::Environment
     assert Lemans::Config::NetworkPolicy
-    assert Lemans::TaskDefinition::ImageSpec
+    assert Lemans::Config::ImageSpec
   end
 end

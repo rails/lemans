@@ -2,6 +2,7 @@
 
 require "json"
 require "shellwords"
+require "tempfile"
 
 module Lemans
   module Agents
@@ -18,7 +19,7 @@ module Lemans
       # startup, so the results file exists before the outer exec expires.
       EXEC_SLACK_SEC = 60
 
-      def install(environment, task:) # rubocop:disable Lint/UnusedMethodArgument
+      def install(_task, environment)
         environment.exec!(
           "command -v miniswen >/dev/null 2>&1 || gem install miniswen -v #{::Miniswen::VERSION} --no-document",
           timeout: INSTALL_TIMEOUT_SEC
@@ -30,14 +31,17 @@ module Lemans
 
       # An in-sandbox run self-reports: everything but the verifier's reward
       # comes from a file the sandbox wrote.
-      def obtain_result(environment, task:, logs_dir:)
+      def obtain_result(task, environment, result: nil, store: nil)
         run = environment.exec(command_for(task), timeout: profile.timeout + EXEC_SLACK_SEC,
                                                   env: provider_env(environment))
 
-        local = logs_dir.join(RESULT_FILENAME)
         begin
-          environment.download(RESULTS_PATH, local)
-          ::Miniswen::Agent::Result.from_h(JSON.parse(local.read))
+          Tempfile.create(%w[miniswen .result.json]) do |file|
+            environment.download(RESULTS_PATH, file.path)
+            contents = File.read(file.path)
+            store.save_artifact(result, contents, path: RESULT_FILENAME) if store && result
+            ::Miniswen::Agent::Result.from_h(JSON.parse(contents))
+          end
         rescue StandardError => e
           raise InfrastructureError,
                 "miniswen-installed: no usable result file (exit #{run.exit_code}, #{e.message}): " \

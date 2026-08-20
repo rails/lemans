@@ -10,9 +10,9 @@ class OracleTest < Minitest::Test
   # this covers the bare-patch convention that keeps a bench from copying
   # the same three lines into every task.
   def test_a_bare_solution_patch_is_applied_by_the_oracle_itself
-    with_solution("solution.patch" => "diff --git a/x b/x\n") do |task, logs_dir|
-      fake = FakeEnvironment.new
-      Lemans::Agents::Oracle.new(profile: load_config.agent).call(fake, task: task, logs_dir: logs_dir)
+    with_solution("solution.patch" => "diff --git a/x b/x\n") do |task|
+      fake = TestEnvironment.new
+      oracle.run(task, fake)
 
       command = fake.commands.fetch(0)
 
@@ -23,19 +23,17 @@ class OracleTest < Minitest::Test
   end
 
   def test_a_solve_executable_wins_and_gets_its_mode_bit
-    with_solution("solve" => "#!/usr/bin/env ruby\nputs :solved\n", "solution.patch" => "diff\n") do |task, logs_dir|
-      fake = FakeEnvironment.new
-      Lemans::Agents::Oracle.new(profile: load_config.agent).call(fake, task: task, logs_dir: logs_dir)
+    with_solution("solve" => "#!/usr/bin/env ruby\nputs :solved\n", "solution.patch" => "diff\n") do |task|
+      fake = TestEnvironment.new
+      oracle.run(task, fake)
 
       assert_equal "chmod +x /solution/solve && /solution/solve", fake.commands.fetch(0)
     end
   end
 
   def test_a_solution_with_neither_entrypoint_nor_patch_is_the_authors_bug
-    with_solution("README.md" => "nothing runnable") do |task, logs_dir|
-      error = assert_raises(Lemans::ConfigError) do
-        Lemans::Agents::Oracle.new(profile: load_config.agent).call(FakeEnvironment.new, task: task, logs_dir: logs_dir)
-      end
+    with_solution("README.md" => "nothing runnable") do |task|
+      error = assert_raises(Lemans::ConfigError) { oracle.run(task, TestEnvironment.new) }
 
       assert_match(/neither solve, solve.sh nor solution.patch/, error.message)
     end
@@ -47,9 +45,13 @@ class OracleTest < Minitest::Test
     end
 
     def solution? = solution_files.any?
+
+    def environment = config.environment
   end
 
   private
+
+  def oracle = Lemans::Agents::Oracle.new(profile: load_config.agent)
 
   def with_solution(files)
     Dir.mktmpdir do |dir|
@@ -57,7 +59,7 @@ class OracleTest < Minitest::Test
       solution.mkpath
       files.each { |name, content| solution.join(name).write(content) }
 
-      yield FakeTask.new("bare-task", solution, load_config), Pathname(dir)
+      yield FakeTask.new("bare-task", solution, load_config)
     end
   end
 end

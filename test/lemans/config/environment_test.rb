@@ -11,8 +11,7 @@ class ConfigEnvironmentTest < Minitest::Test
       "workdir" => "/work",
       "resources" => { "cpus" => 4, "memory" => "2GB", "storage" => "5GB" },
       "build_timeout" => "10m",
-      "network" => { "mode" => "none" },
-      "setup" => ["bundle install"]
+      "network" => { "mode" => "none" }
     }
   end
 
@@ -24,7 +23,6 @@ class ConfigEnvironmentTest < Minitest::Test
     assert_equal Resources.new(cpus: 4, memory: 2048, storage: 5120), env.resources
     assert_equal 600.0, env.build_timeout
     assert_equal "none", env.network.mode
-    assert_equal ["bundle install"], env.setup
   end
 
   def test_defaults
@@ -35,7 +33,6 @@ class ConfigEnvironmentTest < Minitest::Test
     assert_equal Resources.new(cpus: 2, memory: 2048, storage: 5120), env.resources
     assert_equal 600, env.build_timeout
     assert_equal "public", env.network.mode
-    assert_empty env.setup
   end
 
   def test_partial_resources

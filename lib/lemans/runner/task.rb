@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require "forwardable"
+
 module Lemans
   class Runner
     # A single task to run: a thin wrapper owning status, reporting, and
@@ -15,7 +17,8 @@ module Lemans
         define_method(:"#{name}?") { status == name }
       end
 
-      def_delegators :name, :config, to: :definition
+      def_delegators :definition, :name, :config
+      def_delegators :result, :id
 
       private attr_reader :definition, :store, :reporter
 
@@ -28,7 +31,7 @@ module Lemans
         @status = :pending
 
         # prepare the result object: it's used by the actual execution down the stack
-        @result = Result.from_task(definition)
+        @result = Result.from_task(definition, index:, model: model || config.models.first)
       end
 
       def with_reporter(reporter)
@@ -52,7 +55,7 @@ module Lemans
       private
 
       def execute!
-        Trial.new(definition, store:, result:).run
+        Trial.new(definition, model, store:, result:).run
       end
     end
   end

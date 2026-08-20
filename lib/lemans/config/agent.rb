@@ -33,6 +33,8 @@ module Lemans
                     :step_limit, :cost_limit, :exec_timeout,
                     :environment
 
+      def model = models.first
+
       Environment = Struct.new(:network, keyword_init: true)
 
       def initialize(name, model)

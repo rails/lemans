@@ -78,7 +78,7 @@ module Lemans
       summary = runner.run(reporter)
 
       say ""
-      say_status :report, "collecting results from #{runner.runs_dir}", :cyan
+      say_status :report, "collecting results from #{options[:runs_dir]}", :cyan
       print_report Results::Report.load(options[:runs_dir])
 
       exit 130 if summary.status == :interrupted

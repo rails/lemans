@@ -11,18 +11,17 @@ module Lemans
 
       private attr_reader :task, :environment, :workdir, :paths, :timeout, :baseline
 
-      def initialize(task, environment, timeout: nil)
+      def initialize(task, environment, timeout: 300)
         @task = task
         @environment = environment
+        @timeout = timeout
 
-        @workdir = task.config.environment.workdir
-        @paths = task.restore_paths
-
-        @timeout = timeout || task.config.environment.build_timeout || 300
-
+        @workdir = task.environment.workdir
+        @paths = task.verifier.restore_paths
         @baseline = nil
       end
 
+      # Sealing failure is an environment error: the agent has not run yet.
       def capture!
         return if paths.empty?
 

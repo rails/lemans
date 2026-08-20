@@ -2,29 +2,25 @@
 
 require "pathname"
 require "shellwords"
+require "tempfile"
 
 module Lemans
   class Trial
     # The agent's work as one git patch, diffed against a baseline sealed before
     # its first turn
     class Patch
-      LOCAL_PATH = "agent.patch"
       REMOTE_PATCH = "/tmp/lemans-agent.patch"
       REMOTE_INDEX = "/tmp/lemans-patch.idx"
 
-      private attr_reader :task, :environment, :path,
-                          :workdir, :baseline, :timeout
+      private attr_reader :task, :environment, :path, :workdir, :baseline, :timeout
 
-      def initialize(task, environment, timeout: nil, path: "agent.patch")
+      def initialize(task, environment, timeout: 300, path: "agent.patch")
         @task = task
         @environment = environment
         @path = path
+        @timeout = timeout
 
-        @workdir = task.config.environment.workdir
-        @path = Pathname(dir).join(LOCAL_PATH)
-
-        @timeout = timeout || task.config.environment.build_timeout || 300
-
+        @workdir = task.environment.workdir
         @baseline = nil
       end
 
@@ -40,12 +36,12 @@ module Lemans
         after = write_tree
         return unless after
 
-        result = environment.exec("#{git} diff --binary #{baseline} #{after} > #{REMOTE_PATCH}", timeout: TIMEOUT)
-        return unless result.success?
+        diffed = environment.exec("#{git} diff --binary #{baseline} #{after} > #{REMOTE_PATCH}", timeout:)
+        return unless diffed.success?
 
-        Tempfile.new(["patch", ".diff"]).tap do |file|
+        Tempfile.create(%w[agent .patch]) do |file|
           environment.download(REMOTE_PATCH, file.path)
-          store.save_artifact(result, file, path:)
+          store.save_artifact(result, Pathname(file.path), path:)
         end
 
         environment.exec("rm -f #{REMOTE_PATCH} #{REMOTE_INDEX}", timeout:)

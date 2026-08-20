@@ -16,7 +16,7 @@ class ConfigVerifierTest < Minitest::Test
     )
 
     assert_equal 300.0, verifier.timeout
-    assert_equal ["apt-get install -y jq"], verifier.setup
+    assert_equal ["apt-get install -y jq"], verifier.setup.commands
     assert_equal "bash /grade.sh", verifier.command
     assert_equal "git stash", verifier.preverify
     assert_equal ["tests"], verifier.restore_paths
@@ -28,7 +28,7 @@ class ConfigVerifierTest < Minitest::Test
     verifier = Lemans::Config::Verifier.new
 
     assert_equal 600, verifier.timeout
-    assert_empty verifier.setup
+    assert_predicate verifier.setup, :empty?
     assert_includes verifier.command, "bash /tests/test.sh"
     assert_nil verifier.preverify
     assert_empty verifier.restore_paths

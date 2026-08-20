@@ -4,7 +4,7 @@ require "fileutils"
 
 # A sandbox made of a Hash, so the phases around verification can be tested without
 # paying for one. It answers only the commands the harness actually issues.
-class FakeEnvironment < Lemans::Environments::Base
+class TestEnvironment < Lemans::Environment
   attr_reader :files, :uploads, :commands, :stopped, :policies
 
   def initialize(files: {}, on_command: nil, fails: nil, refuses: nil, crashes: nil)
@@ -47,7 +47,7 @@ class FakeEnvironment < Lemans::Environments::Base
     File.write(local_path.to_s, files.fetch(remote_path.to_s))
   end
 
-  def network_policy=(policy)
+  def switch_network_policy!(policy)
     @policies << policy
     @network = policy
   end
@@ -81,8 +81,27 @@ class FakeEnvironment < Lemans::Environments::Base
   end
 
   def result(exit_code, output)
-    Lemans::Environments::Base::ExecResult.new(
+    Lemans::Environment::ExecResult.new(
       command: @commands.last, exit_code: exit_code, output: output, duration: 0.0
     )
+  end
+end
+
+# A Store made of Hashes, so persistence can be asserted without a filesystem.
+class TestStore < Lemans::Store
+  attr_reader :results, :artifacts
+
+  def initialize
+    super
+    @results = []
+    @artifacts = {}
+  end
+
+  def fetch = results
+
+  def save(result) = results << result
+
+  def save_artifact(_result, contents, path:)
+    artifacts[path.to_s] = contents.is_a?(String) ? contents : File.read(contents)
   end
 end

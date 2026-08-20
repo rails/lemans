@@ -9,7 +9,14 @@ module Lemans
     # not a StandardError, so task-level rescues cannot swallow it.
     class Shutdown < Exception; end # rubocop:disable Lint/InheritException
 
-    Summary = Struct.new(:results, :status, keyword_init: true)
+    Summary = Struct.new(:results, :interrupted, keyword_init: true) do
+      def status
+        return :interrupted if interrupted
+        return :invalid if results.any?(&:invalid?)
+
+        :ok
+      end
+    end
 
     attr_reader :config, :tasks, :store, :reporter
 
@@ -38,7 +45,7 @@ module Lemans
     def run(reporter = nil)
       @reporter = reporter if reporter
 
-      store.setup
+      store&.setup
 
       results_handle = executor.start
       interrupted = false
@@ -69,7 +76,7 @@ module Lemans
     end
 
     def completed_runs
-      @completed_runs ||= store.fetch
+      @completed_runs ||= store&.fetch || []
     end
   end
 end

@@ -8,13 +8,10 @@ class ProgressReporterTest < Minitest::Test
   end
 
   def result(status: :completed, reward: 1.0, detail: nil)
-    raw = Lemans::Trial::Result.new(agent: "oracle", model: "m/model-a")
-    raw.status = status
-    raw.reward = reward
-    raw.detail = detail
-    raw.started_at = Time.at(0)
-    raw.finished_at = Time.at(42)
-    Lemans::Runner::Result.new(task: "hello-world", model: "m/model-a", index: 1, id: "hello-world__abc1234", raw:)
+    result = Lemans::Result.new(task: "hello-world", agent: "oracle", model: "m/model-a", index: 1)
+    result.phase_started(:agent, Time.at(0).utc)
+    result.phase_finished(:agent, Time.at(42).utc)
+    result.completed!(Lemans::Result::Outcome.new(status, detail)).graded!(reward)
   end
 
   def test_one_line_per_event

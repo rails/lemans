@@ -16,7 +16,6 @@ module Lemans
           conf.workdir = absolute_path!(data["workdir"]) if data["workdir"]
           conf.build_timeout = seconds!(data["build_timeout"]) if data["build_timeout"]
           conf.network = NetworkPolicy.from_config(data["network"]) if data["network"]
-          conf.setup = Array(data["setup"]) if data["setup"]
 
           conf.resources.cpus = integer!(data.dig("resources", "cpus")) if data.dig("resources", "cpus")
           conf.resources.memory = megabytes!(data.dig("resources", "memory")) if data.dig("resources", "memory")
@@ -26,7 +25,7 @@ module Lemans
         end
       end
 
-      attr_accessor :image, :workdir, :resources, :build_timeout, :network, :setup
+      attr_accessor :image, :workdir, :resources, :build_timeout, :network
 
       def initialize
         @image = nil
@@ -34,7 +33,6 @@ module Lemans
         @resources = Resources.new(cpus: 2, memory: 2048, storage: 5120)
         @build_timeout = 10 * 60
         @network = NetworkPolicy.new
-        @setup = []
       end
     end
   end
