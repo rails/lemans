@@ -13,7 +13,7 @@ module Lemans
           case data
           when Hash
             conf.commands = Array(data["commands"])
-            conf.files = Array(data["files"]).map { [root.join(it), it] }
+            conf.files = Array(data["files"]).map { [ root.join(it), it ] }
           else
             conf.commands = Array(data)
           end

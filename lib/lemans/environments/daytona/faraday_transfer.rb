@@ -114,7 +114,7 @@ module Lemans
               req.headers.update(api_client.default_headers)
               req.headers["Accept"] = "multipart/form-data"
               req.headers["Content-Type"] = "application/json"
-              req.body = JSON.generate(paths: [remote_path])
+              req.body = JSON.generate(paths: [ remote_path ])
               apply_timeout(req, timeout)
               req.options.on_data = proc do |chunk, _received, env|
                 raise ::Daytona::Sdk::Error, "Download cancelled: #{remote_path}" if cancel_event&.set?

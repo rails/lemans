@@ -80,16 +80,16 @@ module Lemans
         @drawn = 0
       end
 
-      def cell(task, model) = @cells[[task, short(model)]]
+      def cell(task, model) = @cells[[ task, short(model) ]]
 
       # A bench may declare no model at all; nil must not reach ljust.
       def short(model) = model.nil? ? "(default)" : model.to_s.split("/").last
 
       def draw
         @frame += 1
-        task_width = (@tasks.map(&:length) + [4]).max
-        cell_width = ([@attempts, 3].max + 2)
-        lines = [header(task_width, cell_width)]
+        task_width = (@tasks.map(&:length) + [ 4 ]).max
+        cell_width = ([ @attempts, 3 ].max + 2)
+        lines = [ header(task_width, cell_width) ]
         @tasks.each { lines << row(it, task_width, cell_width) }
         lines << "#{DIM}#{FRAMES[@frame % FRAMES.size]} #{@done}/#{@total} done " \
                  "· #{@in_flight} in flight#{RESET}"
@@ -105,16 +105,16 @@ module Lemans
       end
 
       def header(task_width, cell_width)
-        "#{DIM}#{"task".ljust(task_width)}  #{@models.map { it.ljust([it.length, cell_width].max) }.join("  ")}#{RESET}"
+        "#{DIM}#{"task".ljust(task_width)}  #{@models.map { it.ljust([ it.length, cell_width ].max) }.join("  ")}#{RESET}"
       end
 
       # ljust would count the glyphs' invisible ANSI bytes, so cells pad by
       # visible width — one column per attempt — instead.
       def row(task, task_width, cell_width)
         cells = @models.map do |model|
-          states = @cells[[task, model]]
-          pad = [model.length, cell_width].max - states.size
-          states.map { glyph(it) }.join + (" " * [pad, 0].max)
+          states = @cells[[ task, model ]]
+          pad = [ model.length, cell_width ].max - states.size
+          states.map { glyph(it) }.join + (" " * [ pad, 0 ].max)
         end
         "#{task.ljust(task_width)}  #{cells.join("  ")}"
       end

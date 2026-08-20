@@ -44,10 +44,10 @@ class MiniswenTrajectoryTest < Minitest::Test
     steps = trajectory["steps"]
 
     # No step comes from a tool: observations ride the agent turn that asked.
-    assert_equal(%w[system user agent agent], steps.map { _1["source"] })
-    assert_equal((1..steps.size).to_a, steps.map { _1["step_id"] })
+    assert_equal(%w[system user agent agent], steps.map { it["source"] })
+    assert_equal((1..steps.size).to_a, steps.map { it["step_id"] })
 
-    called = steps.find { _1["observation"] }
+    called = steps.find { it["observation"] }
 
     assert_equal "agent", called["source"]
     call_id = called.dig("tool_calls", 0, "tool_call_id")
@@ -66,7 +66,7 @@ class MiniswenTrajectoryTest < Minitest::Test
     result = agent.run("Just submit.")
 
     trajectory = as_json(trajectory_for(result))
-    turn = trajectory["steps"].find { _1["source"] == "agent" }
+    turn = trajectory["steps"].find { it["source"] == "agent" }
 
     assert_match(/\A\d{4}-\d{2}-\d{2}T/, turn["timestamp"])
     assert_equal "test", turn["model_name"]
@@ -75,7 +75,7 @@ class MiniswenTrajectoryTest < Minitest::Test
     # Cached tokens nest where the provider payload puts them.
     assert_equal 5, turn.dig("metrics", "extra", "prompt_tokens_details", "cached_tokens")
     # total_steps counts model turns, and the steps array now agrees.
-    agent_steps = trajectory["steps"].count { _1["source"] == "agent" }
+    agent_steps = trajectory["steps"].count { it["source"] == "agent" }
 
     assert_equal trajectory.dig("final_metrics", "total_steps"), agent_steps
   end
@@ -85,7 +85,7 @@ class MiniswenTrajectoryTest < Minitest::Test
     result = agent.run("Just submit.")
 
     trajectory = as_json(trajectory_for(result))
-    turn = trajectory["steps"].find { _1["source"] == "agent" }
+    turn = trajectory["steps"].find { it["source"] == "agent" }
 
     assert_equal "just do it", turn["reasoning_content"]
     assert_equal 40, turn.dig("metrics", "extra", "completion_tokens_details", "reasoning_tokens")
@@ -108,7 +108,7 @@ class MiniswenTrajectoryTest < Minitest::Test
   def test_an_orphan_tool_entry_is_dropped_not_invented_into_a_step
     result = Miniswen::Agent::Result.from_h(
       status: "format_error", submission: nil, steps: 0,
-      messages: [{ role: "tool", tool_call_id: "call_1", content: "{}" }],
+      messages: [ { role: "tool", tool_call_id: "call_1", content: "{}" } ],
       cost_source: nil, input_tokens: 0, output_tokens: 0, cached_tokens: 0, thinking_tokens: 0, cost_usd: 0.0
     )
 

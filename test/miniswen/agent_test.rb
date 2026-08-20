@@ -22,7 +22,7 @@ class MiniswenAgentTest < Minitest::Test
     assert_equal :submitted, result.status
     assert_equal 2, result.steps
     # The first exec is the uname that fills <system_information>.
-    assert_equal ["uname -srvm", "ls /app", "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"], fake_env.commands
+    assert_equal [ "uname -srvm", "ls /app", "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT" ], fake_env.commands
     # The model saw what the command printed, as the mini JSON observation.
     # The last message observes the submit command itself; the ls came before.
     observation = result.messages[-3]
@@ -32,22 +32,22 @@ class MiniswenAgentTest < Minitest::Test
     assert_includes observation[:content], "hello.txt"
     # And the instruction made it into the first user turn.
     assert_includes result.messages[1][:content], "List the app directory."
-    assert_equal [Miniswen::Agent::BashTool], RubyLLM::Test.last_request.tool_classes
+    assert_equal [ Miniswen::Agent::BashTool ], RubyLLM::Test.last_request.tool_classes
     assert_in_delta 0.02, result.cost_usd
     assert_equal 200, result.input_tokens
   end
 
   def test_each_tool_call_in_a_response_runs_and_gets_its_own_observation
-    stub_llm({ cmd: ["echo one", "echo two"] }, SUBMIT)
+    stub_llm({ cmd: [ "echo one", "echo two" ] }, SUBMIT)
 
     result = agent.run("task")
 
-    assert_equal ["uname -srvm", "echo one", "echo two",
-                  "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"], fake_env.commands
+    assert_equal [ "uname -srvm", "echo one", "echo two",
+                  "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT" ], fake_env.commands
     assistant = result.messages[2]
-    ids = assistant[:tool_calls].map { _1[:id] }
+    ids = assistant[:tool_calls].map { it[:id] }
 
-    observed_ids = result.messages[3..4].map { _1[:tool_call_id] }
+    observed_ids = result.messages[3..4].map { it[:tool_call_id] }
 
     assert_equal ids, observed_ids
     assert_includes result.messages[3][:content], "one"
@@ -55,12 +55,12 @@ class MiniswenAgentTest < Minitest::Test
   end
 
   def test_a_submission_stops_the_remaining_tool_calls
-    stub_llm({ cmd: ["echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT", "echo after"] })
+    stub_llm({ cmd: [ "echo COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT", "echo after" ] })
 
     result = agent.run("task")
 
     assert_equal :submitted, result.status
-    refute_includes result.messages.filter_map { _1[:observation] }.join, "after"
+    refute_includes result.messages.filter_map { it[:observation] }.join, "after"
   end
 
   def test_a_response_without_tool_calls_is_bounced_back_and_the_model_may_recover
@@ -69,7 +69,7 @@ class MiniswenAgentTest < Minitest::Test
     result = agent.run("task")
 
     assert_equal :submitted, result.status
-    assert(result.messages.any? { _1[:content].include?("No tool calls found in the response") })
+    assert(result.messages.any? { it[:content].include?("No tool calls found in the response") })
   end
 
   def test_a_truncated_response_is_told_to_be_concise
@@ -78,22 +78,22 @@ class MiniswenAgentTest < Minitest::Test
     result = agent.run("task")
 
     assert_equal :submitted, result.status
-    assert(result.messages.any? { _1[:content].include?("reached the output token limit") })
+    assert(result.messages.any? { it[:content].include?("reached the output token limit") })
   end
 
   def test_three_malformed_answers_in_a_row_end_the_run
     stub_llm(
       { content: "nope" },
-      { content: "wrong tool", tool_calls: [{ name: "python", arguments: {} }] },
-      { content: "no arg", tool_calls: [{ name: "bash", arguments: {} }] }
+      { content: "wrong tool", tool_calls: [ { name: "python", arguments: {} } ] },
+      { content: "no arg", tool_calls: [ { name: "bash", arguments: {} } ] }
     )
 
     result = agent.run("task")
 
     assert_equal :format_error, result.status
     assert_equal 3, result.steps
-    assert(result.messages.any? { _1[:content].include?("Unknown tool 'python'.") })
-    assert(result.messages.any? { _1[:content].include?("Missing 'command' argument") })
+    assert(result.messages.any? { it[:content].include?("Unknown tool 'python'.") })
+    assert(result.messages.any? { it[:content].include?("Missing 'command' argument") })
   end
 
   def test_a_command_with_a_null_byte_is_bounced_back_and_the_model_may_recover
@@ -102,8 +102,8 @@ class MiniswenAgentTest < Minitest::Test
     result = agent.run("task")
 
     assert_equal :submitted, result.status
-    assert(result.messages.any? { _1[:content].include?("contains a null byte") })
-    refute(fake_env.commands.any? { _1.include?("\0") })
+    assert(result.messages.any? { it[:content].include?("contains a null byte") })
+    refute(fake_env.commands.any? { it.include?("\0") })
   end
 
   def test_the_step_limit_stops_the_loop_before_the_next_paid_call
@@ -128,7 +128,7 @@ class MiniswenAgentTest < Minitest::Test
   end
 
   def test_the_time_limit_stops_the_loop
-    ticks = [0, 1, 100].each
+    ticks = [ 0, 1, 100 ].each
     build_agent(max_time: 60, clock: -> { ticks.next })
     stub_llm("true", "true")
 
@@ -198,12 +198,12 @@ class MiniswenAgentTest < Minitest::Test
 
   def test_provider_env_maps_the_resolved_providers_credentials
     original = RubyLLM.config.ollama_api_base
-    RubyLLM.configure { _1.ollama_api_base = "http://localhost:11434/v1" }
+    RubyLLM.configure { it.ollama_api_base = "http://localhost:11434/v1" }
     build_agent(model: "ollama/qwen3:8b")
 
     assert_equal({ "OLLAMA_API_BASE" => "http://localhost:11434/v1" }, agent.provider_env)
   ensure
-    RubyLLM.configure { _1.ollama_api_base = original }
+    RubyLLM.configure { it.ollama_api_base = original }
   end
 
   def test_a_local_provider_completion_is_priced_at_zero_not_unknown
@@ -259,7 +259,7 @@ class MiniswenAgentTest < Minitest::Test
     raw = contents.grep(RubyLLM::Content::Raw)
 
     refute_empty raw
-    assert(raw.all? { _1.value.first[:cache_control] == { type: "ephemeral" } })
+    assert(raw.all? { it.value.first[:cache_control] == { type: "ephemeral" } })
   end
 
   def test_a_plain_model_sends_no_cache_breakpoints
@@ -275,7 +275,7 @@ class MiniswenAgentTest < Minitest::Test
     ENV["LEMANS_PROVIDER_ORDER"] = "Chutes, Io Net"
     agent.run("task")
 
-    assert_equal({ provider: { order: ["Chutes", "Io Net"], allow_fallbacks: false } },
+    assert_equal({ provider: { order: [ "Chutes", "Io Net" ], allow_fallbacks: false } },
                  RubyLLM::Test.last_request.params)
   ensure
     ENV.delete("LEMANS_PROVIDER_ORDER")
@@ -283,13 +283,13 @@ class MiniswenAgentTest < Minitest::Test
 
   def test_a_tool_call_thought_signature_is_replayed_on_the_next_turn
     stub_llm({ content: "Running.",
-               tool_calls: [{ name: "bash", arguments: { "command" => "true" }, thought_signature: "tsig" }] },
+               tool_calls: [ { name: "bash", arguments: { "command" => "true" }, thought_signature: "tsig" } ] },
              SUBMIT)
 
     result = agent.run("task")
 
     assert_equal :submitted, result.status
-    replayed = RubyLLM::Test.last_request.messages.find { _1.role == :assistant }
+    replayed = RubyLLM::Test.last_request.messages.find { it.role == :assistant }
 
     assert_equal "tsig", replayed.tool_calls.values.first.thought_signature
   end
@@ -305,7 +305,7 @@ class MiniswenAgentTest < Minitest::Test
     result = agent.run("task")
 
     assert_equal :submitted, result.status
-    replayed = RubyLLM::Test.last_request.messages.find { _1.role == :assistant }
+    replayed = RubyLLM::Test.last_request.messages.find { it.role == :assistant }
 
     assert_equal details, replayed.thinking.details
     assert_equal "onetwo", replayed.thinking.text
@@ -331,7 +331,7 @@ class MiniswenAgentTest < Minitest::Test
     provider = openrouter_provider
 
     assert_equal({ reasoning_details: details }, provider.send(:format_thinking, verbatim))
-    assert_equal({ reasoning_details: [{ type: "reasoning.text", text: "onetwo", signature: "sig-1" }] },
+    assert_equal({ reasoning_details: [ { type: "reasoning.text", text: "onetwo", signature: "sig-1" } ] },
                  provider.send(:format_thinking, collapsed))
   end
 

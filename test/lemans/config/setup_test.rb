@@ -9,21 +9,21 @@ class ConfigSetupTest < Minitest::Test
   def from_config(data, root: ROOT) = Lemans::Config::Setup.from_config(data, root:)
 
   def test_a_bare_list_is_commands_shorthand
-    setup = from_config(["bundle install"])
+    setup = from_config([ "bundle install" ])
 
-    assert_equal ["bundle install"], setup.commands
+    assert_equal [ "bundle install" ], setup.commands
     assert_empty setup.files
   end
 
   def test_full_form
-    setup = from_config({ "commands" => ["bash tests/test.sh"], "files" => ["tests/test.sh"] })
+    setup = from_config({ "commands" => [ "bash tests/test.sh" ], "files" => [ "tests/test.sh" ] })
 
-    assert_equal ["bash tests/test.sh"], setup.commands
-    assert_equal [[ROOT.join("tests/test.sh"), "tests/test.sh"]], setup.files
+    assert_equal [ "bash tests/test.sh" ], setup.commands
+    assert_equal [ [ ROOT.join("tests/test.sh"), "tests/test.sh" ] ], setup.files
   end
 
   def test_merge_concatenates_without_mutating
-    base = from_config({ "commands" => %w[a], "files" => ["tests/test.sh"] })
+    base = from_config({ "commands" => %w[a], "files" => [ "tests/test.sh" ] })
     extra = from_config(%w[b])
     merged = base.merge(extra)
 

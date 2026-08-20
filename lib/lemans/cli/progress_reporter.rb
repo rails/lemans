@@ -22,7 +22,7 @@ module Lemans
 
       def initialize(shell:, tasks:)
         @shell = shell
-        @task_width = (tasks.map(&:length) + [4]).max
+        @task_width = (tasks.map(&:length) + [ 4 ]).max
       end
 
       def start = self

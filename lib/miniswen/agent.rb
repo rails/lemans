@@ -215,9 +215,9 @@ module Miniswen
           value.to_h do |key, item|
             key = key.to_sym
             # Tool-call arguments and reasoning details keep their provider-style string keys.
-            [key, %i[arguments reasoning_details].include?(key) ? item : deep_symbolize(item)]
+            [ key, %i[arguments reasoning_details].include?(key) ? item : deep_symbolize(item) ]
           end
-        when Array then value.map { deep_symbolize(_1) }
+        when Array then value.map { deep_symbolize(it) }
         else value
         end
       end
@@ -313,7 +313,7 @@ module Miniswen
     # them back from ENV on boot (the option upcased).
     def provider_env
       _, provider = resolved
-      env = provider.configuration_requirements.to_h { [_1.to_s.upcase, RubyLLM.config.public_send(_1)] }.compact
+      env = provider.configuration_requirements.to_h { [ it.to_s.upcase, RubyLLM.config.public_send(it) ] }.compact
 
       order = ENV["LEMANS_PROVIDER_ORDER"]
       env["LEMANS_PROVIDER_ORDER"] = order if order
@@ -340,7 +340,7 @@ module Miniswen
     def next_actions
       response = complete(@messages)
       @steps += 1
-      @totals.each_key { @totals[_1] += response[_1].to_i }
+      @totals.each_key { @totals[it] += response[it].to_i }
       track_cost(response)
 
       entry = { role: "assistant", timestamp: Time.now.utc.iso8601, content: response[:content].to_s,
@@ -496,7 +496,7 @@ module Miniswen
     def complete(messages)
       model_info, provider = resolved
       response = provider.complete(
-        with_cache_breakpoints(messages.map { as_ruby_llm(_1) }),
+        with_cache_breakpoints(messages.map { as_ruby_llm(it) }),
         tools: { bash: @bash_tool },
         temperature: nil,
         model: model_info,
@@ -518,13 +518,13 @@ module Miniswen
     def with_cache_breakpoints(messages)
       return messages unless explicit_cache?
 
-      system = messages.find { _1.role == :system }
-      [system, messages.last].compact.uniq.each do |message|
+      system = messages.find { it.role == :system }
+      [ system, messages.last ].compact.uniq.each do |message|
         text = message.content
         next unless text.is_a?(String) && !text.empty?
 
         message.content = RubyLLM::Content::Raw.new(
-          [{ type: "text", text: text, cache_control: CACHE_CONTROL }]
+          [ { type: "text", text: text, cache_control: CACHE_CONTROL } ]
         )
       end
       messages
@@ -580,8 +580,8 @@ module Miniswen
       return nil if tool_calls.nil? || tool_calls.empty?
 
       tool_calls.to_h do |call|
-        [call[:id], RubyLLM::ToolCall.new(id: call[:id], name: call[:name], arguments: call[:arguments],
-                                          thought_signature: call[:thought_signature])]
+        [ call[:id], RubyLLM::ToolCall.new(id: call[:id], name: call[:name], arguments: call[:arguments],
+                                          thought_signature: call[:thought_signature]) ]
       end
     end
 
@@ -668,7 +668,7 @@ module Miniswen
       cache_write = info.cache_write_input_price_per_million || input
       # Providers usually fold thinking into output_tokens; max() bills the
       # larger count once and can never double-bill.
-      generated = [response.output_tokens.to_i, tokens&.thinking.to_i].max
+      generated = [ response.output_tokens.to_i, tokens&.thinking.to_i ].max
       ((response.input_tokens.to_i * input) +
         (tokens&.cached.to_i * cache_read) +
         (tokens&.cache_creation.to_i * cache_write) +

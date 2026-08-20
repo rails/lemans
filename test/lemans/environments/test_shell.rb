@@ -33,7 +33,7 @@ class ShellTest < Minitest::Test
     assert_includes session_command, "export K=v"
     assert_includes session_command, "bin/rails test"
     # The scratch files were removed before the model's next look at /tmp.
-    assert(process.direct_commands.any? { _1.start_with?("rm -f /tmp/lemans-") })
+    assert(process.direct_commands.any? { it.start_with?("rm -f /tmp/lemans-") })
   end
 
   def test_a_command_that_outruns_its_budget_kills_the_session_and_reports_a_timeout

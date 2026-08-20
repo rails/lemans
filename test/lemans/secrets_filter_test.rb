@@ -4,7 +4,7 @@ require "test_helper"
 
 class SecretsFilterTest < Minitest::Test
   def test_filter
-    filter = Lemans::SecretsFilter.new(["sk-or-v1-abcdef123456", "dtn_0123456789", nil, "", "short"])
+    filter = Lemans::SecretsFilter.new([ "sk-or-v1-abcdef123456", "dtn_0123456789", nil, "", "short" ])
 
     assert_equal "key=<filtered> and <filtered>", filter.filter("key=sk-or-v1-abcdef123456 and dtn_0123456789")
     assert_equal "short is kept, nothing else here", filter.filter("short is kept, nothing else here")

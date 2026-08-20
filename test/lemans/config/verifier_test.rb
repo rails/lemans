@@ -7,19 +7,19 @@ class ConfigVerifierTest < Minitest::Test
     verifier = Lemans::Config::Verifier.from_config(
       {
         "timeout" => "5m",
-        "setup" => ["apt-get install -y jq"],
+        "setup" => [ "apt-get install -y jq" ],
         "command" => "bash /grade.sh",
         "preverify" => "git stash",
-        "restore" => ["tests"],
+        "restore" => [ "tests" ],
         "logs_dir" => "/logs/grade"
       }
     )
 
     assert_equal 300.0, verifier.timeout
-    assert_equal ["apt-get install -y jq"], verifier.setup.commands
+    assert_equal [ "apt-get install -y jq" ], verifier.setup.commands
     assert_equal "bash /grade.sh", verifier.command
     assert_equal "git stash", verifier.preverify
-    assert_equal ["tests"], verifier.restore_paths
+    assert_equal [ "tests" ], verifier.restore_paths
     assert_equal "/logs/grade", verifier.logs_dir
     assert_equal "/logs/grade/reward.txt", verifier.reward_path
   end
@@ -42,8 +42,8 @@ class ConfigVerifierTest < Minitest::Test
   end
 
   def test_restore_paths_confined_to_the_workdir
-    assert_raises(Lemans::ConfigError) { Lemans::Config::Verifier.from_config({ "restore" => ["/abs"] }) }
-    assert_raises(Lemans::ConfigError) { Lemans::Config::Verifier.from_config({ "restore" => ["../up"] }) }
-    assert_raises(Lemans::ConfigError) { Lemans::Config::Verifier.from_config({ "restore" => ["."] }) }
+    assert_raises(Lemans::ConfigError) { Lemans::Config::Verifier.from_config({ "restore" => [ "/abs" ] }) }
+    assert_raises(Lemans::ConfigError) { Lemans::Config::Verifier.from_config({ "restore" => [ "../up" ] }) }
+    assert_raises(Lemans::ConfigError) { Lemans::Config::Verifier.from_config({ "restore" => [ "." ] }) }
   end
 end

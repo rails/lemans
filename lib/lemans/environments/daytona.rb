@@ -78,7 +78,7 @@ module Lemans
         local_path = Pathname(local_path)
         local_path.dirname.mkpath
         local_path.open("wb") do |file|
-          sandbox.fs.download_file_stream(remote_path.to_s, timeout: TRANSFER_TIMEOUT) { file.write(_1) }
+          sandbox.fs.download_file_stream(remote_path.to_s, timeout: TRANSFER_TIMEOUT) { file.write(it) }
         end
       rescue *Retries::SDK_ERRORS, SystemCallError => e
         raise InfrastructureError, "daytona: could not download #{remote_path}: #{e.message}"

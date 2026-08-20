@@ -12,14 +12,14 @@ class MiniswenAdapterTest < Minitest::Test
     config = load_config
     agent = Lemans::Agents.build("miniswen", profile: config.agent, model: model)
     stub_llm(*answers, **overrides)
-    [agent, load_task(config)]
+    [ agent, load_task(config) ]
   end
 
   def run_agent(agent, task)
     response = agent.run(task, FakeEnv.new)
     trajectory = response.trajectory
     trajectory.session_id = "test-session"
-    [response, JSON.parse(JSON.generate(trajectory.to_atif))]
+    [ response, JSON.parse(JSON.generate(trajectory.to_atif)) ]
   end
 
   class TransportFailingMiniswen < Lemans::Agents::Miniswen
@@ -65,7 +65,7 @@ class MiniswenAdapterTest < Minitest::Test
     assert_equal "ATIF-v1.7", trajectory["schema_version"]
     assert_equal "submitted", trajectory.dig("extra", "status")
     # The task's real instruction reached the model.
-    assert(trajectory["steps"].any? { _1["message"].include?("hello.txt") })
+    assert(trajectory["steps"].any? { it["message"].include?("hello.txt") })
   end
 
   def test_the_trajectory_is_native_atif_with_linked_calls_and_metrics
@@ -74,14 +74,14 @@ class MiniswenAdapterTest < Minitest::Test
 
     assert ATIFSchema.valid?(trajectory), ATIFSchema.errors(trajectory).join("\n")
 
-    agent_step = trajectory["steps"].find { _1["source"] == "agent" }
+    agent_step = trajectory["steps"].find { it["source"] == "agent" }
     call_id = agent_step.dig("tool_calls", 0, "tool_call_id")
 
     assert_equal "bash", agent_step.dig("tool_calls", 0, "function_name")
     assert_equal "date", agent_step.dig("tool_calls", 0, "arguments", "command")
     assert_equal 100, agent_step.dig("metrics", "prompt_tokens")
 
-    observation_step = trajectory["steps"].find { _1["observation"] }
+    observation_step = trajectory["steps"].find { it["observation"] }
 
     assert_equal call_id, observation_step.dig("observation", "results", 0, "source_call_id")
     assert_equal 200, trajectory.dig("final_metrics", "total_prompt_tokens")
@@ -94,7 +94,7 @@ class MiniswenAdapterTest < Minitest::Test
 
     assert ATIFSchema.valid?(trajectory), ATIFSchema.errors(trajectory).join("\n")
 
-    agent_step = trajectory["steps"].find { _1["source"] == "agent" }
+    agent_step = trajectory["steps"].find { it["source"] == "agent" }
 
     assert_equal "the task wants a date", agent_step["reasoning_content"]
     assert_equal 1, agent_step["llm_call_count"]

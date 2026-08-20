@@ -5,7 +5,7 @@ require_relative "lib/miniswen/version"
 Gem::Specification.new do |spec|
   spec.name = "miniswen"
   spec.version = Miniswen::VERSION
-  spec.authors = ["Svyatoslav Kryukov", "Artur Petrov", "Vladimir Dementyev"]
+  spec.authors = [ "Svyatoslav Kryukov", "Artur Petrov", "Vladimir Dementyev" ]
   spec.email = %w[me@skryukov.dev ardecvz@gmail.com dementiev.vm@gmail.com]
 
   spec.summary = "A Ruby port of mini-swe-agent"
@@ -24,10 +24,10 @@ Gem::Specification.new do |spec|
   }
 
   spec.files = Dir["lib/miniswen/**/*", "lib/miniswen.rb", "exe/miniswen", "LICENSE.txt", "README.md"]
-  spec.require_paths = ["lib"]
+  spec.require_paths = [ "lib" ]
 
   spec.bindir = "exe"
-  spec.executables = ["miniswen"]
+  spec.executables = [ "miniswen" ]
 
   spec.add_dependency "logger"
   spec.add_dependency "ruby_llm", "~> 1.16"

@@ -22,7 +22,7 @@ class ReportAggregateTest < Minitest::Test
     assert_equal %i[task agent model], Lemans::CLI::Report::Aggregate.keys("task-agent-model")
     assert_equal %i[model], Lemans::CLI::Report::Aggregate.keys("model")
 
-    ["task-reward", "", "task-task", "task-agent-model-task"].each do |spec|
+    [ "task-reward", "", "task-task", "task-agent-model-task" ].each do |spec|
       assert_raises(Lemans::ConfigError) { Lemans::CLI::Report::Aggregate.keys(spec) }
     end
   end
@@ -37,7 +37,7 @@ class ReportAggregateTest < Minitest::Test
     rows = aggregate.to_rows
 
     assert_equal %w[task model score time cost steps tokens], rows.first
-    assert_equal ["hello-world", "gpt-5.6-luna", "2/3", "1m 40s", "$0.02", "3", "2000"], rows.last
+    assert_equal [ "hello-world", "gpt-5.6-luna", "2/3", "1m 40s", "$0.02", "3", "2000" ], rows.last
   end
 
   def test_the_aggregate_csv_keeps_raw_values_and_full_model_names

@@ -9,7 +9,7 @@ class ATIFTest < Minitest::Test
     {
       schema_version: "ATIF-v1.7",
       agent: { name: "miniswen", version: "0.1.0" },
-      steps: [{ step_id: 1, source: "user", message: "do the thing" }]
+      steps: [ { step_id: 1, source: "user", message: "do the thing" } ]
     }
   end
 
@@ -21,7 +21,7 @@ class ATIFTest < Minitest::Test
     broken = minimal_trajectory
     broken[:steps][0][:source] = "the void"
 
-    assert(ATIFSchema.errors(broken).any? { _1.include?("/steps/0") })
+    assert(ATIFSchema.errors(broken).any? { it.include?("/steps/0") })
   end
 
   def test_an_agent_without_a_version_is_refused

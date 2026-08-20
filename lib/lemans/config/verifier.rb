@@ -61,7 +61,7 @@ module Lemans
         @files ||= begin
           dir = root.join(VERIFICATION_DIR)
           if dir.directory?
-            dir.glob("**/*", File::FNM_DOTMATCH).select(&:file?).map { [it, it.relative_path_from(dir).to_s] }
+            dir.glob("**/*", File::FNM_DOTMATCH).select(&:file?).map { [ it, it.relative_path_from(dir).to_s ] }
           else
             []
           end

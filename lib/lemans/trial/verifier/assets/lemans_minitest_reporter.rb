@@ -17,11 +17,11 @@ module LemansReport
     end
 
     def report
-      graded = @results.select { graded?(_1) }
+      graded = @results.select { graded?(it) }
       prior = existing.fetch("checks", {})
       return if graded.empty? && prior.empty?
 
-      checks = prior.merge(graded.to_h { [name(_1), status(_1)] }).sort.to_h
+      checks = prior.merge(graded.to_h { [ name(it), status(it) ] }).sort.to_h
       File.write(
         File.join(@dir, "checks.json"),
         JSON.pretty_generate(checks: checks, failures: checks.reject { |_, status| status == "pass" }.keys)

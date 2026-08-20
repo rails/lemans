@@ -118,7 +118,7 @@ module Lemans
       raise
     rescue StandardError => e
       # A harness bug must leave evidence.
-      result.failed!(:harness_crash, ["#{e.class}: #{e.message}", *Array(e.backtrace).first(5)].join("\n"))
+      result.failed!(:harness_crash, [ "#{e.class}: #{e.message}", *Array(e.backtrace).first(5) ].join("\n"))
     ensure
       environment&.stop
     end

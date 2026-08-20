@@ -40,7 +40,7 @@ class TestEnvironment < Lemans::Environment
     end
   end
 
-  def upload(local_path, remote_path) = @uploads << [local_path.to_s, remote_path.to_s]
+  def upload(local_path, remote_path) = @uploads << [ local_path.to_s, remote_path.to_s ]
 
   def download(remote_path, local_path)
     FileUtils.mkdir_p(File.dirname(local_path.to_s))
@@ -63,7 +63,7 @@ class TestEnvironment < Lemans::Environment
   end
 
   def find(root)
-    matches = files.keys.select { _1.start_with?("#{root}/") }
+    matches = files.keys.select { it.start_with?("#{root}/") }
     return result(1, "find: '#{root}': No such file or directory") if matches.empty?
 
     result(0, matches.join("\0"))
@@ -73,7 +73,7 @@ class TestEnvironment < Lemans::Environment
 
   def present(path) = files.key?(path) ? result(0, "") : result(1, "")
 
-  def directory(root) = files.keys.any? { _1.start_with?("#{root}/") } ? result(0, "") : result(1, "")
+  def directory(root) = files.keys.any? { it.start_with?("#{root}/") } ? result(0, "") : result(1, "")
 
   def removed(path)
     files.delete(path)

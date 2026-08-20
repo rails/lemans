@@ -1,3 +1,6 @@
+inherit_gem:
+  rubocop-rails-omakase: rubocop.yml
+
 AllCops:
   TargetRubyVersion: 3.4
   NewCops: enable
@@ -5,36 +8,6 @@ AllCops:
   Exclude:
     - lib/lemans/cli/templates/**/*
 
-Style/StringLiterals:
-  EnforcedStyle: double_quotes
-
-Style/StringLiteralsInInterpolation:
-  EnforcedStyle: double_quotes
-
-Metrics:
-  Enabled: false
-
-Layout/LineLength:
-  Enabled: false
-
-Lint/UnusedMethodArgument:
-  Exclude:
-    - test/**/*
-
-Style/Documentation:
-  Exclude:
-    - test/**/*
-
-Style/FormatStringToken:
-  Exclude:
-    - test/**/*
-
-Style/FetchEnvVar:
-  Enabled: false
-
-Naming/FileName:
-  Exclude:
-    - "**/assets/**"
-
+# Because `it`-s cool!
 Style/ItBlockParameter:
-  Enabled: false
+  Enabled: true

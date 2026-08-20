@@ -27,6 +27,6 @@ class ConfigNetworkPolicyTest < Minitest::Test
 
   def test_hosts_misuse
     assert_raises(Lemans::ConfigError) { from_config({ "mode" => "allowlist" }) }
-    assert_raises(Lemans::ConfigError) { from_config({ "mode" => "none", "hosts" => ["a"] }) }
+    assert_raises(Lemans::ConfigError) { from_config({ "mode" => "none", "hosts" => [ "a" ] }) }
   end
 end

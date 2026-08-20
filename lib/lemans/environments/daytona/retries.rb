@@ -10,7 +10,7 @@ module Lemans
       module Retries
         # The snapshot service leaks the generated client's own error classes
         # instead of wrapping them, so both dialects have to be caught.
-        SDK_ERRORS = [::Daytona::Sdk::Error, *::Daytona::Sdk::API_ERROR_CLASSES].freeze
+        SDK_ERRORS = [ ::Daytona::Sdk::Error, *::Daytona::Sdk::API_ERROR_CLASSES ].freeze
 
         READ_ATTEMPTS = 3
         RETRY_DELAY_SEC = 2

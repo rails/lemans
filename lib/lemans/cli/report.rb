@@ -17,7 +17,7 @@ module Lemans
       class << self
         def load(store, tags: nil, names: nil)
           rows = store.query(task: names, tags:).map { row_from(it) }
-          new(rows.sort_by { [it[:task].to_s, it[:started_at].to_s, it[:trial].to_s] },
+          new(rows.sort_by { [ it[:task].to_s, it[:started_at].to_s, it[:trial].to_s ] },
               unreadable: store.unreadable.size)
         end
 
@@ -69,7 +69,7 @@ module Lemans
         end
 
         def sort_rows(rows, descending: false)
-          keyed = rows.map { [yield(it), it] }
+          keyed = rows.map { [ yield(it), it ] }
           present, missing = keyed.partition { |value, _| value }
           sorted = present.sort_by { |value, _| value }
           sorted.reverse! if descending
@@ -99,7 +99,7 @@ module Lemans
       end
 
       def to_rows
-        [TABLE_COLUMNS.map(&:to_s)] +
+        [ TABLE_COLUMNS.map(&:to_s) ] +
           rows.map do |row|
             TABLE_COLUMNS.map do |column|
               display(column == :model ? short_model(row[:model]) : row[column])
@@ -113,9 +113,9 @@ module Lemans
           if per_model.size > 1
             width = per_model.keys.map(&:length).max
             per_model.map { |model, group| "#{model.ljust(width)}  #{stats(group)}" } +
-              ["#{"total".ljust(width)}  #{stats(rows)}"]
+              [ "#{"total".ljust(width)}  #{stats(rows)}" ]
           else
-            [stats(rows)]
+            [ stats(rows) ]
           end
         lines[-1] = "#{lines[-1]} · #{unreadable} unreadable result(s) skipped" if unreadable.positive?
         lines
@@ -141,7 +141,7 @@ module Lemans
       end
 
       def pass_at_k(group)
-        cells = group.select { it[:scored] }.group_by { [it[:model], it[:task]] }.values
+        cells = group.select { it[:scored] }.group_by { [ it[:model], it[:task] ] }.values
         sizes = cells.map(&:size).uniq
         return "" unless sizes.any? { it > 1 }
 

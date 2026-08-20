@@ -68,7 +68,7 @@ module Lemans
     def Usage.from_json(data)
       # Older files carry a partial cost_source (just the name).
       if (source = data[:cost_source])
-        cost_source = CostSource.new(**CostSource.members.to_h { [it, nil] }, **source)
+        cost_source = CostSource.new(**CostSource.members.to_h { [ it, nil ] }, **source)
       end
       new(
         input_tokens: data[:input_tokens],

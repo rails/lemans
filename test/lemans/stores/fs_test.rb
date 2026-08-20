@@ -20,7 +20,7 @@ class StoresFSTest < Minitest::Test
       store.save(saved)
       fetched = store.fetch
 
-      assert_equal [saved.id], fetched.map(&:id)
+      assert_equal [ saved.id ], fetched.map(&:id)
       assert_equal :completed, fetched.first.status
       assert_in_delta 1.0, fetched.first.reward
     end
@@ -68,7 +68,7 @@ class StoresFSTest < Minitest::Test
 
   def test_secrets_are_filtered_from_persisted_files
     Dir.mktmpdir do |dir|
-      store = Lemans::Stores::FS.new(dir, filterer: Lemans::SecretsFilter.new(["super-secret-token"]))
+      store = Lemans::Stores::FS.new(dir, filterer: Lemans::SecretsFilter.new([ "super-secret-token" ]))
       result = build_result.failed!(:agent_error, "401 unauthorized: super-secret-token")
       store.save(result)
       saved = store.send(:result_dir, result).join("result.json").read

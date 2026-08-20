@@ -5,7 +5,7 @@ require_relative "lib/lemans/version"
 Gem::Specification.new do |spec|
   spec.name = "lemans"
   spec.version = Lemans::VERSION
-  spec.authors = ["Svyatoslav Kryukov", "Artur Petrov", "Vladimir Dementyev"]
+  spec.authors = [ "Svyatoslav Kryukov", "Artur Petrov", "Vladimir Dementyev" ]
   spec.email = %w[me@skryukov.dev ardecvz@gmail.com dementiev.vm@gmail.com]
 
   spec.summary = "A Ruby harness for running agent benchmarks"
@@ -24,7 +24,7 @@ Gem::Specification.new do |spec|
   }
 
   spec.files = Dir["lib/**/*", "exe/lemans", "exe/lemans-remote", "CHANGELOG.md", "LICENSE.txt", "README.md"]
-  spec.require_paths = ["lib"]
+  spec.require_paths = [ "lib" ]
 
   spec.bindir = "exe"
   spec.executables = %w[lemans lemans-remote]

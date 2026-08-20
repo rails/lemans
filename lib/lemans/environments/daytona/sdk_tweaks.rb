@@ -36,10 +36,10 @@ module Lemans
         end
 
         def self.apply!
-          GENERATED_CLIENTS.each { _1::Configuration.prepend(Deadline) }
+          GENERATED_CLIENTS.each { it::Configuration.prepend(Deadline) }
           return if ENV["DEBUG_DAYTONA"] == "1"
 
-          GENERATED_CLIENTS.each { _1::Configuration.prepend(Quiet) }
+          GENERATED_CLIENTS.each { it::Configuration.prepend(Quiet) }
           # The same prepend seam as everything else: poking the @logger ivar
           # would become a silent no-op if the SDK ever renamed it.
           ::Daytona::Sdk.singleton_class.prepend(Quiet)

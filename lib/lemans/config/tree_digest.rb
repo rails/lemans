@@ -15,7 +15,7 @@ module Lemans
 
           path = entry.relative_path_from(dir).to_s
           contents = entry.binread
-          sha << [path.bytesize, contents.bytesize].pack("Q>Q>")
+          sha << [ path.bytesize, contents.bytesize ].pack("Q>Q>")
           sha << path
           sha << contents
         end

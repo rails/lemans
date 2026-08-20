@@ -10,7 +10,7 @@ class ConfigTest < Minitest::Test
 
     assert_equal 1, config.version
     assert_equal "miniswen", config.agent_name
-    assert_equal ["openrouter/z-ai/glm-5.2"], config.models
+    assert_equal [ "openrouter/z-ai/glm-5.2" ], config.models
     assert_equal "allowlist", config.environment.network.mode
     assert_equal 2048, config.environment.resources.memory
     assert_equal "allowlist", config.agent.environment.network.mode
@@ -62,7 +62,7 @@ class ConfigTest < Minitest::Test
     config.load_options(agent: "oracle", model: "test-model", attempts: 3, concurrency: 2, backend: "shell", bench: ".")
 
     assert_equal "oracle", config.agent_name
-    assert_equal ["test-model"], config.models
+    assert_equal [ "test-model" ], config.models
     assert_equal 3, config.attempts
     assert_equal 2, config.concurrency
     assert_equal "shell", config.backend

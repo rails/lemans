@@ -83,7 +83,7 @@ module Miniswen
     end
 
     def tool_calls_for(calls)
-      calls.map { { tool_call_id: _1[:id], function_name: _1[:name], arguments: _1[:arguments] } }
+      calls.map { { tool_call_id: it[:id], function_name: it[:name], arguments: it[:arguments] } }
     end
 
     def metrics_for(metrics)

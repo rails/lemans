@@ -37,7 +37,7 @@ class TrialVerifierTest < Minitest::Test
     verification = Lemans::Trial::Verifier.new(task, env, snapshot).verify! do |file, path|
       evidence[path] = file.read
     end
-    [verification, evidence]
+    [ verification, evidence ]
   end
 
   def test_it_verifies_in_the_agents_sandbox_with_freshly_uploaded_tests
@@ -69,7 +69,7 @@ class TrialVerifierTest < Minitest::Test
       env = sandbox(reward: "1")
       verify(env, config:)
 
-      uploaded = env.uploads.to_h { |local, remote| [remote, local] }
+      uploaded = env.uploads.to_h { |local, remote| [ remote, local ] }
 
       assert_equal root.join("verification/verify").to_s, uploaded["/tests/verify"]
       # The task ships its own test.sh; the bench copy must not shadow it.

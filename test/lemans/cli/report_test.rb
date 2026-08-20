@@ -140,7 +140,7 @@ class CLIReportTest < Minitest::Test
       report = Lemans::CLI::Report.load(store)
 
       refute_predicate report, :empty?
-      assert_equal ["0 trials: 0 scored, 0 invalid, 0 solved · $0.0000 · 1 unreadable result(s) skipped"],
+      assert_equal [ "0 trials: 0 scored, 0 invalid, 0 solved · $0.0000 · 1 unreadable result(s) skipped" ],
                    report.summary_lines
     end
   end

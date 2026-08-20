@@ -60,14 +60,14 @@ module Miniswen
       end
 
       def on(command, output, exit_code: 0)
-        @canned[command] = [exit_code, output]
+        @canned[command] = [ exit_code, output ]
       end
 
       def exec(command, timeout: nil, env: nil) # rubocop:disable Lint/UnusedMethodArgument
         @commands << command
         return result(0, command.delete_prefix("echo ")) if command.start_with?("echo ")
 
-        exit_code, output = @canned.fetch(command, [0, ""])
+        exit_code, output = @canned.fetch(command, [ 0, "" ])
         result(exit_code, output)
       end
 
@@ -87,7 +87,7 @@ module Miniswen
     # and/or :content, plus optional overrides (:tool_calls, :finish_reason,
     # :thinking, token counts). Overrides given here apply to every answer.
     def stub_llm(*answers, **overrides)
-      RubyLLM::Test.stub_responses(*answers.map { llm_answer(_1, **overrides) })
+      RubyLLM::Test.stub_responses(*answers.map { llm_answer(it, **overrides) })
     end
 
     def llm_answer(answer, **overrides)
@@ -115,15 +115,15 @@ module Miniswen
     def raw_body_for(answer, calls)
       choice = { "finish_reason" => answer.fetch(:finish_reason) { calls.empty? ? "stop" : "tool_calls" } }
       choice["message"] = { "reasoning_details" => answer[:reasoning_details] } if answer[:reasoning_details]
-      { "choices" => [choice] }
+      { "choices" => [ choice ] }
     end
 
     def tool_calls_for(answer)
-      calls = answer[:tool_calls] || Array(answer[:cmd]).map { { name: "bash", arguments: { "command" => _1 } } }
+      calls = answer[:tool_calls] || Array(answer[:cmd]).map { { name: "bash", arguments: { "command" => it } } }
       calls.to_h do |call|
         id = call[:id] || "call_#{@llm_answer_ids = @llm_answer_ids.to_i + 1}"
-        [id, RubyLLM::ToolCall.new(id: id, name: call[:name], arguments: call[:arguments],
-                                   thought_signature: call[:thought_signature])]
+        [ id, RubyLLM::ToolCall.new(id: id, name: call[:name], arguments: call[:arguments],
+                                   thought_signature: call[:thought_signature]) ]
       end
     end
   end

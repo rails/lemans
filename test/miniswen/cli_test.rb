@@ -12,7 +12,7 @@ class MiniswenCLITest < Minitest::Test
 
   def build_reporter
     output = StringIO.new
-    [Miniswen::CLI::Reporter.new(output), output]
+    [ Miniswen::CLI::Reporter.new(output), output ]
   end
 
   def test_renders_messages_as_readable_agent_blocks
@@ -59,7 +59,7 @@ class MiniswenCLITest < Minitest::Test
 
   def test_prints_a_summary_to_the_reporter_output
     reporter, output = build_reporter
-    result = Struct.new(:messages, :steps, :cost_usd).new([{ content: "Done" }], 2, 0.15)
+    result = Struct.new(:messages, :steps, :cost_usd).new([ { content: "Done" } ], 2, 0.15)
 
     reporter.print_summary(result)
 
@@ -79,7 +79,7 @@ class MiniswenCLITest < Minitest::Test
     io = StringIO.new
     io.define_singleton_method(:tty?) { true }
     reporter = Miniswen::CLI::Reporter.new(io)
-    result = Struct.new(:messages, :steps, :cost_usd).new([{ content: "Done" }], 2, 0.15)
+    result = Struct.new(:messages, :steps, :cost_usd).new([ { content: "Done" } ], 2, 0.15)
 
     reporter.print_summary(result)
     reporter.print_failure(Struct.new(:status).new("max_steps"))
@@ -124,7 +124,7 @@ class MiniswenCLITest < Minitest::Test
       cli = parse("--atif-path=#{path}", "-m", "test", "-p", "task")
       result = Miniswen::Agent::Result.from_h(
         status: "submitted", submission: "done", steps: 1,
-        messages: [{ role: "assistant", content: "ok", metrics: { prompt_tokens: 1 } }],
+        messages: [ { role: "assistant", content: "ok", metrics: { prompt_tokens: 1 } } ],
         cost_source: nil, input_tokens: 1, output_tokens: 1, cached_tokens: 0, thinking_tokens: 0, cost_usd: 0.0
       )
       cli.send(:write_atif, result)

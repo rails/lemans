@@ -40,7 +40,7 @@ module Miniswen
   # ConnectionFailed retries ruby_llm already does; it only lists SSL errors
   # as fatal.
   module RetryTransientSSL
-    def retry_exceptions = super + [Faraday::SSLError]
+    def retry_exceptions = super + [ Faraday::SSLError ]
   end
 end
 

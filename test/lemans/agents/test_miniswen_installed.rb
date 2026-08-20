@@ -10,17 +10,17 @@ class MiniswenInstalledTest < Minitest::Test
 
   def build_agent
     config = load_config
-    [Lemans::Agents.build("miniswen-installed", profile: config.agent), load_task(config)]
+    [ Lemans::Agents.build("miniswen-installed", profile: config.agent), load_task(config) ]
   end
 
   # The fixture model resolves through openrouter; pinning its key keeps the
   # tests independent of whatever the developer's shell exports.
   def with_openrouter_key(value = "test-key")
     original = RubyLLM.config.openrouter_api_key
-    RubyLLM.configure { _1.openrouter_api_key = value }
+    RubyLLM.configure { it.openrouter_api_key = value }
     yield
   ensure
-    RubyLLM.configure { _1.openrouter_api_key = original }
+    RubyLLM.configure { it.openrouter_api_key = original }
   end
 
   # A genuine remote payload: what the sandboxed CLI would leave behind

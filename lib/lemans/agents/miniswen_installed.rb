@@ -58,13 +58,13 @@ module Lemans
       end
 
       def command_for(task)
-        argv = ["miniswen", "-q", "--no-refresh-registry",
+        argv = [ "miniswen", "-q", "--no-refresh-registry",
                 "-m", model.to_s, "-p", task.instruction,
                 "--results-path", RESULTS_PATH,
                 "--max-steps", profile.step_limit, "--max-time", profile.timeout.to_i,
-                "--exec-timeout", profile.exec_timeout.to_i]
-        argv += ["--max-cost", profile.cost_limit.to_i] if profile.cost_limit
-        argv.map { Shellwords.escape(_1.to_s) }.join(" ")
+                "--exec-timeout", profile.exec_timeout.to_i ]
+        argv += [ "--max-cost", profile.cost_limit.to_i ] if profile.cost_limit
+        argv.map { Shellwords.escape(it.to_s) }.join(" ")
       end
     end
   end

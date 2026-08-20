@@ -36,7 +36,7 @@ class DaytonaEnvironmentTest < Minitest::Test
         resources_with(memory: 4096), resources_with(storage: 10_240)
       ]
 
-      names = shapes.map { snapshot_name_for(image, resources: _1) }
+      names = shapes.map { snapshot_name_for(image, resources: it) }
 
       assert_equal shapes.size, names.uniq.size
     end
@@ -53,11 +53,11 @@ class DaytonaEnvironmentTest < Minitest::Test
   # The name is the content, so a build that failed under it refuses every
   # task that shares the image — on a shared-image bench, all of them.
   def test_a_poisoned_snapshot_is_thrown_away_and_built_again
-    snapshots = FakeSnapshotService.new(answers: [failed_snapshot])
+    snapshots = FakeSnapshotService.new(answers: [ failed_snapshot ])
 
     store_for(reference_image, snapshots: snapshots).call
 
-    assert_equal [failed_snapshot.name], snapshots.deleted.map(&:name)
+    assert_equal [ failed_snapshot.name ], snapshots.deleted.map(&:name)
     assert_equal 1, snapshots.created.size
   end
 
@@ -73,7 +73,7 @@ class DaytonaEnvironmentTest < Minitest::Test
   end
 
   def test_an_allowlist_mixing_domains_and_ips_is_refused
-    policy = Lemans::Config::NetworkPolicy.new("allowlist", ["openrouter.ai", "10.0.0.0/8"])
+    policy = Lemans::Config::NetworkPolicy.new("allowlist", [ "openrouter.ai", "10.0.0.0/8" ])
     environment = environment_for(reference_image)
 
     assert_raises(Lemans::ConfigError) { environment.send(:network_kwargs, policy) }

@@ -49,7 +49,7 @@ module Lemans
         # shape, because a sandbox inherits resources from its snapshot.
         def name
           @name ||= begin
-            shape = [image.digest, resources.cpus, resources.memory, resources.storage].join(":")
+            shape = [ image.digest, resources.cpus, resources.memory, resources.storage ].join(":")
             "lemans-#{Digest::SHA256.hexdigest(shape)[0, 32]}"
           end
         end
@@ -154,7 +154,7 @@ module Lemans
           )
         end
 
-        def to_gib(megabytes) = [(megabytes / 1024.0).ceil, 1].max
+        def to_gib(megabytes) = [ (megabytes / 1024.0).ceil, 1 ].max
 
         def now = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       end

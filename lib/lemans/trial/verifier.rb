@@ -64,8 +64,8 @@ module Lemans
       def upload_tests!
         environment.exec!("rm -rf #{TESTS_DIR} && mkdir -p #{TESTS_DIR}")
 
-        uploads = task.verifier.files.to_h { |local, remote| [remote, local] }
-                      .merge(task.test_files.to_h { |local, remote| [remote, local] })
+        uploads = task.verifier.files.to_h { |local, remote| [ remote, local ] }
+                      .merge(task.test_files.to_h { |local, remote| [ remote, local ] })
 
         uploads.each { |remote, local| environment.upload(local, "#{TESTS_DIR}/#{remote}") }
         ASSETS.glob("*.rb").each { |asset| environment.upload(asset, "#{TESTS_DIR}/#{asset.basename}") }
@@ -102,7 +102,7 @@ module Lemans
       end
 
       def verifier_script
-        [task.verifier.preverify, task.verifier.command].compact.map { "( #{it} )" }.join(" && ")
+        [ task.verifier.preverify, task.verifier.command ].compact.map { "( #{it} )" }.join(" && ")
       end
 
       def read_reward(command_result)

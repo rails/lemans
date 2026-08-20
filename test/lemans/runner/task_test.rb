@@ -11,7 +11,7 @@ class RunnerTaskTest < Minitest::Test
 
     def initialize = @events = []
 
-    def record(event, data = nil) = @events << [event, data]
+    def record(event, data = nil) = @events << [ event, data ]
   end
 
   def sandbox

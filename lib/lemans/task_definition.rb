@@ -75,7 +75,7 @@ module Lemans
                              "what has to vary belongs in bench.yml, where it varies for every trial"
         end
 
-        if (extras = data["verifier"].is_a?(Hash) ? data["verifier"].keys - ["setup"] : nil) && extras.any?
+        if (extras = data["verifier"].is_a?(Hash) ? data["verifier"].keys - [ "setup" ] : nil) && extras.any?
           raise ConfigError, "#{task.dir}: a task may only override verifier.setup, not verifier.#{extras.first}"
         end
 
@@ -179,18 +179,18 @@ module Lemans
       declared = @declared_setup || Config::Setup.new
       return declared unless seed? && declared.files.none? { |_, remote| remote == FLAT_SEED }
 
-      declared.merge(Config::Setup.new.tap { it.files = [[dir.join(FLAT_SEED), FLAT_SEED]] })
+      declared.merge(Config::Setup.new.tap { it.files = [ [ dir.join(FLAT_SEED), FLAT_SEED ] ] })
     end
 
     # Dotfiles included, matching TreeDigest: the files a digest records are
     # exactly the files that ship.
     def expand(root)
-      root.glob("**/*", File::FNM_DOTMATCH).select(&:file?).map { [it, it.relative_path_from(root).to_s] }
+      root.glob("**/*", File::FNM_DOTMATCH).select(&:file?).map { [ it, it.relative_path_from(root).to_s ] }
     end
 
     def flat(filename)
       path = dir.join(filename)
-      path.file? ? [[path, filename]] : []
+      path.file? ? [ [ path, filename ] ] : []
     end
   end
 end

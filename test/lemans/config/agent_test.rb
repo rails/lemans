@@ -12,7 +12,7 @@ class ConfigAgentTest < Minitest::Test
       "cost_limit" => 5.0,
       "exec_timeout" => "5m",
       "environment" => {
-        "network" => { "mode" => "allowlist", "hosts" => ["openrouter.ai"] }
+        "network" => { "mode" => "allowlist", "hosts" => [ "openrouter.ai" ] }
       }
     }
   end
@@ -21,13 +21,13 @@ class ConfigAgentTest < Minitest::Test
     agent = Lemans::Config::Agent.from_config(full_config)
 
     assert_equal "miniswen", agent.name
-    assert_equal ["openrouter/z-ai/glm-5.2"], agent.models
+    assert_equal [ "openrouter/z-ai/glm-5.2" ], agent.models
     assert_equal 1800.0, agent.timeout
     assert_equal 200, agent.step_limit
     assert_in_delta 5.0, agent.cost_limit
     assert_in_delta 300.0, agent.exec_timeout
     assert_equal "allowlist", agent.environment.network.mode
-    assert_equal ["openrouter.ai"], agent.environment.network.hosts
+    assert_equal [ "openrouter.ai" ], agent.environment.network.hosts
   end
 
   def test_minimal_section_with_defaults

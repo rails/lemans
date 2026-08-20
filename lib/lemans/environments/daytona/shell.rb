@@ -92,7 +92,7 @@ module Lemans
         end
 
         def clear_scratch(*paths)
-          command = "rm -f #{paths.map { Shellwords.escape(_1) }.join(" ")}"
+          command = "rm -f #{paths.map { Shellwords.escape(it) }.join(" ")}"
           exec_directly(command, timeout: HOUSEKEEPING_TIMEOUT, env: {})
         rescue *SDK_ERRORS => e
           warn "lemans: could not clear #{paths.join(", ")}: #{e.message}"

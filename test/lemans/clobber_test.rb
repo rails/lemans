@@ -37,13 +37,13 @@ class ClobberTest < Minitest::Test
 
   def test_task_filter_takes_several_names_and_leaves_the_rest
     with_store do |store, _runs|
-      doomed = [store_result(store, task: "hello-world"), store_result(store, task: "ar-announce-once")]
+      doomed = [ store_result(store, task: "hello-world"), store_result(store, task: "ar-announce-once") ]
       spared = store_result(store, task: "ac-throttle-search")
 
       deleted = clobber(store, tasks: %w[hello-world ar-announce-once]).execute!
 
       assert_equal doomed.map(&:id).sort, deleted.map(&:id).sort
-      assert_equal [spared.id], store.fetch.map(&:id)
+      assert_equal [ spared.id ], store.fetch.map(&:id)
     end
   end
 
@@ -52,8 +52,8 @@ class ClobberTest < Minitest::Test
       old = store_result(store, task: "hello-world", age: 3600)
       fresh = store_result(store, task: "hello-world")
 
-      assert_equal [old.id], clobber(store, ttl: "10m").execute!.map(&:id)
-      assert_equal [fresh.id], store.fetch.map(&:id)
+      assert_equal [ old.id ], clobber(store, ttl: "10m").execute!.map(&:id)
+      assert_equal [ fresh.id ], store.fetch.map(&:id)
     end
   end
 
@@ -75,7 +75,7 @@ class ClobberTest < Minitest::Test
 
       assert_equal 2, deleted.size
       assert_includes deleted.map(&:id), "ac-throttle-search__abc1234"
-      assert_equal [scored.id], store.fetch.map(&:id)
+      assert_equal [ scored.id ], store.fetch.map(&:id)
     end
   end
 
@@ -89,7 +89,7 @@ class ClobberTest < Minitest::Test
       latecomer = store_result(store, task: "hello-world")
       doomed.execute!
 
-      assert_equal [latecomer.id], store.fetch.map(&:id)
+      assert_equal [ latecomer.id ], store.fetch.map(&:id)
     end
   end
 

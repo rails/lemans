@@ -13,7 +13,7 @@ class TaskDefinitionTest < Minitest::Test
     assert_equal "hello-world", task.name
     assert_equal "Prove the harness end to end", task.description
     assert_equal :easy, task.difficulty
-    assert_equal ["infrastructure"], task.tags
+    assert_equal [ "infrastructure" ], task.tags
     assert_equal "infrastructure", task.metadata["category"]
     assert_match(/\A[0-9a-f]{16}\z/, task.digest)
     assert_includes task.instruction, "hello.txt"
@@ -38,7 +38,7 @@ class TaskDefinitionTest < Minitest::Test
       task = load_task(dir)
 
       assert_predicate task, :seed?
-      assert_equal ["environment.patch"], task.setup.files.map(&:last)
+      assert_equal [ "environment.patch" ], task.setup.files.map(&:last)
     end
   end
 
@@ -59,8 +59,8 @@ class TaskDefinitionTest < Minitest::Test
 
       assert_includes task.setup.commands, "make prep"
       assert_includes task.setup.files.map(&:last), "tests/test.sh"
-      assert_equal ["tests"], task.verifier.restore_paths
-      assert_equal ["make verify-prep"], task.verifier.setup.commands
+      assert_equal [ "tests" ], task.verifier.restore_paths
+      assert_equal [ "make verify-prep" ], task.verifier.setup.commands
       assert_same task.config.environment, task.environment
 
       assert_empty task.config.setup.commands
@@ -92,7 +92,7 @@ class TaskDefinitionTest < Minitest::Test
   def test_a_task_cannot_shadow_a_bench_setup_file
     with_task_dir("shadowing") do |dir|
       config = Lemans::Config.new
-      config.setup.files = [[BenchFixture::ROOT.join("bench.yml"), "tests/test.sh"]]
+      config.setup.files = [ [ BenchFixture::ROOT.join("bench.yml"), "tests/test.sh" ] ]
       dir.join("instruction.md").write("---\nsetup:\n  files: [tests/test.sh]\n---\nGo.\n")
 
       error = assert_raises(Lemans::ConfigError) { Lemans::TaskDefinition.load_from_directory(config, dir) }
