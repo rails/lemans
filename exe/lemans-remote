@@ -37,7 +37,6 @@ lib_path = File.expand_path("../lib", __dir__)
 $LOAD_PATH.unshift(lib_path) unless $LOAD_PATH.include?(lib_path)
 
 require "lemans"
-require "concurrent"
 require "daytona"
 require "digest"
 require "fileutils"
@@ -81,19 +80,12 @@ module LemansRemote # :nodoc: all
 
   Backend = Lemans::Environments::Daytona
 
-  # File transfers ride the SDK's typhoeus/libcurl stack, which segfaults the
-  # VM under concurrent easy_perform calls (see Backend::TRANSFER_SLOTS); the
-  # fan-out threads here move whole-bench archives, so the cap is tighter.
-  TRANSFER_SLOTS = Concurrent::Semaphore.new(2)
+  # The SDK's typhoeus/libcurl transfers segfault the VM under concurrent
+  # easy_perform calls, and the fan-out threads here move whole-bench archives;
+  # Faraday/Net::HTTP is pure Ruby, so transfers need no throttling at all.
+  Backend::FaradayTransfer.apply!
 
   def self.client = Backend.client
-
-  def self.transfer
-    TRANSFER_SLOTS.acquire
-    yield
-  ensure
-    TRANSFER_SLOTS.release
-  end
 
   class Provisioner
     include Backend::Retries
@@ -391,7 +383,7 @@ module LemansRemote # :nodoc: all
       Dir.mktmpdir("lemans-remote") do |tmp|
         local = File.join(tmp, "runs.tgz")
         File.open(local, "wb") do |file|
-          LemansRemote.transfer { sandbox.fs.download_file_stream(remote, timeout: TRANSFER_TIMEOUT_SEC) { file.write(_1) } }
+          sandbox.fs.download_file_stream(remote, timeout: TRANSFER_TIMEOUT_SEC) { file.write(_1) }
         end
         _, err, status = Open3.capture3("tar", "-xzf", local, "-C", runs_dir)
         raise "could not unpack #{run_id}: #{err}" unless status.success?
@@ -508,7 +500,7 @@ module LemansRemote # :nodoc: all
         archive = BenchArchive.new(bench: @bench, selected_tasks: @tasks.empty? ? nil : @tasks)
                               .pack(to: File.join(tmp, "bench.tgz"))
         File.open(archive, "rb") do |file|
-          LemansRemote.transfer { sandbox.fs.upload_file_stream(file, REMOTE_BENCH_ARCHIVE, timeout: TRANSFER_TIMEOUT_SEC) }
+          sandbox.fs.upload_file_stream(file, REMOTE_BENCH_ARCHIVE, timeout: TRANSFER_TIMEOUT_SEC)
         end
       end
       exec!(sandbox, "mkdir -p #{REMOTE_BENCH_DIR} && " \
@@ -546,7 +538,7 @@ module LemansRemote # :nodoc: all
     end
 
     def upload_blob(sandbox, content, remote_path)
-      LemansRemote.transfer { sandbox.fs.upload_file_stream(StringIO.new(content), remote_path, timeout: TRANSFER_TIMEOUT_SEC) }
+      sandbox.fs.upload_file_stream(StringIO.new(content), remote_path, timeout: TRANSFER_TIMEOUT_SEC)
     end
 
     def launch(sandbox)
@@ -680,7 +672,7 @@ module LemansRemote # :nodoc: all
       Dir.mktmpdir("lemans-remote") do |tmp|
         local = File.join(tmp, "runs.tgz")
         File.open(local, "wb") do |file|
-          LemansRemote.transfer { sandbox.fs.download_file_stream(REMOTE_RUNS_ARCHIVE, timeout: TRANSFER_TIMEOUT_SEC) { file.write(_1) } }
+          sandbox.fs.download_file_stream(REMOTE_RUNS_ARCHIVE, timeout: TRANSFER_TIMEOUT_SEC) { file.write(_1) }
         end
         _, err, status = Open3.capture3("tar", "-xzf", local, "-C", @runs_dir)
         raise "could not unpack the runs: #{err}" unless status.success?
