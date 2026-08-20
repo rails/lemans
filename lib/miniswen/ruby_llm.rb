@@ -8,6 +8,12 @@ RubyLLM.configure do |config|
   config.logger = Logger.new(IO::NULL) unless ENV["MINISWEN_DEBUG"] == "1"
 end
 
+# Increase retry window to handle egress network issues
+RubyLLM.configure do |config|
+  config.max_retries = 3
+  config.retry_interval = 1
+end
+
 # ruby_llm reads no API keys from ENV on its own; the conventional variable is the provider's
 # config option upcased.
 RubyLLM.configure do |config|
