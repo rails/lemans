@@ -101,6 +101,37 @@ class TaskDefinitionTest < Minitest::Test
     end
   end
 
+  def test_environment_image_resolution
+    with_task_dir("imaged") do |dir|
+      config = Lemans::Config.new
+      config.environment.image = "ruby:3.4"
+      task = Lemans::TaskDefinition.load_from_directory(config, dir)
+
+      assert_predicate task.environment_image, :built?
+      assert_equal dir.join("environment"), task.environment_image.context_dir
+
+      FileUtils.rm_rf(dir.join("environment"))
+      task = Lemans::TaskDefinition.load_from_directory(config, dir)
+
+      assert_equal "ruby:3.4", task.environment_image.name
+
+      config.environment.image = nil
+      shared = dir.parent.join("environment")
+      shared.mkpath
+      shared.join("Dockerfile").write("FROM scratch\n")
+      config.environment.dockerfile = shared.join("Dockerfile")
+      task = Lemans::TaskDefinition.load_from_directory(config, dir)
+
+      assert_predicate task.environment_image, :built?
+      assert_equal shared, task.environment_image.context_dir
+
+      config.environment.dockerfile = nil
+      error = assert_raises(Lemans::ConfigError) { Lemans::TaskDefinition.load_from_directory(config, dir) }
+
+      assert_includes error.message, "no shared image or dockerfile"
+    end
+  end
+
   def test_unclosed_frontmatter
     with_task_dir("broken") do |dir|
       dir.join("instruction.md").write("---\ndescription: broken\nFix it.\n")

@@ -34,7 +34,7 @@ module Lemans
         sections[:tasks_dir] = contents["tasks"]
         sections[:setup] = Setup.from_config(contents["setup"], root:)
         sections[:agent] = Agent.from_config(contents["agent"])
-        sections[:environment] = Environment.from_config(contents["environment"])
+        sections[:environment] = Environment.from_config(contents["environment"], root:)
         sections[:verifier] = Verifier.from_config(contents["verifier"], root:)
         sections.compact!
 
@@ -60,6 +60,7 @@ module Lemans
       @setup = setup || Setup.new
       @agent = agent
       @environment = environment
+      @environment.dockerfile ||= default_dockerfile unless @environment.image
       @verifier = verifier
       @verifier.root = root
       @concurrency = 4
@@ -91,12 +92,18 @@ module Lemans
       @digest ||= begin
         sha = Digest::SHA256.new
         sha << TreeDigest.call(root.join(Verifier::VERIFICATION_DIR))
+        sha << TreeDigest.call(environment.dockerfile.dirname) if environment.dockerfile
         sha << Digest::SHA256.file(config_path.to_s).hexdigest if config_path.file?
         sha.hexdigest[0, 16]
       end
     end
 
     private
+
+    def default_dockerfile
+      path = root.join("environment/Dockerfile")
+      path.file? ? path : nil
+    end
 
     def parse_tasks
       return [] unless tasks_dir.directory?

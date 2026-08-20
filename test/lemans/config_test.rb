@@ -34,6 +34,24 @@ class ConfigTest < Minitest::Test
     assert_match(/\A[0-9a-f]{16}\z/, task.digest)
   end
 
+  def test_default_dockerfile
+    Dir.mktmpdir do |dir|
+      root = Pathname(dir)
+      root.join("environment").mkpath
+      root.join("environment/Dockerfile").write("FROM scratch\n")
+      root.join("bench.yml").write("version: 1\n")
+
+      config = Lemans::Config.load_file(dir)
+
+      assert_equal root.join("environment/Dockerfile"), config.environment.dockerfile
+
+      root.join("bench.yml").write("environment:\n  image: ruby:3.4\n")
+      config = Lemans::Config.load_file(dir)
+
+      assert_nil config.environment.dockerfile
+    end
+  end
+
   def test_load_options
     config = load_config
     config.load_options(agent: "oracle", model: "test-model", attempts: 3, concurrency: 2, backend: "shell", bench: ".")

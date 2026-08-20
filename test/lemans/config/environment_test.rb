@@ -41,6 +41,36 @@ class ConfigEnvironmentTest < Minitest::Test
     assert_equal Resources.new(cpus: 2, memory: 4096, storage: 5120), env.resources
   end
 
+  def test_dockerfile
+    Dir.mktmpdir do |dir|
+      root = Pathname(dir)
+      root.join("docker").mkpath
+      root.join("docker/Dockerfile").write("FROM scratch\n")
+
+      env = Lemans::Config::Environment.from_config({ "dockerfile" => "docker/Dockerfile" }, root:)
+
+      assert_equal root.join("docker/Dockerfile"), env.dockerfile
+
+      error = assert_raises(Lemans::ConfigError) do
+        Lemans::Config::Environment.from_config({ "dockerfile" => "/abs/Dockerfile" }, root:)
+      end
+
+      assert_includes error.message, "must be relative"
+
+      error = assert_raises(Lemans::ConfigError) do
+        Lemans::Config::Environment.from_config({ "dockerfile" => "missing/Dockerfile" }, root:)
+      end
+
+      assert_includes error.message, "no Dockerfile"
+
+      error = assert_raises(Lemans::ConfigError) do
+        Lemans::Config::Environment.from_config({ "image" => "ruby:3.4", "dockerfile" => "docker/Dockerfile" }, root:)
+      end
+
+      assert_includes error.message, "mutually exclusive"
+    end
+  end
+
   def test_relative_workdir
     error = assert_raises(Lemans::ConfigError) do
       Lemans::Config::Environment.from_config(full_config.merge("workdir" => "app"))
