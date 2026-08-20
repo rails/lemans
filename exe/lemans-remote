@@ -785,32 +785,27 @@ module LemansRemote # :nodoc: all
     option :history, type: :boolean, default: false, desc: "Also read the vault manifests (spins a short-lived helper sandbox)"
     option :running, type: :boolean, default: false, desc: "Only show runs still in flight"
     option :complete, type: :boolean, default: false, desc: "Only show finished runs (success, failed, or stale)"
+    option :watch, type: :boolean, default: false, aliases: "-W", desc: "Redraw the table every 5 seconds until interrupted"
     def status
-      rows = Fleet.rows.map { [_1.run_id, _1.status, _1.started_at || "?", _1.state, _1.sandbox.id] }
-      if options[:history]
-        seen = rows.map(&:first)
-        manifests = with_vault { |vault, sandbox| vault.manifests(sandbox) }
-        manifests.reject { seen.include?(_1["run_id"]) }.each do |manifest|
-          note = manifest["pulled_at"] ? "pulled" : "-"
-          rows << [manifest["run_id"], manifest["status"], manifest["started_at"] || "?", "gone", note]
+      no_watch_history = "lemans-remote: --watch cannot be combined with --history (each refresh would spin a helper sandbox)"
+      raise Thor::Error, no_watch_history if options[:watch] && options[:history]
+      return print_status unless options[:watch]
+
+      loop do
+        print "\e[H\e[2J"
+        say "lemans-remote status — #{Time.now.strftime("%H:%M:%S")}, refreshing every 5s (^C to stop)"
+        begin
+          unless print_status
+            say_status :done, "no running sandboxes — stopping watch", :green
+            break
+          end
+        rescue StandardError => e
+          say_status :error, e.message, :red
         end
+        sleep 5
       end
-
-      filtered = options[:running] ^ options[:complete]
-      rows.select! { (_1[1] == "running") == options[:running] } if filtered
-
-      if rows.empty?
-        if filtered
-          say "no #{options[:running] ? "running" : "complete"} lemans-remote runs"
-        else
-          say "no lemans-remote runs#{" — try --history for completed ones" unless options[:history]}"
-        end
-        return
-      end
-
-      rows.sort_by! { _1[2].to_s }
-      rows.reverse!
-      print_table([%w[run status started sandbox id]] + rows)
+    rescue Interrupt
+      say ""
     rescue Lemans::ConfigError, RuntimeError => e
       raise Thor::Error, "lemans-remote: #{e.message}"
     end
@@ -970,6 +965,37 @@ module LemansRemote # :nodoc: all
     end
 
     private
+
+    def print_status
+      rows = Fleet.rows.map { [_1.run_id, _1.status, _1.started_at || "?", _1.state, _1.sandbox.id] }
+      if options[:history]
+        seen = rows.map(&:first)
+        manifests = with_vault { |vault, sandbox| vault.manifests(sandbox) }
+        manifests.reject { seen.include?(_1["run_id"]) }.each do |manifest|
+          note = manifest["pulled_at"] ? "pulled" : "-"
+          rows << [manifest["run_id"], manifest["status"], manifest["started_at"] || "?", "gone", note]
+        end
+      end
+
+      any_running = rows.any? { _1[1] == "running" }
+
+      filtered = options[:running] ^ options[:complete]
+      rows.select! { (_1[1] == "running") == options[:running] } if filtered
+
+      if rows.empty?
+        if filtered
+          say "no #{options[:running] ? "running" : "complete"} lemans-remote runs"
+        else
+          say "no lemans-remote runs#{" — try --history for completed ones" unless options[:history]}"
+        end
+        return any_running
+      end
+
+      rows.sort_by! { _1[2].to_s }
+      rows.reverse!
+      print_table([%w[run status started sandbox id]] + rows)
+      any_running
+    end
 
     def build_provisioner
       Provisioner.new(cpus: options[:cpus].to_i, memory_gb: options[:memory].to_i, disk_gb: options[:disk].to_i)
