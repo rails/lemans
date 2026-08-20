@@ -19,6 +19,17 @@ module Lemans
       raise NotImplementedError
     end
 
+    # Returns stub records for results that exist but cannot be read
+    def unreadable
+      []
+    end
+
+    # Deletes the result with everything it stored (artifacts included).
+    # Returns something truthy on success, nil otherwise
+    def delete(result)
+      raise NotImplementedError
+    end
+
     # Persist the result
     def save(result)
       raise NotImplementedError

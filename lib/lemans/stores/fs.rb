@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "fileutils"
 require "json"
 require "pathname"
 require "securerandom"
@@ -37,6 +38,29 @@ module Lemans
         results
       end
 
+      RESULT_ID = /\A(?<task>.+)__[A-Za-z0-9]{7}\z/
+
+      def unreadable
+        root.glob("**/#{FILENAME}").filter_map do |path|
+          next if to_record(path)
+
+          id = path.dirname.basename.to_s
+          Result.new(task: RESULT_ID.match(id)&.[](:task), agent: nil, model: nil, id:)
+        end
+      end
+
+      def delete(result)
+        dir = root.glob("**/#{result.id}").find(&:directory?)
+        return unless dir
+
+        FileUtils.remove_entry(dir.to_s)
+        prune_empty_parents(dir.parent)
+        dir
+      rescue SystemCallError => e
+        warn "lemans: could not delete #{result.id}: #{e.message}"
+        nil
+      end
+
       def save(result)
         atomic_write(result_dir(result).join(FILENAME), "#{JSON.pretty_generate(result.as_json)}\n")
       rescue SystemCallError, JSON::GeneratorError => e
@@ -60,6 +84,15 @@ module Lemans
       end
 
       private
+
+      def prune_empty_parents(dir)
+        while dir != root && dir.children.empty?
+          dir.rmdir
+          dir = dir.parent
+        end
+      rescue SystemCallError
+        nil
+      end
 
       def to_record(json_path)
         data = JSON.parse(json_path.read, symbolize_names: true)

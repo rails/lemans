@@ -116,4 +116,32 @@ class CLIReportTest < Minitest::Test
       assert_predicate Lemans::CLI::Report.load(Lemans::Stores::FS.new(runs_dir)), :empty?
     end
   end
+
+  def test_unreadable_results_are_skipped_but_said_out_loud
+    with_store do |store|
+      truncated = store.send(:root).join("model-a", "broken__abc1234")
+      truncated.mkpath
+      truncated.join("result.json").write("{ half a resu")
+
+      report = Lemans::CLI::Report.load(store)
+
+      assert_equal 3, report.rows.size
+      assert_includes report.summary_lines.last, "1 unreadable result(s) skipped"
+    end
+  end
+
+  def test_a_store_holding_only_unreadable_results_is_not_empty
+    Dir.mktmpdir do |runs_dir|
+      store = Lemans::Stores::FS.new(runs_dir)
+      broken = Pathname(runs_dir).join("model-a", "broken__abc1234")
+      broken.mkpath
+      broken.join("result.json").write("{ half a resu")
+
+      report = Lemans::CLI::Report.load(store)
+
+      refute_predicate report, :empty?
+      assert_equal ["0 trials: 0 scored, 0 invalid, 0 solved · $0.0000 · 1 unreadable result(s) skipped"],
+                   report.summary_lines
+    end
+  end
 end

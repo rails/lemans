@@ -99,21 +99,18 @@ module Lemans
     option :invalid, type: :boolean, default: false, desc: "Only runs that measured nothing (invalid or unreadable)"
     option :force, type: :boolean, default: false, aliases: "-f", desc: "Delete without asking"
     def clobber
-      clobber = Clobber.new(
-        runs_dir: options[:runs_dir],
-        tasks: options[:task],
-        ttl_sec: Units.seconds(options[:ttl], field: "--ttl"),
-        invalid: options[:invalid]
-      )
+      store = Stores::FS.new(options[:runs_dir])
+      clobber = Clobber.new(store, tasks: options[:task], ttl: options[:ttl], invalid: options[:invalid])
+
       doomed = clobber.matches
       return say "lemans: nothing to clobber under #{options[:runs_dir]}" if doomed.empty?
 
       unless options[:force]
-        doomed.each { say it.to_s }
+        doomed.each { say it.id }
         return say "lemans: nothing deleted" unless yes?("Delete #{doomed.size} run(s) under #{options[:runs_dir]}? [y/N]")
       end
 
-      removed = clobber.call
+      removed = clobber.execute!
       say "deleted #{removed.size} run(s)"
     rescue ConfigError => e
       raise Thor::Error, "lemans: #{e.message}"

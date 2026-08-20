@@ -12,12 +12,13 @@ module Lemans
       TABLE_COLUMNS = %i[task agent model reward outcome cost_usd steps tokens duration trial].freeze
       NUMERIC_COLUMNS = %i[reward cost_usd steps tokens duration].freeze
 
-      attr_reader :rows
+      attr_reader :rows, :unreadable
 
       class << self
         def load(store, tags: nil, names: nil)
           rows = store.query(task: names, tags:).map { row_from(it) }
-          new(rows.sort_by { [it[:task].to_s, it[:started_at].to_s, it[:trial].to_s] })
+          new(rows.sort_by { [it[:task].to_s, it[:started_at].to_s, it[:trial].to_s] },
+              unreadable: store.unreadable.size)
         end
 
         def row_from(result)
@@ -76,11 +77,14 @@ module Lemans
         end
       end
 
-      def initialize(rows)
+      def initialize(rows, unreadable: 0)
         @rows = rows
+        @unreadable = unreadable
       end
 
-      def empty? = rows.empty?
+      # A store holding only unreadable results is not empty: the report's
+      # job is to say so.
+      def empty? = rows.empty? && unreadable.zero?
 
       # Numbers rank best-first the way a leaderboard reads; names sort A-Z.
       # Trials that never measured the column sink to the bottom either way.
@@ -105,11 +109,16 @@ module Lemans
 
       def summary_lines
         per_model = rows.group_by { short_model(it[:model]) }
-        return [stats(rows)] unless per_model.size > 1
-
-        width = per_model.keys.map(&:length).max
-        per_model.map { |model, group| "#{model.ljust(width)}  #{stats(group)}" } +
-          ["#{"total".ljust(width)}  #{stats(rows)}"]
+        lines =
+          if per_model.size > 1
+            width = per_model.keys.map(&:length).max
+            per_model.map { |model, group| "#{model.ljust(width)}  #{stats(group)}" } +
+              ["#{"total".ljust(width)}  #{stats(rows)}"]
+          else
+            [stats(rows)]
+          end
+        lines[-1] = "#{lines[-1]} · #{unreadable} unreadable result(s) skipped" if unreadable.positive?
+        lines
       end
 
       def to_csv
