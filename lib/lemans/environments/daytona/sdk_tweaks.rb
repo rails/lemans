@@ -8,7 +8,7 @@ module Lemans
     class Daytona
       # Repairs the Daytona SDK needs to be usable from a harness. Upstream ask: per-request
       # timeouts like the Python SDK's — tracked in tmp/upstream-daytona-sdk-timeouts.md.
-      module SdkTweaks
+      module SDKTweaks
         GENERATED_CLIENTS = [
           ::DaytonaApiClient, ::DaytonaToolboxApiClient, ::DaytonaAnalyticsApiClient
         ].freeze

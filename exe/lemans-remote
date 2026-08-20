@@ -80,11 +80,6 @@ module LemansRemote # :nodoc: all
 
   Backend = Lemans::Environments::Daytona
 
-  # The SDK's typhoeus/libcurl transfers segfault the VM under concurrent
-  # easy_perform calls, and the fan-out threads here move whole-bench archives;
-  # Faraday/Net::HTTP is pure Ruby, so transfers need no throttling at all.
-  Backend::FaradayTransfer.apply!
-
   def self.client = Backend.client
 
   class Provisioner

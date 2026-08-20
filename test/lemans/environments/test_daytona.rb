@@ -79,10 +79,17 @@ class DaytonaEnvironmentTest < Minitest::Test
     assert_raises(Lemans::ConfigError) { environment.send(:network_kwargs, policy) }
   end
 
+  # A libcurl GC race segfaults the VM under concurrent transfers; the pure-Ruby
+  # reroute is what lets uploads and downloads run unthrottled.
+  def test_file_transfers_ride_faraday_not_libcurl
+    assert_includes ::Daytona::FileTransfer.singleton_class.ancestors,
+                    Lemans::Environments::Daytona::FaradayTransfer::Transfers
+  end
+
   # timeout = 0 is libcurl's "no timeout": one silently dropped connection
   # would park a worker thread forever, unkillable even by Thread#kill.
   def test_every_generated_client_gets_a_real_http_deadline
-    tweaks = Lemans::Environments::Daytona::SdkTweaks
+    tweaks = Lemans::Environments::Daytona::SDKTweaks
     tweaks::GENERATED_CLIENTS.each do |client_mod|
       assert_equal tweaks::HTTP_TIMEOUT_SEC, client_mod::Configuration.new.timeout
     end

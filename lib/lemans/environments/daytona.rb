@@ -17,13 +17,11 @@ module Lemans
       # budget through the SDK's streaming API instead of the global HTTP cap.
       TRANSFER_TIMEOUT = 900
 
-      # File transfers ride the SDK's typhoeus/libcurl stack, which segfaults
-      # the VM under enough concurrent easy_perform calls (a GC race on string
-      # options libcurl is still copying). Transfers are seconds each, so
-      # capping them costs little; execs and lifecycle stay fully parallel.
-      TRANSFER_SLOTS = Concurrent::Semaphore.new(6)
-
-      SdkTweaks.apply!
+      SDKTweaks.apply!
+      # The SDK's typhoeus/libcurl transfers segfault the VM under concurrent
+      # easy_perform calls; Faraday/Net::HTTP is pure Ruby, so transfers need
+      # no throttling at all.
+      FaradayTransfer.apply!
 
       attr_reader :sandbox
 
@@ -67,12 +65,10 @@ module Lemans
       end
 
       def upload(local_path, remote_path)
-        transfer do
-          # An open handle, not a path string: the SDK uploads a non-existent
-          # path AS ITS OWN BYTES, so a missing file must die here as ENOENT.
-          Pathname(local_path).open("rb") do |file|
-            sandbox.fs.upload_file_stream(file, remote_path.to_s, timeout: TRANSFER_TIMEOUT)
-          end
+        # An open handle, not a path string: the SDK uploads a non-existent
+        # path AS ITS OWN BYTES, so a missing file must die here as ENOENT.
+        Pathname(local_path).open("rb") do |file|
+          sandbox.fs.upload_file_stream(file, remote_path.to_s, timeout: TRANSFER_TIMEOUT)
         end
       rescue *Retries::SDK_ERRORS => e
         raise InfrastructureError, "daytona: could not upload #{local_path}: #{e.message}"
@@ -81,10 +77,8 @@ module Lemans
       def download(remote_path, local_path)
         local_path = Pathname(local_path)
         local_path.dirname.mkpath
-        transfer do
-          local_path.open("wb") do |file|
-            sandbox.fs.download_file_stream(remote_path.to_s, timeout: TRANSFER_TIMEOUT) { file.write(_1) }
-          end
+        local_path.open("wb") do |file|
+          sandbox.fs.download_file_stream(remote_path.to_s, timeout: TRANSFER_TIMEOUT) { file.write(_1) }
         end
       rescue *Retries::SDK_ERRORS, SystemCallError => e
         raise InfrastructureError, "daytona: could not download #{remote_path}: #{e.message}"
@@ -119,13 +113,6 @@ module Lemans
       end
 
       private
-
-      def transfer
-        TRANSFER_SLOTS.acquire
-        yield
-      ensure
-        TRANSFER_SLOTS.release
-      end
 
       def client = self.class.client
 
