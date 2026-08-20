@@ -4,8 +4,8 @@ module Lemans
   class CLI < Thor
     # The pipe renderer: one plain line per event
     class ProgressReporter
-      # say_status's verb column is 12 wide; the longer outcome names get a
-      # short verb here and keep their full name in the table and result.json.
+      # say_status's verb column is 12 wide; the longer status names get a
+      # short verb here and keep their full name in the board and the result.
       STATUS_VERBS = {
         completed: :completed,
         agent_timeout: :timeout,
@@ -20,20 +20,19 @@ module Lemans
 
       MAX_DETAIL_CHARS = 200
 
-      def initialize(shell:, task_width:)
+      def initialize(shell:, tasks:)
         @shell = shell
-        @task_width = task_width
+        @task_width = (tasks.map(&:length) + [4]).max
       end
 
       def start = self
 
-      def record(event, data)
+      def record(event, data = nil)
         case event
         when :started then started(data)
         when :finished then finished(data)
         when :interrupted
-          @shell.say_status :interrupt,
-                            "waiting for #{data[:in_flight]} in-flight trial(s), ^C again to abandon", :yellow
+          @shell.say_status :interrupt, "abandoning in-flight trial(s)", :yellow
         end
       end
 
@@ -41,26 +40,27 @@ module Lemans
 
       private
 
-      def started(data)
-        attempt = "attempt #{data[:index].to_s.rjust(data[:attempts].to_s.length)}/#{data[:attempts]}"
-        @shell.say_status :run, "#{data[:task].to_s.ljust(@task_width)}  #{attempt}  #{data[:trial]}", :blue
+      def started(task)
+        attempts = task.config.attempts
+        attempt = "attempt #{task.index.to_s.rjust(attempts.to_s.length)}/#{attempts}"
+        @shell.say_status :run, "#{task.name.ljust(@task_width)}  #{attempt}  #{task.id}", :blue
       end
 
-      def finished(data)
-        status = data[:scored] ? "reward=#{data[:reward].inspect}" : data[:outcome].to_s
-        @shell.say_status STATUS_VERBS.fetch(data[:outcome].to_sym, data[:outcome].to_sym),
-                          "#{data[:task].to_s.ljust(@task_width)}  #{status.ljust(12)}  #{data[:duration_sec]}s",
-                          color(data)
+      def finished(result)
+        status = result.scored? ? "reward=#{result.reward.inspect}" : result.status.to_s
+        @shell.say_status STATUS_VERBS.fetch(result.status, result.status),
+                          "#{result.task.ljust(@task_width)}  #{status.ljust(12)}  #{result.duration}s",
+                          color(result)
 
-        @shell.say_status :error, first_line(data[:detail]), :red unless data[:scored] || data[:detail].nil?
+        @shell.say_status :error, first_line(result.detail), :red unless result.scored? || result.detail.nil?
       end
 
       def first_line(detail) = detail.to_s.lines.first.to_s.strip[0, MAX_DETAIL_CHARS]
 
-      def color(data)
-        return :red unless data[:scored]
+      def color(result)
+        return :red unless result.scored?
 
-        data[:reward].to_f >= 1.0 ? :green : :yellow
+        result.reward.to_f >= 1.0 ? :green : :yellow
       end
     end
   end

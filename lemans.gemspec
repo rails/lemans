@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
   spec.description = "Lemans runs tasks against a coding agent in a sandbox."
   spec.homepage = "https://github.com/rails/lemans"
   spec.license = "MIT"
-  spec.required_ruby_version = ">= 3.3.0"
+  spec.required_ruby_version = ">= 3.4.0"
 
   spec.metadata = {
     "bug_tracker_uri" => "#{spec.homepage}/issues",

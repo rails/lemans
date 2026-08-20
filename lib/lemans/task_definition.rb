@@ -1,0 +1,194 @@
+# frozen_string_literal: true
+
+require "pathname"
+require "yaml"
+
+module Lemans
+  # A single task definition: an instruction, an environment, tests, a solution —
+  # plus the task's projection of the bench config (setup and verifier sections
+  # with per-task overrides applied). Anything lemans does not understand
+  # belongs under `metadata`, copied untouched.
+  class TaskDefinition
+    INSTRUCTION = "instruction.md"
+    ENVIRONMENT_DIR = "environment"
+    TESTS_DIR = "tests"
+    SOLUTION_DIR = "solution"
+
+    FLAT_TEST = "verification_test.rb"
+    FLAT_SOLUTION = "solution.patch"
+    FLAT_SEED = "environment.patch"
+
+    FRONTMATTER = /\A---\n(.*?)\n---\n/m
+
+    class << self
+      def load_from_directory(config, dir)
+        dir = Pathname(dir)
+        data = frontmatter(dir)
+
+        task = new(config, data["name"] || dir.basename.to_s, dir:)
+        task.description = data["description"].to_s if data["description"]
+        task.difficulty = data["difficulty"].to_sym if data["difficulty"]
+        task.tags = Array(data["tags"]).map(&:to_s) if data["tags"]
+        task.metadata = data["metadata"] if data["metadata"]
+
+        declared_setup = Config::Setup.from_config(data["setup"], root: dir)
+        refuse_config_collisions!(task, declared_setup, config.setup)
+        task.setup = declared_setup
+
+        task.verifier.restore_paths = Config::Verifier.restore_paths!(data["restore"]) if data.key?("restore")
+        if (declared = Config::Setup.from_config(data.dig("verifier", "setup"), root: dir))
+          refuse_config_collisions!(task, declared, config.verifier.setup)
+          task.verifier.setup = config.verifier.setup.merge(declared)
+        end
+
+        validate!(task, data)
+        task
+      end
+
+      private
+
+      def frontmatter(dir)
+        path = dir.join(INSTRUCTION)
+        raise ConfigError, "#{dir}: #{INSTRUCTION} is required" unless path.file?
+
+        contents = path.read
+        match = contents.match(FRONTMATTER)
+
+        unless match
+          raise ConfigError, "#{path}: frontmatter opens with --- but never closes" if contents.start_with?("---")
+
+          return {}
+        end
+
+        data = YAML.safe_load(match[1], aliases: true) || {}
+        raise ConfigError, "#{path}: frontmatter must be a mapping" unless data.is_a?(Hash)
+
+        data
+      rescue Psych::Exception => e
+        raise ConfigError, "#{path}: #{e.message}"
+      end
+
+      def validate!(task, data)
+        if data.key?("overrides")
+          named = data["overrides"].is_a?(Hash) && data["overrides"].any? ? " (#{data["overrides"].keys.join(", ")})" : ""
+          raise ConfigError, "#{task.dir}: a task cannot override the frozen profile#{named} — " \
+                             "what has to vary belongs in bench.yml, where it varies for every trial"
+        end
+
+        if (extras = data["verifier"].is_a?(Hash) ? data["verifier"].keys - ["setup"] : nil) && extras.any?
+          raise ConfigError, "#{task.dir}: a task may only override verifier.setup, not verifier.#{extras.first}"
+        end
+
+        raise ConfigError, "#{task.dir}: #{ENVIRONMENT_DIR}/Dockerfile is required when bench.yml names no shared image" unless
+          task.config.environment.image || task.environment_dockerfile.file?
+
+        return unless task.test_files.empty?
+
+        raise ConfigError, "#{task.dir}: #{TESTS_DIR}/ or a flat #{FLAT_TEST} is required — " \
+                           "the verifier uploads it at verification time"
+      end
+
+      # Collisions would be resolved by upload order, so a task never gets to
+      # shadow the bench-wide copy.
+      def refuse_config_collisions!(task, declared, base)
+        return unless declared
+
+        shadowed = declared.files.map(&:last) & base.files.map(&:last)
+        return if shadowed.empty?
+
+        raise ConfigError, "#{task.dir}: setup.files names #{shadowed.first}, which the bench " \
+                           "already ships to every task"
+      end
+    end
+
+    attr_reader :config, :name, :dir
+
+    attr_accessor :difficulty, :tags, :description, :metadata
+
+    def initialize(config, name, dir: nil)
+      @config = config
+      @name = name
+
+      @difficulty = :easy
+      @tags = []
+      @description = ""
+      @metadata = {}
+
+      @dir = dir || config.tasks_dir.join(name)
+    end
+
+    # The story alone: frontmatter is for the harness, never for the agent.
+    def instruction
+      @instruction ||= dir.join(INSTRUCTION).read.sub(FRONTMATTER, "")
+    end
+
+    def digest
+      @digest ||= Config::TreeDigest.call(dir)[0, 16]
+    end
+
+    # The task's projection of the config sections: bench-wide values with the
+    # task's own overrides applied. Phase machinery reads these, never the
+    # global config.
+    def setup
+      @setup ||= config.setup.merge(own_setup_with_seed)
+    end
+
+    def setup=(declared)
+      @declared_setup = declared
+    end
+
+    def verifier
+      @verifier ||= config.verifier.dup
+    end
+
+    def environment = config.environment
+
+    def seed? = dir.join(FLAT_SEED).file?
+
+    # [absolute, remote-relative] pairs. Tests stay on the harness side while
+    # the agent works; uploaded into the sandbox only at verification.
+    def test_files
+      tests_dir.directory? ? expand(tests_dir) : flat(FLAT_TEST)
+    end
+
+    def solution_files
+      solution_dir.directory? ? expand(solution_dir) : flat(FLAT_SOLUTION)
+    end
+
+    def solution? = solution_files.any?
+
+    def tests_dir = dir.join(TESTS_DIR)
+
+    def solution_dir = dir.join(SOLUTION_DIR)
+
+    def environment_dockerfile = dir.join(ENVIRONMENT_DIR, "Dockerfile")
+
+    def environment_image
+      if environment.image
+        Config::ImageSpec.registry(environment.image)
+      else
+        Config::ImageSpec.dockerfile(environment_dockerfile, slug: name)
+      end
+    end
+
+    private
+
+    def own_setup_with_seed
+      declared = @declared_setup || Config::Setup.new
+      return declared unless seed? && declared.files.none? { |_, remote| remote == FLAT_SEED }
+
+      declared.merge(Config::Setup.new.tap { it.files = [[dir.join(FLAT_SEED), FLAT_SEED]] })
+    end
+
+    # Dotfiles included, matching TreeDigest: the files a digest records are
+    # exactly the files that ship.
+    def expand(root)
+      root.glob("**/*", File::FNM_DOTMATCH).select(&:file?).map { [it, it.relative_path_from(root).to_s] }
+    end
+
+    def flat(filename)
+      path = dir.join(filename)
+      path.file? ? [[path, filename]] : []
+    end
+  end
+end

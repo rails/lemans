@@ -80,11 +80,6 @@ module LemansRemote # :nodoc: all
 
   Backend = Lemans::Environments::Daytona
 
-  # The SDK's typhoeus/libcurl transfers segfault the VM under concurrent
-  # easy_perform calls, and the fan-out threads here move whole-bench archives;
-  # Faraday/Net::HTTP is pure Ruby, so transfers need no throttling at all.
-  Backend::FaradayTransfer.apply!
-
   def self.client = Backend.client
 
   class Provisioner
@@ -704,6 +699,8 @@ module LemansRemote # :nodoc: all
   end
 
   class CLI < Thor
+    include Lemans::Config::Conversion
+
     check_unknown_options!
 
     def self.exit_on_failure? = true
@@ -746,7 +743,7 @@ module LemansRemote # :nodoc: all
     option :concurrency, type: :numeric, default: 4, aliases: "-C",
                          desc: "Async mode: how many sandboxes to launch in parallel (1 to serialize)"
     def run_bench
-      bench = Lemans::Bench.load(options[:bench])
+      bench = Lemans::Config.load_file(options[:bench])
       tasks = options[:task] || []
       unknown = tasks - bench.tasks.map(&:name)
       raise Thor::Error, "lemans-remote: no such task(s): #{unknown.join(", ")}" if unknown.any?
@@ -902,7 +899,7 @@ module LemansRemote # :nodoc: all
     option :min_age, default: "10m", desc: "Leave younger runs alone — they may still be uploading"
     option :force, type: :boolean, default: false, aliases: "-f", desc: "Skip the confirmation"
     def drop_orphans
-      cutoff = Time.now.utc - Lemans::Units.seconds(options[:min_age], field: "--min-age")
+      cutoff = Time.now.utc - seconds!(options[:min_age])
       candidates = Fleet.live.select do |row|
         row.status == "running" && row.started_at && Time.parse(row.started_at) <= cutoff
       end
@@ -1017,7 +1014,7 @@ module LemansRemote # :nodoc: all
         models: models,
         extra_args: options[:args].strip,
         extra_env: options[:env] || [],
-        timeout_sec: Lemans::Units.seconds(options[:timeout], field: "--timeout").to_i,
+        timeout_sec: seconds!(options[:timeout]).to_i,
         runs_dir: options[:runs_dir],
         keep: options[:keep],
         sync: options[:sync],

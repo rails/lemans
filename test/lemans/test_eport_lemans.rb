@@ -2,7 +2,7 @@
 
 require "test_helper"
 
-require Lemans::Verifier::ASSETS.join("eport-lemans.rb").to_s
+require Lemans::Trial::Verifier::ASSETS.join("eport-lemans.rb").to_s
 
 class EportLemansTest < Minitest::Test
   FakeResult = Struct.new(:klass, :name, :skipped?, :error?, :passed?, :source_location)

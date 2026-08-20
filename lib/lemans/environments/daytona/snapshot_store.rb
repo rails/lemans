@@ -28,11 +28,11 @@ module Lemans
           LOCKS.compute_if_absent(name) { Mutex.new }
         end
 
-        def initialize(client:, image:, resources:, build_timeout_sec:, logger: nil)
+        def initialize(client:, image:, resources:, build_timeout:, logger: nil)
           @client = client
           @image = image
           @resources = resources
-          @build_timeout_sec = build_timeout_sec
+          @build_timeout = build_timeout
           @logger = logger
         end
 
@@ -49,21 +49,21 @@ module Lemans
         # shape, because a sandbox inherits resources from its snapshot.
         def name
           @name ||= begin
-            shape = [image.digest, resources.cpus, resources.memory_mb, resources.storage_mb].join(":")
+            shape = [image.digest, resources.cpus, resources.memory, resources.storage].join(":")
             "lemans-#{Digest::SHA256.hexdigest(shape)[0, 32]}"
           end
         end
 
         private
 
-        attr_reader :client, :image, :resources, :build_timeout_sec, :logger
+        attr_reader :client, :image, :resources, :build_timeout, :logger
 
         # A failed build keeps the name, so it would wedge every future trial
         # sharing that image. The state is terminal; rebuilding is all that is left.
         def discard(snapshot)
           client.snapshot.delete(snapshot)
 
-          deadline = now + build_timeout_sec
+          deadline = now + build_timeout
           while find(name)
             raise InfrastructureError, "daytona: failed snapshot #{name} would not go away" if now > deadline
 
@@ -96,8 +96,8 @@ module Lemans
             image: image.built? ? ::Daytona::Image.from_dockerfile(image.dockerfile_path.to_s) : base_image,
             resources: daytona_resources
           )
-          Timeout.timeout(build_timeout_sec, InfrastructureError,
-                          "daytona: snapshot #{name} did not build within #{build_timeout_sec}s") do
+          Timeout.timeout(build_timeout, InfrastructureError,
+                          "daytona: snapshot #{name} did not build within #{build_timeout}s") do
             client.snapshot.create(params, on_logs: logger)
           end
         rescue *SDK_ERRORS => e
@@ -117,7 +117,7 @@ module Lemans
         # A snapshot that exists may still be building for whoever won the race,
         # or deactivated from disuse — a weekly run will hit that.
         def await_ready(snapshot)
-          deadline = now + build_timeout_sec
+          deadline = now + build_timeout
           activated = false
 
           loop do
@@ -131,7 +131,7 @@ module Lemans
               activated = true
             end
 
-            raise InfrastructureError, "daytona: snapshot #{name} was still #{state} after #{build_timeout_sec}s" if now > deadline
+            raise InfrastructureError, "daytona: snapshot #{name} was still #{state} after #{build_timeout}s" if now > deadline
 
             sleep POLL_INTERVAL_SEC
             snapshot = find(name)
@@ -149,8 +149,8 @@ module Lemans
         def daytona_resources
           ::Daytona::Resources.new(
             cpu: resources.cpus,
-            memory: to_gib(resources.memory_mb),
-            disk: to_gib(resources.storage_mb)
+            memory: to_gib(resources.memory),
+            disk: to_gib(resources.storage)
           )
         end
 

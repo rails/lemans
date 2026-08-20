@@ -8,22 +8,20 @@ module Lemans
   module Environments
     # Daytona sandboxes. Daytona builds images server-side into reusable content-named
     # snapshots and enforces the network policy itself.
-    class Daytona < Base
+    class Daytona < Environment
       TTL_MINUTES = 120
 
-      DEFAULT_BUILD_TIMEOUT_SEC = 600
+      DEFAULT_BUILD_TIMEOUT = 600
 
       # Workspace tarballs ride uploads/downloads, so transfers get their own
       # budget through the SDK's streaming API instead of the global HTTP cap.
       TRANSFER_TIMEOUT = 900
 
-      # File transfers ride the SDK's typhoeus/libcurl stack, which segfaults
-      # the VM under enough concurrent easy_perform calls (a GC race on string
-      # options libcurl is still copying). Transfers are seconds each, so
-      # capping them costs little; execs and lifecycle stay fully parallel.
-      TRANSFER_SLOTS = Concurrent::Semaphore.new(6)
-
-      SdkTweaks.apply!
+      SDKTweaks.apply!
+      # The SDK's typhoeus/libcurl transfers segfault the VM under concurrent
+      # easy_perform calls; Faraday/Net::HTTP is pure Ruby, so transfers need
+      # no throttling at all.
+      FaradayTransfer.apply!
 
       attr_reader :sandbox
 
@@ -43,9 +41,9 @@ module Lemans
         config
       end
 
-      def initialize(image:, resources:, network:, env: {}, labels: {}, logger: nil, build_timeout_sec: nil)
-        super(image: image, resources: resources, network: network, env: env, labels: labels,
-              build_timeout_sec: build_timeout_sec || DEFAULT_BUILD_TIMEOUT_SEC)
+      def initialize(image:, resources:, network:, env: {}, labels: {}, logger: nil, build_timeout: nil)
+        super(image:, resources:, network:, env:, labels:,
+              build_timeout: build_timeout || DEFAULT_BUILD_TIMEOUT)
         @logger = logger
       end
 
@@ -67,12 +65,10 @@ module Lemans
       end
 
       def upload(local_path, remote_path)
-        transfer do
-          # An open handle, not a path string: the SDK uploads a non-existent
-          # path AS ITS OWN BYTES, so a missing file must die here as ENOENT.
-          Pathname(local_path).open("rb") do |file|
-            sandbox.fs.upload_file_stream(file, remote_path.to_s, timeout: TRANSFER_TIMEOUT)
-          end
+        # An open handle, not a path string: the SDK uploads a non-existent
+        # path AS ITS OWN BYTES, so a missing file must die here as ENOENT.
+        Pathname(local_path).open("rb") do |file|
+          sandbox.fs.upload_file_stream(file, remote_path.to_s, timeout: TRANSFER_TIMEOUT)
         end
       rescue *Retries::SDK_ERRORS => e
         raise InfrastructureError, "daytona: could not upload #{local_path}: #{e.message}"
@@ -81,16 +77,14 @@ module Lemans
       def download(remote_path, local_path)
         local_path = Pathname(local_path)
         local_path.dirname.mkpath
-        transfer do
-          local_path.open("wb") do |file|
-            sandbox.fs.download_file_stream(remote_path.to_s, timeout: TRANSFER_TIMEOUT) { file.write(_1) }
-          end
+        local_path.open("wb") do |file|
+          sandbox.fs.download_file_stream(remote_path.to_s, timeout: TRANSFER_TIMEOUT) { file.write(_1) }
         end
       rescue *Retries::SDK_ERRORS, SystemCallError => e
         raise InfrastructureError, "daytona: could not download #{remote_path}: #{e.message}"
       end
 
-      def network_policy=(policy)
+      def switch_network_policy!(policy)
         sandbox.update_network_settings(**network_kwargs(policy, for_update: true))
         @network = policy
       rescue *Retries::SDK_ERRORS => e
@@ -120,13 +114,6 @@ module Lemans
 
       private
 
-      def transfer
-        TRANSFER_SLOTS.acquire
-        yield
-      ensure
-        TRANSFER_SLOTS.release
-      end
-
       def client = self.class.client
 
       # A sandbox inherits the snapshot's resources, so the profile's are
@@ -146,17 +133,16 @@ module Lemans
       end
 
       def snapshot_store
-        SnapshotStore.new(client: client, image: image, resources: resources,
-                          build_timeout_sec: build_timeout_sec, logger: @logger)
+        SnapshotStore.new(client:, image:, resources:, build_timeout:, logger: @logger)
       end
 
       def network_kwargs(policy, for_update: false)
         case policy.mode
-        when :none
+        when "none"
           { network_block_all: true }
-        when :public
+        when "public"
           for_update ? { network_block_all: false } : {}
-        when :allowlist
+        when "allowlist"
           raise ConfigError, "daytona: an allowlist cannot mix domains and IP targets (#{policy.hosts.join(", ")})" if policy.domains.any? && policy.ip_targets.any?
 
           {
