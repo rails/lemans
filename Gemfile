@@ -10,6 +10,8 @@ gem "debug", platform: :mri unless ENV["CI"] == "true"
 gem "ruby-lsp", require: false unless ENV["CI"] == "true"
 
 gem "irb"
+# For lemans-remote to work
+gem "openssl", ">= 3.3"
 gem "rake", "~> 13.0"
 
 gem "json_skooma", "~> 0.2"

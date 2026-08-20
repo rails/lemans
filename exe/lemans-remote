@@ -743,7 +743,7 @@ module LemansRemote # :nodoc: all
     option :concurrency, type: :numeric, default: 4, aliases: "-C",
                          desc: "Async mode: how many sandboxes to launch in parallel (1 to serialize)"
     def run_bench
-      bench = Lemans::Bench.load(options[:bench])
+      bench = Lemans::Config.load_file(options[:bench])
       tasks = options[:task] || []
       unknown = tasks - bench.tasks.map(&:name)
       raise Thor::Error, "lemans-remote: no such task(s): #{unknown.join(", ")}" if unknown.any?
