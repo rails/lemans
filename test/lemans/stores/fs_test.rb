@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "tempfile"
 
 class StoresFSTest < Minitest::Test
   def build_result(task: "hello-world", agent: "oracle", model: "m/model-a", tags: [])
@@ -62,6 +63,29 @@ class StoresFSTest < Minitest::Test
 
       assert_includes err, "collides"
       assert_equal "the checks ran", path.read
+    end
+  end
+
+  def test_secrets_are_filtered_from_persisted_files
+    Dir.mktmpdir do |dir|
+      store = Lemans::Stores::FS.new(dir, filterer: Lemans::SecretsFilter.new(["super-secret-token"]))
+      result = build_result.failed!(:agent_error, "401 unauthorized: super-secret-token")
+      store.save(result)
+      saved = store.send(:result_dir, result).join("result.json").read
+
+      refute_includes saved, "super-secret-token"
+      assert_includes saved, "<filtered>"
+
+      artifact = store.save_artifact(result, "token=super-secret-token", path: "agent.log")
+
+      assert_equal "token=<filtered>", artifact.read
+
+      source = Tempfile.new
+      source.write("--- a\n+++ b\n+key = \"super-secret-token\"\n")
+      source.rewind
+      patch = store.save_artifact(result, source, path: "patch.diff")
+
+      assert_equal "--- a\n+++ b\n+key = \"<filtered>\"\n", patch.read
     end
   end
 end

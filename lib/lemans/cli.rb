@@ -54,7 +54,7 @@ module Lemans
 
       tasks = filter_tasks(config.tasks, tags: options[:tag], name: options[:task])
 
-      store = Stores::FS.new(options[:runs_dir])
+      store = Stores::FS.new(options[:runs_dir], filterer: SecretsFilter.default)
 
       runner = Runner.new(config, tasks, store:, resume: options[:resume])
 

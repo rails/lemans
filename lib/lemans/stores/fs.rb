@@ -11,11 +11,12 @@ module Lemans
     class FS < Store
       FILENAME = "result.json"
 
-      private attr_reader :root
+      private attr_reader :root, :filterer
 
-      def initialize(root)
+      def initialize(root, filterer: nil)
         super()
         @root = Pathname(root)
+        @filterer = filterer
       end
 
       def setup
@@ -62,7 +63,7 @@ module Lemans
       end
 
       def save(result)
-        atomic_write(result_dir(result).join(FILENAME), "#{JSON.pretty_generate(result.as_json)}\n")
+        atomic_write(result_dir(result).join(FILENAME), filtered("#{JSON.pretty_generate(result.as_json)}\n"))
       rescue SystemCallError, JSON::GeneratorError => e
         # runs_dir unwritable, disk full
         raise ConfigError, "cannot record trial #{result.id}: #{e.message}"
@@ -76,7 +77,7 @@ module Lemans
         end
 
         destination.dirname.mkpath
-        contents.is_a?(String) ? destination.write(contents) : IO.copy_stream(contents, destination)
+        contents.is_a?(String) ? destination.write(filtered(contents)) : copy_filtered(contents, destination)
         destination
       rescue SystemCallError => e
         warn "lemans: could not save artifact #{path} for #{result.id}: #{e.message}"
@@ -84,6 +85,18 @@ module Lemans
       end
 
       private
+
+      def filtered(text) = filterer ? filterer.filter(text) : text
+
+      # Secrets never span lines, so filtering line by line keeps memory
+      # constant without a plain-text copy ever touching the disk.
+      def copy_filtered(contents, destination)
+        return IO.copy_stream(contents, destination) unless filterer
+
+        destination.open("wb") do |file|
+          contents.each_line { file.write(filterer.filter(it)) }
+        end
+      end
 
       def prune_empty_parents(dir)
         while dir != root && dir.children.empty?
