@@ -17,6 +17,8 @@ module Miniswen
       new(result: result, model: model, session_id: session_id, agent: agent)
     end
 
+    attr_writer :session_id
+
     def initialize(result:, model:, session_id: nil, agent: {})
       @result = result
       @model = model

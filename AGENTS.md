@@ -10,6 +10,7 @@ This file holds only lasting guidelines. Temporary or local instructions (work-i
 - No single-purpose helper modules (a module wrapping one validation is an anti-pattern) — make such helpers private methods of the class that uses them.
 - Prefer mutable value containers: `Struct.new(..., keyword_init: true)` updated via writers, not `Data` with `#with`.
 - No unit suffixes in names: `duration`, not `duration_sec` — the unit is implied by convention (seconds, megabytes).
+- Persisted formats are wire contracts, not code: `result.json` keeps the schema older lemans releases read (`outcome` hash, `duration_sec`, `trial`) regardless of internal renames. Never break backward compatibility of persisted/reported data.
 
 ## Tests
 

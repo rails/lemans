@@ -33,7 +33,7 @@ class DaytonaEnvironmentTest < Minitest::Test
       image = context_with({ "app.rb" => "shared" })
       shapes = [
         resources_with, resources_with(cpus: 8),
-        resources_with(memory_mb: 4096), resources_with(storage_mb: 10_240)
+        resources_with(memory: 4096), resources_with(storage: 10_240)
       ]
 
       names = shapes.map { snapshot_name_for(image, resources: _1) }
@@ -43,7 +43,7 @@ class DaytonaEnvironmentTest < Minitest::Test
   end
 
   def test_a_published_image_gets_one_snapshot_per_shape
-    image = Lemans::Task::ImageSpec.registry("ghcr.io/lemans/reference@sha256:#{"ab" * 32}")
+    image = Lemans::TaskDefinition::ImageSpec.registry("ghcr.io/lemans/reference@sha256:#{"ab" * 32}")
 
     assert_equal snapshot_name_for(image), snapshot_name_for(image)
     assert_match(/\Alemans-[0-9a-f]{32}\z/, snapshot_name_for(image))
@@ -65,7 +65,7 @@ class DaytonaEnvironmentTest < Minitest::Test
     snapshots = FakeSnapshotService.new(answers: Array.new(50, failed_snapshot))
 
     error = assert_raises(Lemans::InfrastructureError) do
-      store_for(reference_image, snapshots: snapshots, build_timeout_sec: 0).call
+      store_for(reference_image, snapshots: snapshots, build_timeout: 0).call
     end
 
     assert_match(/would not go away/, error.message)
@@ -73,7 +73,7 @@ class DaytonaEnvironmentTest < Minitest::Test
   end
 
   def test_an_allowlist_mixing_domains_and_ips_is_refused
-    policy = Lemans::NetworkPolicy.new(mode: :allowlist, hosts: ["openrouter.ai", "10.0.0.0/8"])
+    policy = Lemans::Config::NetworkPolicy.new("allowlist", ["openrouter.ai", "10.0.0.0/8"])
     environment = environment_for(reference_image)
 
     assert_raises(Lemans::ConfigError) { environment.send(:network_kwargs, policy) }
@@ -233,13 +233,13 @@ class DaytonaEnvironmentTest < Minitest::Test
   end
 
   def reference_image
-    Lemans::Task::ImageSpec.registry("ghcr.io/lemans/reference:1")
+    Lemans::TaskDefinition::ImageSpec.registry("ghcr.io/lemans/reference:1")
   end
 
-  def store_for(image, snapshots: nil, resources: resources_with, build_timeout_sec: 4)
+  def store_for(image, snapshots: nil, resources: resources_with, build_timeout: 4)
     store = Lemans::Environments::Daytona::SnapshotStore.new(
       client: snapshots && FakeClient.new(snapshots),
-      image: image, resources: resources, build_timeout_sec: build_timeout_sec
+      image: image, resources: resources, build_timeout: build_timeout
     )
     quiet(store)
   end
@@ -254,13 +254,13 @@ class DaytonaEnvironmentTest < Minitest::Test
     store_for(image, resources: resources).name
   end
 
-  def environment_for(image, resources: resources_with, build_timeout_sec: 4)
+  def environment_for(image, resources: resources_with, build_timeout: 4)
     Lemans::Environments::Daytona.new(image: image, resources: resources,
-                                      network: Lemans::NetworkPolicy.none, build_timeout_sec: build_timeout_sec)
+                                      network: Lemans::Config::NetworkPolicy.new("none"), build_timeout: build_timeout)
   end
 
-  def resources_with(cpus: 2, memory_mb: 2048, storage_mb: 5120)
-    Lemans::Bench::Resources.new(cpus: cpus, memory_mb: memory_mb, storage_mb: storage_mb)
+  def resources_with(cpus: 2, memory: 2048, storage: 5120)
+    Lemans::Config::Environment::Resources.new(cpus: cpus, memory: memory, storage: storage)
   end
 
   def in_root(&)
@@ -274,6 +274,6 @@ class DaytonaEnvironmentTest < Minitest::Test
     dir = Pathname(Dir.mktmpdir(nil, @tmp_root))
     dir.join("Dockerfile").write("FROM ruby:3.4-slim\nCOPY . /app\n")
     files.each { |path, content| dir.join(path).write(content) }
-    Lemans::Task::ImageSpec.dockerfile(dir.join("Dockerfile"), slug: slug)
+    Lemans::TaskDefinition::ImageSpec.dockerfile(dir.join("Dockerfile"), slug: slug)
   end
 end

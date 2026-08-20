@@ -7,21 +7,21 @@ module Lemans
     class Base
       # Backends interleave a command's streams before we ever see them, so one
       # output field is the honest shape.
-      ExecResult = Data.define(:command, :exit_code, :output, :duration_sec) do
+      ExecResult = Data.define(:command, :exit_code, :output, :duration) do
         def success? = exit_code.zero?
       end
 
-      attr_reader :image, :resources, :network, :env, :labels, :build_timeout_sec
+      attr_reader :image, :resources, :network, :env, :labels, :build_timeout
 
       # `labels` is backend-agnostic trial metadata (task, trial id, phase);
       # every backend receives it even if it has nowhere to put it.
-      def initialize(image:, resources:, network:, env: {}, labels: {}, build_timeout_sec: nil)
+      def initialize(image:, resources:, network:, env: {}, labels: {}, build_timeout: nil)
         @image = image
         @resources = resources
         @network = network
         @env = env
         @labels = labels
-        @build_timeout_sec = build_timeout_sec
+        @build_timeout = build_timeout
       end
 
       # Build the image and bring the sandbox up under the network policy it was

@@ -1,11 +1,8 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "yaml"
 
-class SnapshotTest < Minitest::Test
-  include BenchFixture
-
+class TrialSnapshotTest < Minitest::Test
   TREE = "a" * 40
 
   # A sandbox whose git answers write-tree with an object name; everything
@@ -21,20 +18,14 @@ class SnapshotTest < Minitest::Test
       commands << command
       exit_code = @git_refuses&.match?(command) ? 1 : 0
       output = command.include?("write-tree") ? "#{@tree}\n" : ""
-      Lemans::Environments::Base::ExecResult.new(command: command, exit_code: exit_code,
-                                                 output: output, duration_sec: 0.0)
+      Lemans::Environments::Base::ExecResult.new(command:, exit_code:, output:, duration: 0.0)
     end
   end
 
-  def bench_with_restore(paths)
-    config = YAML.safe_load_file(BenchFixture::ROOT.join("bench.yml"), aliases: true)
-    config["verifier"]["restore"] = paths
-    Lemans::Bench.new(config, path: BenchFixture::ROOT.join("bench.yml"))
-  end
-
   def snapshot(env, paths: %w[test bin])
-    bench = bench_with_restore(paths)
-    Lemans::Snapshot.new(env, bench: bench, task: load_task(bench))
+    config = Lemans::Config.new
+    config.verifier.restore_paths = paths
+    Lemans::Trial::Snapshot.new(env, task: Lemans::TaskDefinition.new(config, "restored"))
   end
 
   def test_capture_seals_a_tree_and_restore_checks_it_out

@@ -25,16 +25,6 @@ module Lemans
 
           conf
         end
-
-        private
-
-        def restore_path!(path)
-          raise ConfigError, "restore path must be workdir-relative, got #{path.inspect}" if path.start_with?("/")
-          raise ConfigError, "restore path must not escape the workdir: #{path.inspect}" if path.split("/").include?("..")
-          raise ConfigError, "restore path must name something inside the workdir, got #{path.inspect}" if Pathname(path).cleanpath.to_s == "."
-
-          path
-        end
       end
 
       attr_accessor :timeout, :setup, :command, :preverify, :restore_paths, :logs_dir

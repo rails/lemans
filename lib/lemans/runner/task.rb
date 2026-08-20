@@ -1,37 +1,35 @@
 # frozen_string_literal: true
 
-require "securerandom"
-
 module Lemans
   class Runner
-    # A single task to run
+    # A single task to run: a thin wrapper owning status, reporting, and
+    # result persistence; the actual work is the Trial's.
     class Task
+      extend Forwardable
+
       attr_reader :model, :index, :status, :result
 
-      private attr_reader :task, :reporter
+      RUN_STATUSES = %i[pending running finished].freeze
 
-      def initialize(model, task, index: 0, reporter: nil)
+      RUN_STATUSES.each do |name|
+        define_method(:"#{name}?") { status == name }
+      end
+
+      def_delegators :name, :config, to: :definition
+
+      private attr_reader :definition, :store, :reporter
+
+      def initialize(model, task_definition, index: 0, store: nil, reporter: nil)
         @model = model
-        @task = task
+        @definition = task_definition
         @index = index
+        @store = store
         @reporter = reporter
         @status = :pending
-        @result = nil
+
+        # prepare the result object: it's used by the actual execution down the stack
+        @result = Result.from_task(definition)
       end
-
-      def id
-        @id ||= "#{name}__#{SecureRandom.alphanumeric(7)}"
-      end
-
-      def name = task.name
-
-      def config = task.config
-
-      def pending? = status == :pending
-
-      def running? = status == :running
-
-      def finished? = status == :finished
 
       def with_reporter(reporter)
         @reporter = reporter
@@ -41,16 +39,20 @@ module Lemans
       def run
         @status = :running
         reporter&.record(:started, self)
-        @result = execute
+
+        execute!
+
         @status = :finished
         reporter&.record(:finished, result)
         result
+      ensure
+        store&.save(result)
       end
 
       private
 
-      def execute
-        # TODO: implement me
+      def execute!
+        Trial.new(definition, store:, result:).run
       end
     end
   end

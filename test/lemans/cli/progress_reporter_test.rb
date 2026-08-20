@@ -8,7 +8,13 @@ class ProgressReporterTest < Minitest::Test
   end
 
   def result(status: :completed, reward: 1.0, detail: nil)
-    Lemans::Runner::Result.new(task: "hello-world", model: "m/model-a", index: 1, status:, reward:, duration: 42, detail:)
+    raw = Lemans::Trial::Result.new(agent: "oracle", model: "m/model-a")
+    raw.status = status
+    raw.reward = reward
+    raw.detail = detail
+    raw.started_at = Time.at(0)
+    raw.finished_at = Time.at(42)
+    Lemans::Runner::Result.new(task: "hello-world", model: "m/model-a", index: 1, id: "hello-world__abc1234", raw:)
   end
 
   def test_one_line_per_event
@@ -24,7 +30,7 @@ class ProgressReporterTest < Minitest::Test
     assert_includes out, "attempt 1/1"
     assert_includes out, task.id
     assert_includes out, "reward=1.0"
-    assert_includes out, "42s"
+    assert_includes out, "42.0s"
     assert_includes out, "abandoning in-flight"
   end
 

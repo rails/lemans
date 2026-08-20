@@ -7,8 +7,8 @@ module Lemans
     class Nop < Base
       NAME = "nop"
 
-      def call(_environment, task:, logs_dir:) # rubocop:disable Lint/UnusedMethodArgument
-        Result.new(outcome: Results::Outcome.new(:completed), usage: Results::Usage.zero, trajectory: nil)
+      def run(_task, _environment)
+        Result.new(outcome: Result::Outcome.new(:completed), usage: Results::Usage.zero, trajectory: nil)
       end
     end
   end

@@ -18,9 +18,9 @@ require_relative "support/atif_schema"
 module BenchFixture
   ROOT = Pathname(File.expand_path("fixtures/bench", __dir__))
 
-  def load_bench = Lemans::Bench.load(BenchFixture::ROOT)
+  def load_config = Lemans::Config.load_file(BenchFixture::ROOT.to_s)
 
-  def load_task(bench = load_bench) = bench.tasks.fetch(0)
+  def load_task(config = load_config) = config.tasks.fetch(0)
 
   def with_task_dir(name)
     Dir.mktmpdir do |dir|

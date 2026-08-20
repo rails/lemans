@@ -11,7 +11,7 @@ module Lemans
     class Daytona < Base
       TTL_MINUTES = 120
 
-      DEFAULT_BUILD_TIMEOUT_SEC = 600
+      DEFAULT_BUILD_TIMEOUT = 600
 
       # Workspace tarballs ride uploads/downloads, so transfers get their own
       # budget through the SDK's streaming API instead of the global HTTP cap.
@@ -43,9 +43,9 @@ module Lemans
         config
       end
 
-      def initialize(image:, resources:, network:, env: {}, labels: {}, logger: nil, build_timeout_sec: nil)
-        super(image: image, resources: resources, network: network, env: env, labels: labels,
-              build_timeout_sec: build_timeout_sec || DEFAULT_BUILD_TIMEOUT_SEC)
+      def initialize(image:, resources:, network:, env: {}, labels: {}, logger: nil, build_timeout: nil)
+        super(image:, resources:, network:, env:, labels:,
+              build_timeout: build_timeout || DEFAULT_BUILD_TIMEOUT)
         @logger = logger
       end
 
@@ -90,7 +90,7 @@ module Lemans
         raise InfrastructureError, "daytona: could not download #{remote_path}: #{e.message}"
       end
 
-      def network_policy=(policy)
+      def switch_network_policy!(policy)
         sandbox.update_network_settings(**network_kwargs(policy, for_update: true))
         @network = policy
       rescue *Retries::SDK_ERRORS => e
@@ -146,17 +146,16 @@ module Lemans
       end
 
       def snapshot_store
-        SnapshotStore.new(client: client, image: image, resources: resources,
-                          build_timeout_sec: build_timeout_sec, logger: @logger)
+        SnapshotStore.new(client:, image:, resources:, build_timeout:, logger: @logger)
       end
 
       def network_kwargs(policy, for_update: false)
         case policy.mode
-        when :none
+        when "none"
           { network_block_all: true }
-        when :public
+        when "public"
           for_update ? { network_block_all: false } : {}
-        when :allowlist
+        when "allowlist"
           raise ConfigError, "daytona: an allowlist cannot mix domains and IP targets (#{policy.hosts.join(", ")})" if policy.domains.any? && policy.ip_targets.any?
 
           {

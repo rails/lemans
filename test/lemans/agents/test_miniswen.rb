@@ -10,10 +10,10 @@ class MiniswenAdapterTest < Minitest::Test
   include Miniswen::Testing
 
   def build_agent(*answers, model: "test", **overrides)
-    bench = load_bench
-    agent = Lemans::Agents.build("miniswen", profile: bench.agent, model: model)
+    config = load_config
+    agent = Lemans::Agents.build("miniswen", profile: config.agent, model: model)
     stub_llm(*answers, **overrides)
-    [agent, load_task(bench)]
+    [agent, load_task(config)]
   end
 
   def call(agent, task)
@@ -39,9 +39,9 @@ class MiniswenAdapterTest < Minitest::Test
   end
 
   def test_a_model_call_failure_still_leaves_a_trajectory
-    bench = load_bench
-    agent = TransportFailingMiniswen.new(profile: bench.agent, model: "test")
-    task = load_task(bench)
+    config = load_config
+    agent = TransportFailingMiniswen.new(profile: config.agent, model: "test")
+    task = load_task(config)
     Dir.mktmpdir do |dir|
       logs_dir = Pathname(dir)
       error = assert_raises(::Miniswen::InfrastructureError) do
@@ -124,8 +124,8 @@ class MiniswenAdapterTest < Minitest::Test
   end
 
   def test_the_profile_config_reaches_the_loop_mini_style
-    bench = load_bench
-    agent = Lemans::Agents.build("miniswen", profile: bench.agent)
+    config = load_config
+    agent = Lemans::Agents.build("miniswen", profile: config.agent)
     loop_config = agent.send(:agent_for, FakeEnv.new)
 
     assert_equal 100, loop_config.instance_variable_get(:@max_steps)

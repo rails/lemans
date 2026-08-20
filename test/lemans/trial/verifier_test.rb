@@ -1,10 +1,9 @@
 # frozen_string_literal: true
 
 require "test_helper"
-require "tmpdir"
 require "yaml"
 
-class VerifierTest < Minitest::Test
+class TrialVerifierTest < Minitest::Test
   include BenchFixture
 
   # A bench root with shared verification files, borrowing the fixture's
@@ -16,16 +15,16 @@ class VerifierTest < Minitest::Test
       root.join("verification/verify").write("#!/usr/bin/env ruby\nputs :graded\n")
       root.join("verification/test.sh").write("echo bench copy\n")
 
-      config = YAML.safe_load_file(BenchFixture::ROOT.join("bench.yml"), aliases: true)
-      config["tasks"] = BenchFixture::ROOT.join("tasks").to_s
-      yield Lemans::Bench.new(config, path: root.join("bench.yml")), root
+      contents = YAML.safe_load_file(BenchFixture::ROOT.join("bench.yml"), aliases: true)
+      contents["tasks"] = BenchFixture::ROOT.join("tasks").to_s
+      root.join("bench.yml").write(YAML.dump(contents))
+      yield Lemans::Config.load_file(root.to_s), root
     end
   end
 
-  def with_verifier
+  def with_verifier(config = load_config)
     Dir.mktmpdir do |dir|
-      bench = load_bench
-      yield Lemans::Verifier.new(bench: bench, task: load_task(bench), dir: Pathname(dir)), Pathname(dir)
+      yield Lemans::Trial::Verifier.new(task: load_task(config), dir: Pathname(dir)), Pathname(dir)
     end
   end
 
@@ -50,7 +49,8 @@ class VerifierTest < Minitest::Test
       assert_match(%r{rm -rf /tests}, env.commands.first)
       # The command ran from the workdir with /tests on the LOAD_PATH; the
       # reporter loads only when a command says -report-lemans.
-      command = env.commands.find { _1.start_with?("cd /app && ") }
+      command = env.commands.find { it.start_with?("cd /app && ") }
+
       assert_includes command, %(export RUBYOPT="${RUBYOPT:+$RUBYOPT }-I/tests")
       assert_includes command, "&& ( "
       assert_includes env.uploads.map(&:last), "/tests/test.sh"
@@ -62,8 +62,8 @@ class VerifierTest < Minitest::Test
   end
 
   def test_corpus_verification_files_ship_with_the_tests_and_the_task_wins_collisions
-    in_corpus_with_verification do |bench, root|
-      verifier = Lemans::Verifier.new(bench: bench, task: load_task(bench), dir: root.join("out"))
+    in_corpus_with_verification do |config, root|
+      verifier = Lemans::Trial::Verifier.new(task: load_task(config), dir: root.join("out"))
       env = sandbox(reward: "1")
       verifier.call(env)
 
@@ -74,7 +74,7 @@ class VerifierTest < Minitest::Test
       assert_equal BenchFixture::ROOT.join("tasks/hello-world/tests/test.sh").to_s, uploaded["/tests/test.sh"]
       assert_includes env.commands, "chmod +x /tests/verify"
       # The shared files grade every trial, so they are part of the profile.
-      assert bench.file_digests.key?("verification/verify")
+      assert_includes config.verification_files.map(&:last), "verify"
     end
   end
 
@@ -113,28 +113,27 @@ class VerifierTest < Minitest::Test
   end
 
   def test_a_declared_preverify_runs_before_the_verify_command
-    Dir.mktmpdir do |dir|
-      config = YAML.safe_load_file(BenchFixture::ROOT.join("bench.yml"), aliases: true)
-      config["verifier"]["preverify"] = "ruby -report-lemans bin/rails test"
-      bench = Lemans::Bench.new(config, path: BenchFixture::ROOT.join("bench.yml"))
-      verifier = Lemans::Verifier.new(bench: bench, task: load_task(bench), dir: Pathname(dir))
+    config = load_config
+    config.verifier.preverify = "ruby -report-lemans bin/rails test"
+
+    with_verifier(config) do |verifier, _dir|
       env = sandbox
       verifier.call(env)
 
-      command = env.commands.find { _1.start_with?("cd /app && ") }
+      command = env.commands.find { it.start_with?("cd /app && ") }
+
       assert_includes command, "( ruby -report-lemans bin/rails test ) && ( "
     end
   end
 
   def test_an_unrestorable_baseline_scores_zero_instead_of_invalidating_the_run
     Dir.mktmpdir do |dir|
-      config = YAML.safe_load_file(BenchFixture::ROOT.join("bench.yml"), aliases: true)
-      config["verifier"]["restore"] = %w[test]
-      bench = Lemans::Bench.new(config, path: BenchFixture::ROOT.join("bench.yml"))
+      config = load_config
+      config.verifier.restore_paths = %w[test]
       tampered = Class.new do
         def restore! = false # rubocop:disable Naming/PredicateMethod
       end.new
-      verifier = Lemans::Verifier.new(bench: bench, task: load_task(bench), dir: Pathname(dir), snapshot: tampered)
+      verifier = Lemans::Trial::Verifier.new(task: load_task(config), dir: Pathname(dir), snapshot: tampered)
 
       reward = verifier.call(sandbox)
 

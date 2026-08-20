@@ -10,8 +10,8 @@ class MiniswenInstalledTest < Minitest::Test
   include Miniswen::Testing
 
   def build_agent
-    bench = load_bench
-    [Lemans::Agents.build("miniswen-installed", profile: bench.agent), load_task(bench)]
+    config = load_config
+    [Lemans::Agents.build("miniswen-installed", profile: config.agent), load_task(config)]
   end
 
   # The fixture model resolves through openrouter; pinning its key keeps the

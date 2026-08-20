@@ -33,7 +33,7 @@ module Lemans
               exec_directly(command, timeout: timeout, env: env)
             end
 
-          Base::ExecResult.new(command: command, duration_sec: (now - started).round(3), **response)
+          Base::ExecResult.new(command: command, duration: (now - started).round(3), **response)
         end
 
         private

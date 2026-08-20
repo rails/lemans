@@ -82,7 +82,7 @@ class FakeEnvironment < Lemans::Environments::Base
 
   def result(exit_code, output)
     Lemans::Environments::Base::ExecResult.new(
-      command: @commands.last, exit_code: exit_code, output: output, duration_sec: 0.0
+      command: @commands.last, exit_code: exit_code, output: output, duration: 0.0
     )
   end
 end

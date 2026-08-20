@@ -31,7 +31,7 @@ module Lemans
       # An in-sandbox run self-reports: everything but the verifier's reward
       # comes from a file the sandbox wrote.
       def obtain_result(environment, task:, logs_dir:)
-        run = environment.exec(command_for(task), timeout: profile.timeout_sec + EXEC_SLACK_SEC,
+        run = environment.exec(command_for(task), timeout: profile.timeout + EXEC_SLACK_SEC,
                                                   env: provider_env(environment))
 
         local = logs_dir.join(RESULT_FILENAME)
@@ -57,8 +57,8 @@ module Lemans
         argv = ["miniswen", "-q", "--no-refresh-registry",
                 "-m", model.to_s, "-p", task.instruction,
                 "--results-path", RESULTS_PATH,
-                "--max-steps", profile.step_limit, "--max-time", profile.timeout_sec.to_i,
-                "--exec-timeout", profile.exec_timeout_sec.to_i]
+                "--max-steps", profile.step_limit, "--max-time", profile.timeout.to_i,
+                "--exec-timeout", profile.exec_timeout.to_i]
         argv += ["--max-cost", profile.cost_limit.to_i] if profile.cost_limit
         argv.map { Shellwords.escape(_1.to_s) }.join(" ")
       end
