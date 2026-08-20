@@ -99,6 +99,15 @@ class TestStore < Lemans::Store
 
   def fetch = results
 
+  def query(task: nil, agent: nil, model: nil, tags: nil)
+    matched = results.dup
+    matched.select! { Array(task).include?(it.task) } if task
+    matched.select! { it.agent == agent } if agent
+    matched.select! { it.model == model } if model
+    matched.select! { Array(tags).intersect?(it.tags) } if tags
+    matched
+  end
+
   def save(result) = results << result
 
   def save_artifact(_result, contents, path:)

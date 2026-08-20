@@ -66,7 +66,10 @@ module Lemans
     end
 
     def Usage.from_json(data)
-      cost_source = CostSource.new(**data[:cost_source]) if data[:cost_source]
+      # Older files carry a partial cost_source (just the name).
+      if (source = data[:cost_source])
+        cost_source = CostSource.new(**CostSource.members.to_h { [it, nil] }, **source)
+      end
       new(
         input_tokens: data[:input_tokens],
         output_tokens: data[:output_tokens],
@@ -169,12 +172,13 @@ module Lemans
     def invalid? = outcome.invalid?
 
     def duration
-      finished_at && started_at && (finished_at - started_at).round(1)
+      @duration || (finished_at && started_at && (finished_at - started_at).round(1))
     end
 
-    def completed!(outcome, usage = nil)
+    def completed!(outcome, usage = nil, duration: nil)
       @outcome = outcome.is_a?(Outcome) ? outcome : Outcome.new(outcome)
       @usage = usage
+      @duration = duration if duration
       self
     end
 
@@ -209,13 +213,22 @@ module Lemans
       def from_json(data)
         result = new(
           **data.slice(:task, :agent, :model, :index, :profile_digest, :task_digest),
-          id: data[:trial],
+          # 0.2.x releases spell the id `run:`.
+          id: data[:trial] || data[:run],
           revision: revision_from(data)
         )
         result.tags = data[:tags] || []
         result.metadata = data[:metadata] || {}
         phases_from(data).each { result.phases << it }
-        result.completed!(Outcome.from_json(data[:outcome]), data[:usage] && Usage.from_json(data[:usage])) if data[:outcome]
+        if data[:outcome]
+          result.completed!(
+            Outcome.from_json(data[:outcome]),
+            data[:usage] && Usage.from_json(data[:usage]),
+            # The recorded duration wins over the one derived from phases:
+            # older writers timed a slightly wider span.
+            duration: data[:duration] || data[:duration_sec]
+          )
+        end
         result.graded!(data[:reward]) unless data[:reward].nil?
         result
       end

@@ -77,8 +77,7 @@ class ResultTest < Minitest::Test
 
     assert_equal :completed, result.status
     assert_predicate result, :scored?
-    # Duration derives from the recorded phases, not the legacy duration_sec.
-    assert_in_delta 60.0, result.duration
+    assert_in_delta 12.3, result.duration
     assert_equal "abc", result.revision.commit
     assert_equal %i[environment_setup], result.phases.map(&:name)
   end

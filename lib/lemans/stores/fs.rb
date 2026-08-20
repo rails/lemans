@@ -27,6 +27,16 @@ module Lemans
         root.glob("**/#{FILENAME}").filter_map { to_record(it) }
       end
 
+      # The file system keeps no index, so filtering happens in memory.
+      def query(task: nil, agent: nil, model: nil, tags: nil)
+        results = fetch
+        results.select! { Array(task).include?(it.task) } if task
+        results.select! { it.agent == agent } if agent
+        results.select! { it.model == model } if model
+        results.select! { Array(tags).intersect?(it.tags) } if tags
+        results
+      end
+
       def save(result)
         atomic_write(result_dir(result).join(FILENAME), "#{JSON.pretty_generate(result.as_json)}\n")
       rescue SystemCallError, JSON::GeneratorError => e

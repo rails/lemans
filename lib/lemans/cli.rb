@@ -79,7 +79,7 @@ module Lemans
 
       say ""
       say_status :report, "collecting results from #{options[:runs_dir]}", :cyan
-      print_report Results::Report.load(options[:runs_dir])
+      print_report Report.load(store)
 
       exit 130 if summary.status == :interrupted
       exit 1 if summary.status == :invalid
@@ -128,10 +128,11 @@ module Lemans
                        desc: "Group results by 1-3 dash-joined columns (task, agent, model)"
     option :sort, aliases: "-S", banner: "COLUMN", desc: "Sort by a column"
     def report
-      results = Results::Report.load(options[:runs_dir], tags: options[:tag], names: options[:task])
+      store = Stores::FS.new(options[:runs_dir])
+      results = Report.load(store, tags: options[:tag], names: options[:task])
       raise Thor::Error, "lemans: no matching results found" if results.empty?
 
-      results = Results::Aggregate.new(results, keys: Results::Aggregate.keys(options[:aggregate])) if options[:aggregate]
+      results = Report::Aggregate.new(results, keys: Report::Aggregate.keys(options[:aggregate])) if options[:aggregate]
       results.order_by!(options[:sort]) if options[:sort]
       options[:format] == "csv" ? say(results.to_csv) : print_report(results)
     rescue ConfigError => e

@@ -14,6 +14,11 @@ module Lemans
       raise NotImplementedError
     end
 
+    # Returns the run records matching the filters
+    def query(**filters)
+      raise NotImplementedError
+    end
+
     # Persist the result
     def save(result)
       raise NotImplementedError
