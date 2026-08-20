@@ -486,6 +486,8 @@ module LemansRemote # :nodoc: all
       vars = (ENV_ALLOWLIST + @extra_env).filter_map { |key| [key, ENV[key]] if ENV[key] }.to_h
       daytona_key = ENV["DAYTONA_API_KEY"] || ENV["DAYTONA_TOKEN"]
       vars["DAYTONA_API_KEY"] = daytona_key if daytona_key
+      revision = @bench.revision.to_env
+      vars["COMMIT_SHA"] = revision if revision
       vars
     end
 

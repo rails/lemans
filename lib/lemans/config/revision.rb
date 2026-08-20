@@ -37,6 +37,8 @@ module Lemans
       end
 
       def as_json(**) = { commit:, dirty: }
+
+      def to_env = commit && "#{commit}#{"~!" if dirty}"
     end
   end
 end
