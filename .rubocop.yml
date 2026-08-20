@@ -2,6 +2,8 @@ AllCops:
   TargetRubyVersion: 3.4
   NewCops: enable
   SuggestExtensions: false
+  Exclude:
+    - lib/lemans/cli/templates/**/*
 
 Style/StringLiterals:
   EnforcedStyle: double_quotes

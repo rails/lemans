@@ -7,7 +7,11 @@ module Lemans
   # The commands. Thin on purpose: everything a command does is a call into a
   # class somebody can drive without a terminal.
   class CLI < Thor
+    include Thor::Actions
+
     check_unknown_options!
+
+    source_root File.expand_path("cli/templates", __dir__)
 
     def self.exit_on_failure? = true
 
@@ -15,6 +19,13 @@ module Lemans
     desc "version", "Print the lemans version"
     def version
       say VERSION
+    end
+
+    desc "init [DIR]", "Scaffold a new bench directory with example tasks"
+    def init(dir = ".")
+      self.destination_root = dir
+      directory "bench", "."
+      say_status :done, "prove the bench with `lemans run --bench #{dir} --agent oracle`", :cyan
     end
 
     desc "tasks", "List the tasks in a bench"

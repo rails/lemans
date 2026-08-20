@@ -9,4 +9,5 @@
 
 Gemfile.lock
 runs/
+my-bench/
 *.local.md

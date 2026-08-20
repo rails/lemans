@@ -5,8 +5,8 @@ require_relative "lib/lemans/version"
 Gem::Specification.new do |spec|
   spec.name = "lemans"
   spec.version = Lemans::VERSION
-  spec.authors = ["Svyatoslav Kryukov", "Artur Petrov"]
-  spec.email = %w[me@skryukov.dev ardecvz@gmail.com]
+  spec.authors = ["Svyatoslav Kryukov", "Artur Petrov", "Vladimir Dementyev"]
+  spec.email = %w[me@skryukov.dev ardecvz@gmail.com dementiev.vm@gmail.com]
 
   spec.summary = "A Ruby harness for running agent benchmarks"
   spec.description = "Lemans runs tasks against a coding agent in a sandbox."
