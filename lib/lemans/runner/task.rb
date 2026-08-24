@@ -49,7 +49,7 @@ module Lemans
         reporter&.record(:finished, result)
         result
       ensure
-        store&.save(result)
+        store&.save(result) unless result.pending?
       end
 
       private

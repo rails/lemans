@@ -167,6 +167,8 @@ module Lemans
 
     def detail = outcome.detail
 
+    def pending? = outcome.pending?
+
     def scored? = outcome.scored?
 
     def invalid? = outcome.invalid?
