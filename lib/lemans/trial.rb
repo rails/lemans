@@ -36,7 +36,7 @@ module Lemans
             build_timeout: task.environment.build_timeout,
             labels: {
               "lemans.task" => task.name,
-              "lemans.trial" => result.id,
+              "lemans.trial" => self.result.id,
               "lemans.phase" => "agent"
             }
           )

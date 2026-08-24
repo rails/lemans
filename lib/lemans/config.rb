@@ -66,7 +66,7 @@ module Lemans
       @verifier.root = root
       @concurrency = 4
       @attempts = 1
-      @backend = "daytona"
+      @backend = @environment.backend
       @tasks = parse_tasks
     end
 
@@ -75,7 +75,7 @@ module Lemans
       @agent.models = Array(model) if model
       @attempts = attempts if attempts
       @concurrency = concurrency if concurrency
-      @backend = backend if backend
+      @backend = environment.backend = backend if backend
     end
 
     def agent_name = agent.name

@@ -14,6 +14,8 @@ version: 1
 #   commands: [bin/sandbox-setup]
 
 environment:
+  # Where to run sandboxes (Daytona or Docker)
+  # backend: daytona # or docker
   # The shared sandbox image, one of:
   # - a Dockerfile, built once per content digest and reused across trials.
   #   This bench's environment/Dockerfile is the default — used here:

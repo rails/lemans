@@ -12,6 +12,7 @@ module Lemans
           return if data.nil?
 
           conf = new
+          conf.backend = data["backend"] if data["backend"]
           conf.image = data["image"] if data["image"]
           conf.dockerfile = data["dockerfile"] if data["dockerfile"]
           raise ConfigError, "environment.image and environment.dockerfile are mutually exclusive" if conf.image && conf.dockerfile
@@ -28,11 +29,13 @@ module Lemans
         end
       end
 
-      attr_accessor :image, :dockerfile, :workdir, :resources, :build_timeout, :network
+      attr_accessor :image, :dockerfile, :workdir, :backend,
+                    :resources, :build_timeout, :network
 
       def initialize
         @image = nil
         @dockerfile = nil
+        @backend = "daytona"
         @workdir = "/app"
         @resources = Resources.new(cpus: 2, memory: 2048, storage: 5120)
         @build_timeout = 10 * 60
