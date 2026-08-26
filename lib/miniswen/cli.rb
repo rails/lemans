@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "optparse"
+require "fileutils"
 
 require "miniswen/version"
 
@@ -133,8 +134,15 @@ module Miniswen
     private
 
     def write_results(result)
-      File.write(@results_path, JSON.generate(result.to_h)) if @results_path
-      write_atif(result) if @atif_path
+      if @results_path
+        FileUtils.mkdir_p(File.dirname(@results_path))
+        File.write(@results_path, JSON.generate(result.to_h))
+      end
+
+      if @atif_path
+        FileUtils.mkdir_p(File.dirname(@atif_path))
+        write_atif(result)
+      end
     end
 
     def error_message(error)
@@ -162,7 +170,7 @@ module Miniswen
         end
 
         opts.on("-p INSTRUCTION", "--prompt=INSTRUCTION", String, "Instruction prompt") do |v|
-          @instruction = v
+          @instruction = File.file?(v) ? File.read(v) : v
         end
 
         opts.on("--max-steps=STEPS", Integer, "Max steps count") do |v|
