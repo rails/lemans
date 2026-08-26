@@ -112,7 +112,15 @@ module Miniswen
       require "miniswen/local"
 
       reporter = @quiet ? nil : Reporter.new(verbose: @verbose)
-      agent = Agent.new(model:, reporter:, environment: Local.new, **options)
+      environment =
+        if @docker_id
+          require "miniswen/environment/docker"
+          Environment::Docker.new(@docker_id)
+        else
+          Local.new
+        end
+
+      agent = Agent.new(model:, reporter:, environment:, **options)
 
       begin
         result = agent.run(instruction)
@@ -199,6 +207,10 @@ module Miniswen
 
         opts.on("--atif-path=PATH", String, "Write the ATIF trajectory to PATH") do |v|
           @atif_path = v
+        end
+
+        opts.on("--docker=ID", String, "Docker container ID to exec commands on") do |v|
+          @docker_id = v
         end
 
         opts.on("--refresh-registry", "Refresh the model registry, persist it, and exit") do
