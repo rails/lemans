@@ -21,6 +21,13 @@
 #     exe/lemans-remote run --bench ../ai-evals --task hello-world
 #     exe/lemans-remote run --bench ../ai-evals --model openrouter/z-ai/glm-5.2 --args="-k 2 -c 8"
 #
+#   Retry invalid local results (agent/infra errors, not negative rewards):
+#   launches one sandbox per invalid (task, model) group — a single retried
+#   attempt per task — and moves that result dir into runs/_trash; call again
+#   to retry the remaining invalid attempts of the same tasks:
+#
+#     exe/lemans-remote run --bench ../ai-evals --retry-runs=./runs
+#
 #   Then watch, fetch, and clean up:
 #
 #     exe/lemans-remote status [--history] [--running | --complete]
@@ -42,6 +49,7 @@ require "digest"
 require "fileutils"
 require "json"
 require "open3"
+require "pathname"
 require "securerandom"
 require "shellwords"
 require "stringio"
@@ -227,6 +235,51 @@ module LemansRemote # :nodoc: all
 
         FileUtils.rm_rf(File.join(staged_tasks, entry))
       end
+    end
+  end
+
+  class RetryPlanner
+    TRASH_DIR = "_trash"
+
+    Group = Struct.new(:task, :model, :dirs, keyword_init: true)
+
+    def initialize(runs_dir)
+      @root = Pathname(runs_dir)
+    end
+
+    def groups
+      @groups ||= invalids.group_by { |result, _dir| [ result.task, result.model ] }
+                          .map { |(task, model), rows| Group.new(task:, model:, dirs: rows.map(&:last)) }
+                          .sort_by { [ it.task.to_s, it.model.to_s ] }
+    end
+
+    def invalid_attempts = groups.sum { it.dirs.size }
+
+    def trash(group, count)
+      trash_root = @root.join(TRASH_DIR)
+      group.dirs.take(count).map do |dir|
+        target = trash_root.join(dir.relative_path_from(@root))
+        FileUtils.mkdir_p(target.dirname.to_s)
+        FileUtils.mv(dir.to_s, target.to_s)
+        target
+      end
+    end
+
+    private
+
+    def invalids
+      @root.glob("**/#{Lemans::Stores::FS::FILENAME}").filter_map do |path|
+        next if path.relative_path_from(@root).each_filename.include?(TRASH_DIR)
+
+        result = read_result(path)
+        [ result, path.dirname ] if result&.invalid?
+      end
+    end
+
+    def read_result(path)
+      Lemans::Result.from_json(JSON.parse(path.read, symbolize_names: true))
+    rescue JSON::ParserError, SystemCallError, IOError, Lemans::Result::IncompatibleError
+      nil
     end
   end
 
@@ -733,6 +786,8 @@ module LemansRemote # :nodoc: all
     option :bench, default: ".", desc: "Directory holding bench.yml"
     option :task, repeatable: true, desc: "Run task(s) by name (default: all)"
     option :model, repeatable: true, desc: "Override the model(s) from bench.yml"
+    option :retry_runs, desc: "Retry invalid results from this local runs directory " \
+                              "(one attempt per task per call, retried results move to _trash)"
     option :args, default: "", desc: "Extra `lemans run` options, passed through verbatim"
     option :timeout, default: "6h", desc: "Give up on the remote run after this long"
     option :sync, type: :boolean, default: false, desc: "Wait for the run and download the results directly"
@@ -746,7 +801,21 @@ module LemansRemote # :nodoc: all
                          desc: "Async mode: how many sandboxes to launch in parallel (1 to serialize)"
     def run_bench
       bench = Lemans::Config.load_file(options[:bench])
-      tasks = options[:task] || []
+
+      planner = RetryPlanner.new(options[:retry_runs]) if options[:retry_runs]
+      retry_groups = nil
+      if planner
+        raise Thor::Error, "lemans-remote: --retry-runs picks the tasks itself — drop --task" if (options[:task] || []).any?
+        raise Thor::Error, "lemans-remote: --attempts does not combine with --retry-runs (one attempt per task per call)" if options[:attempts].to_i > 1
+
+        retry_groups = planner.groups
+        if retry_groups.empty?
+          say_status :retry, "no invalid runs in #{options[:retry_runs]}", :green
+          return
+        end
+      end
+
+      tasks = retry_groups ? retry_groups.map(&:task).uniq : (options[:task] || [])
       unknown = tasks - bench.tasks.map(&:name)
       raise Thor::Error, "lemans-remote: no such task(s): #{unknown.join(", ")}" if unknown.any?
 
@@ -759,21 +828,34 @@ module LemansRemote # :nodoc: all
       raise Thor::Error, "lemans-remote: --concurrency must be at least 1" if options[:concurrency].to_i < 1
 
       models = options[:model] || []
-      batches = plan_batches(bench, tasks)
-      jobs = batches.flat_map { |batch| (1..attempts).map { [ batch, attempts > 1 ? it : nil ] } }
+      jobs =
+        if retry_groups
+          retry_groups.each { say_status :retry, "#{it.task} (#{it.model}) — #{it.dirs.size} invalid attempt(s), retrying one" }
+          retry_groups.map { [ [ it.task ], models.any? ? models : [ it.model ].compact, nil, it ] }
+        else
+          plan_batches(bench, tasks).flat_map { |batch| (1..attempts).map { [ batch, models, attempts > 1 ? it : nil, nil ] } }
+        end
+      raise Thor::Error, "lemans-remote: --sync runs a single sandbox — #{jobs.size} invalid group(s) to retry" if options[:sync] && jobs.size > 1
+
       Vault.ensure unless options[:sync]
 
       if jobs.size == 1
-        batch, attempt = jobs.first
-        exit_code = launch_batch(bench, batch, models, provisioner, attempt:)
+        batch, job_models, attempt, group = jobs.first
+        exit_code = launch_batch(bench, batch, job_models, provisioner, attempt:)
+        finish_retry(planner, [ group ]) if group
         say_status :detached, "`lemans-remote status` to watch, `lemans-remote pull-runs` to fetch results" unless options[:sync]
         exit exit_code unless exit_code.zero?
         return
       end
 
-      fanout = attempts > 1 ? "#{batches.size} task batch(es) × #{attempts} attempts" : "one per task"
+      fanout =
+        if retry_groups then "one per invalid (task, model) group"
+        elsif attempts > 1 then "#{jobs.size / attempts} task batch(es) × #{attempts} attempts"
+        else "one per task"
+        end
       say_status :fanout, "#{jobs.size} sandboxes, #{fanout}, #{options[:concurrency].to_i} at a time"
-      failures = launch_batches(bench, jobs, models, provisioner)
+      failures, retried = launch_batches(bench, jobs, provisioner)
+      finish_retry(planner, retried) if retry_groups
       say_status :detached, "`lemans-remote status` to watch, `lemans-remote pull-runs` to fetch results"
       raise Thor::Error, "lemans-remote: failed to launch: #{failures.join("; ")}" if failures.any?
     rescue Lemans::ConfigError, RuntimeError => e
@@ -1000,6 +1082,14 @@ module LemansRemote # :nodoc: all
       Provisioner.new(cpus: options[:cpus].to_i, memory_gb: options[:memory].to_i, disk_gb: options[:disk].to_i)
     end
 
+    def finish_retry(planner, retried)
+      retried.each { |group| planner.trash(group, 1).each { say_status :trashed, it.to_s, :cyan } }
+      leftover = planner.invalid_attempts - retried.size
+      return unless leftover.positive?
+
+      say_status :retry, "#{leftover} invalid attempt(s) remain — run --retry-runs again", :yellow
+    end
+
     def plan_batches(bench, tasks)
       return [ tasks ] if options[:sync] || options[:run_in_band]
 
@@ -1024,15 +1114,16 @@ module LemansRemote # :nodoc: all
       ).call
     end
 
-    def launch_batches(bench, jobs, models, provisioner)
+    def launch_batches(bench, jobs, provisioner)
       queue = Queue.new
       jobs.each { queue << it }
       failures = Queue.new
+      launched = Queue.new
 
       threads = [ options[:concurrency].to_i, jobs.size ].min.times.map do
         Thread.new do
           loop do
-            batch, attempt =
+            batch, models, attempt, group =
               begin
                 queue.pop(true)
               rescue ThreadError
@@ -1040,6 +1131,7 @@ module LemansRemote # :nodoc: all
               end
             begin
               launch_batch(bench, batch, models, provisioner, attempt:)
+              launched << group if group
             rescue StandardError => e
               label = batch.empty? ? "all" : batch.join(",")
               label += "/a#{attempt}" if attempt
@@ -1050,7 +1142,7 @@ module LemansRemote # :nodoc: all
       end
       threads.each(&:join)
 
-      Array.new(failures.size) { failures.pop }
+      [ Array.new(failures.size) { failures.pop }, Array.new(launched.size) { launched.pop } ]
     end
 
     def build_run_id(bench, tasks, models, attempt = nil)
