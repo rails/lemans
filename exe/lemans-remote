@@ -38,7 +38,8 @@
 #     exe/lemans-remote deprovision [--name SNAPSHOT]
 #
 #   Credentials come from the host ENV: DAYTONA_API_KEY (or DAYTONA_TOKEN),
-#   OPENROUTER_API_KEY, LEMANS_PROVIDER_ORDER; forward extras with --env KEY.
+#   OPENROUTER_API_KEY, LEMANS_PROVIDER_ORDER (or OPENROUTER_PROVIDER_ORDER);
+#   forward extras with --env KEY.
 
 lib_path = File.expand_path("../lib", __dir__)
 $LOAD_PATH.unshift(lib_path) unless $LOAD_PATH.include?(lib_path)
@@ -84,7 +85,7 @@ module LemansRemote # :nodoc: all
   REMOTE_HOOKS = "/tmp/lemans-remote-hooks.rb"
   REMOTE_META = "/tmp/lemans-remote-run.json"
 
-  ENV_ALLOWLIST = %w[OPENROUTER_API_KEY LEMANS_PROVIDER_ORDER].freeze
+  ENV_ALLOWLIST = %w[OPENROUTER_API_KEY LEMANS_PROVIDER_ORDER OPENROUTER_PROVIDER_ORDER].freeze
 
   Backend = Lemans::Environments::Daytona
 

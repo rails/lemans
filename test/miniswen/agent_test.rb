@@ -272,13 +272,21 @@ class MiniswenAgentTest < Minitest::Test
   def test_provider_order_pins_openrouter_routing
     with_openrouter_key { build_agent(model: "openrouter/anthropic/test") }
     stub_llm(SUBMIT)
-    ENV["LEMANS_PROVIDER_ORDER"] = "Chutes, Io Net"
+    ENV["OPENROUTER_PROVIDER_ORDER"] = "Chutes, Io Net"
     agent.run("task")
 
     assert_equal({ provider: { order: [ "Chutes", "Io Net" ], allow_fallbacks: false } },
                  RubyLLM::Test.last_request.params)
+    assert_equal "Chutes, Io Net", agent.provider_env["OPENROUTER_PROVIDER_ORDER"]
+
+    ENV["LEMANS_PROVIDER_ORDER"] = "DeepInfra"
+    stub_llm(SUBMIT)
+    agent.run("task")
+
+    assert_equal [ "DeepInfra" ], RubyLLM::Test.last_request.params.dig(:provider, :order)
   ensure
     ENV.delete("LEMANS_PROVIDER_ORDER")
+    ENV.delete("OPENROUTER_PROVIDER_ORDER")
   end
 
   def test_a_tool_call_thought_signature_is_replayed_on_the_next_turn

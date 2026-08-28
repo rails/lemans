@@ -315,8 +315,8 @@ module Miniswen
       _, provider = resolved
       env = provider.configuration_requirements.to_h { [ it.to_s.upcase, RubyLLM.config.public_send(it) ] }.compact
 
-      order = ENV["LEMANS_PROVIDER_ORDER"]
-      env["LEMANS_PROVIDER_ORDER"] = order if order
+      order = provider_order
+      env["OPENROUTER_PROVIDER_ORDER"] = order if order
       env
     end
 
@@ -531,11 +531,13 @@ module Miniswen
     end
 
     def routing_params
-      order = ENV["LEMANS_PROVIDER_ORDER"]
+      order = provider_order
       return {} unless order && @provider == "openrouter"
 
       { provider: { order: order.split(",").map(&:strip), allow_fallbacks: false } }
     end
+
+    def provider_order = ENV["LEMANS_PROVIDER_ORDER"] || ENV["OPENROUTER_PROVIDER_ORDER"]
 
     def cost_source
       if local?
