@@ -57,6 +57,24 @@ class MiniswenCLITest < Minitest::Test
     assert_empty output.string
   end
 
+  def test_falls_back_to_thinking_when_content_is_empty
+    reporter, output = build_reporter
+
+    reporter.on_message(role: "assistant", content: "", thinking: "Let me look around.")
+    reporter.on_message(role: "assistant", content: "Fixing it.", thinking: "The bug is in foo.")
+
+    assert_equal "∴ Let me look around.\n● Fixing it.\n", output.string
+  end
+
+  def test_shows_thinking_alongside_content_in_verbose_mode
+    output = StringIO.new
+    reporter = Miniswen::CLI::Reporter.new(output, verbose: true)
+
+    reporter.on_message(role: "assistant", content: "Fixing it.", thinking: "The bug is in foo.")
+
+    assert_equal "∴ The bug is in foo.\n● Fixing it.\n", output.string
+  end
+
   def test_prints_a_summary_to_the_reporter_output
     reporter, output = build_reporter
     result = Struct.new(:messages, :steps, :cost_usd).new([ { content: "Done" } ], 2, 0.15)

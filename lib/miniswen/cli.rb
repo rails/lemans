@@ -26,7 +26,7 @@ module Miniswen
       def on_message(message)
         case message[:role].to_s
         when "assistant"
-          write_block("●", message[:content], :assistant)
+          write_assistant(message)
         when "tool"
           write_block("↳", message[:content], :tool)
         when "user"
@@ -47,7 +47,7 @@ module Miniswen
       end
 
       def print_summary(result)
-        write_block("●", result.messages.last[:content], :assistant)
+        write_assistant(result.messages.last)
         write_block("↳", "steps=#{result.steps} · cost=$#{result.cost_usd}", :muted)
       end
 
@@ -57,17 +57,23 @@ module Miniswen
 
       private
 
+      def write_assistant(message)
+        content = message[:content].to_s.strip
+        write_block("∴", message[:thinking], :thinking) if @verbose || content.empty?
+        write_block("●", content, :assistant)
+      end
+
       def write_block(marker, content, tone)
         text = content.to_s.strip
         return if text.empty?
 
-        text = truncate_tool_output(text) if tone == :tool
+        text = truncate(text) if %i[tool thinking].include?(tone)
         lines = text.lines(chomp: true)
         io.puts("#{style(marker, tone)} #{style(lines.shift, tone)}")
         lines.each { |line| io.puts("  #{style(line, tone)}") }
       end
 
-      def truncate_tool_output(text)
+      def truncate(text)
         return text if @verbose || text.length <= MAX_TOOL_OUTPUT_CHARS
 
         head = MAX_TOOL_OUTPUT_CHARS / 2
@@ -79,7 +85,7 @@ module Miniswen
       def style(text, tone)
         return text unless io.respond_to?(:tty?) && io.tty?
 
-        colors = { assistant: 36, tool: 32, warning: 33, command: 35, muted: 90 }
+        colors = { assistant: 36, tool: 32, warning: 33, command: 35, muted: 90, thinking: 90 }
         "\e[#{colors.fetch(tone)}m#{text}\e[0m"
       end
     end
