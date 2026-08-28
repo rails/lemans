@@ -40,6 +40,16 @@ class StoresFSTest < Minitest::Test
     end
   end
 
+  def test_an_effort_suffix_becomes_a_folder_dash
+    with_store do |store|
+      saved = build_result(model: "openrouter/openai/gpt-5.6-luna#xhigh")
+      store.save(saved)
+
+      assert store.send(:root).join("gpt-5.6-luna-xhigh", saved.id, "result.json").file?
+      assert_equal "openrouter/openai/gpt-5.6-luna#xhigh", store.fetch.first.model
+    end
+  end
+
   def test_an_unreadable_result_is_skipped
     with_store do |store|
       store.save(build_result)

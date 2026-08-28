@@ -232,11 +232,14 @@ module Miniswen
     private attr_reader :max_steps, :max_time, :max_cost, :exec_timeout,
                         :clock, :reporter
 
-    # `model` is a litellm-style name ("openrouter/z-ai/glm-5.2"). Limits of 0 or nil are disabled.
+    # `model` is a litellm-style name ("openrouter/z-ai/glm-5.2"), optionally
+    # suffixed with a reasoning effort ("openrouter/openai/gpt-5.6-luna#xhigh").
+    # Limits of 0 or nil are disabled.
     def initialize(model:, environment:, max_steps: 0, max_time: 0, max_cost: nil,
                    exec_timeout: 30, clock: -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) },
                    reporter: nil)
-      @provider, @id = model.split("/", 2)
+      name, @effort = model.split("#", 2)
+      @provider, @id = name.split("/", 2)
       unless @id
         @id = @provider
         @provider = nil
@@ -500,7 +503,8 @@ module Miniswen
         tools: { bash: @bash_tool },
         temperature: nil,
         model: model_info,
-        params: routing_params
+        params: routing_params,
+        thinking: (RubyLLM::Thinking::Config.new(effort: @effort) if @effort)
       )
       payload(response)
     rescue RubyLLM::Error => e

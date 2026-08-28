@@ -57,7 +57,9 @@ agent:
 
   # Any model RubyLLM can reach. Export the matching credential
   # (OPENROUTER_API_KEY, ANTHROPIC_API_KEY, ...).
-  # `lemans run --model ...` overrides per run.
+  # `lemans run --model ...` overrides per run. A `#<effort>` suffix pins the
+  # reasoning effort (openrouter/openai/gpt-5.6-luna#xhigh); the suffix is part
+  # of the model name in reports and run folders.
   model: openrouter/z-ai/glm-5.2
 
   # The budget of one attempt: wall clock, agent-loop steps, and dollars.

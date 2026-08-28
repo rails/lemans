@@ -289,6 +289,30 @@ class MiniswenAgentTest < Minitest::Test
     ENV.delete("OPENROUTER_PROVIDER_ORDER")
   end
 
+  def test_an_effort_suffix_sets_the_reasoning_effort_and_stays_out_of_the_model_id
+    with_openrouter_key { build_agent(model: "openrouter/anthropic/test#xhigh") }
+    stub_llm(SUBMIT)
+    result = agent.run("task")
+
+    assert_equal "xhigh", RubyLLM::Test.last_request.thinking.effort
+    assert_equal "anthropic/test", agent.send(:resolved).first.id
+    assert_equal :submitted, result.status
+    assert agent.send(:explicit_cache?)
+
+    build_agent(model: "ollama/qwen3:8b#high")
+    source = agent.send(:cost_source)
+
+    assert_equal "ollama/qwen3:8b#high", source.model
+    assert_equal "ollama/qwen3:8b ($0.00, local)", source.priced_as
+  end
+
+  def test_a_model_without_an_effort_suffix_sends_no_thinking_config
+    stub_llm(SUBMIT)
+    agent.run("task")
+
+    assert_nil RubyLLM::Test.last_request.thinking
+  end
+
   def test_a_tool_call_thought_signature_is_replayed_on_the_next_turn
     stub_llm({ content: "Running.",
                tool_calls: [ { name: "bash", arguments: { "command" => "true" }, thought_signature: "tsig" } ] },

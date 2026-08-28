@@ -128,7 +128,7 @@ module Lemans
 
       # result.json is stored at <root>/<model-short>/<result-id>
       def result_dir(result)
-        root.join((result.model || result.agent).to_s.split("/").last, result.id)
+        root.join((result.model || result.agent).to_s.split("/").last.tr("#", "-"), result.id)
       end
     end
   end
