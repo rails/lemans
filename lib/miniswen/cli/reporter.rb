@@ -13,9 +13,10 @@ module Miniswen
       # allowing -vv to retain the complete output for debugging.
       MAX_TOOL_OUTPUT_CHARS = 1_000
 
-      def initialize(io = $stdout, verbose: false)
+      def initialize(io = $stdout, verbose: false, tool_output: verbose)
         @io = io
         @verbose = verbose
+        @tool_output = tool_output
       end
 
       def on_message(message)
@@ -23,7 +24,7 @@ module Miniswen
         when "assistant"
           write_assistant(message)
         when "tool"
-          write_block("↳", message[:content], :tool)
+          write_tool(message)
         when "user"
           write_block("!", message[:content], :warning)
         else
@@ -51,6 +52,20 @@ module Miniswen
       end
 
       private
+
+      def write_tool(message)
+        return write_block("↳", message[:content], :tool) if @tool_output
+
+        exit_code = message.dig(:observation, :exit_code)
+        return if exit_code.nil?
+
+        if exit_code.zero?
+          write_block("↳", "ok", :muted)
+        else
+          output = truncate(message.dig(:observation, :output).to_s.strip)
+          write_block("!", "not ok: exit #{exit_code}\n#{output}", :warning)
+        end
+      end
 
       def write_assistant(message)
         content = message[:content].to_s.strip

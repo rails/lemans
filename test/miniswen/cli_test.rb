@@ -10,13 +10,13 @@ require "json"
 class MiniswenCLITest < Minitest::Test
   include Miniswen::Testing
 
-  def build_reporter
+  def build_reporter(**)
     output = StringIO.new
-    [ Miniswen::CLI::Reporter.new(output), output ]
+    [ Miniswen::CLI::Reporter.new(output, **), output ]
   end
 
   def test_renders_messages_as_readable_agent_blocks
-    reporter, output = build_reporter
+    reporter, output = build_reporter(tool_output: true)
 
     reporter.on_message(role: "assistant", content: "I will inspect the code.\nThen I will fix it.")
     reporter.on_tool_call(name: "bash", arguments: { "command" => "ls -la" })
@@ -27,8 +27,18 @@ class MiniswenCLITest < Minitest::Test
     assert_equal expected, output.string
   end
 
-  def test_truncates_large_tool_output_in_normal_mode
+  def test_shows_only_the_exit_status_of_tool_calls_by_default
     reporter, output = build_reporter
+
+    reporter.on_tool_call(name: "bash", arguments: { "command" => "ls -la" })
+    reporter.on_message(role: "tool", content: "Exit code: 0\n\nREADME.md", observation: { exit_code: 0, output: "README.md" })
+    reporter.on_message(role: "tool", content: "Exit code: 2\n\nboom", observation: { exit_code: 2, output: "boom\n" })
+
+    assert_equal "  $ ls -la\n↳ ok\n! not ok: exit 2\n  boom\n", output.string
+  end
+
+  def test_truncates_large_tool_output_in_normal_mode
+    reporter, output = build_reporter(tool_output: true)
     content = "Exit code: 0\n\n#{"a" * 2_000}"
 
     reporter.on_message(role: "tool", content: content)
