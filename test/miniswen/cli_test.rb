@@ -76,6 +76,15 @@ class MiniswenCLITest < Minitest::Test
     assert_equal "∴ Let me look around.\n● Fixing it.\n", output.string
   end
 
+  def test_hides_thinking_when_reasoning_is_off
+    reporter, output = build_reporter(reasoning: false)
+
+    reporter.on_message(role: "assistant", content: "", thinking: "Let me look around.")
+    reporter.on_message(role: "assistant", content: "Fixing it.", thinking: "The bug is in foo.")
+
+    assert_equal "● Fixing it.\n", output.string
+  end
+
   def test_shows_thinking_alongside_content_in_verbose_mode
     output = StringIO.new
     reporter = Miniswen::CLI::Reporter.new(output, verbose: true)
