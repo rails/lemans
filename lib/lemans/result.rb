@@ -59,6 +59,18 @@ module Lemans
       :cost_usd, :cost_source
     ) do
       def as_json(**) = to_h.merge(cost_source: cost_source&.to_h).compact
+
+      # A multistep trial's totals; an unknown step cost makes the sum unknown.
+      def +(other)
+        self.class.new(
+          input_tokens: input_tokens + other.input_tokens,
+          output_tokens: output_tokens + other.output_tokens,
+          cached_tokens: cached_tokens + other.cached_tokens,
+          steps: steps + other.steps,
+          cost_usd: cost_usd && other.cost_usd && cost_usd + other.cost_usd,
+          cost_source: other.cost_source || cost_source
+        )
+      end
     end
 
     def Usage.zero
@@ -95,6 +107,8 @@ module Lemans
         @finished_at = time || Time.now.utc
       end
 
+      def duration = finished_at && (finished_at - started_at).round(1)
+
       def as_json(**)
         {
           name:,
@@ -117,13 +131,23 @@ module Lemans
       def as_json(**) = to_h
     end
 
+    Step = Data.define(:outcome, :usage, :duration) do
+      def as_json(**) = { outcome: outcome.as_json, usage: usage&.as_json, duration: }.compact
+
+      def self.from_json(data)
+        new(outcome: Outcome.from_json(data[:outcome]),
+            usage: data[:usage] && Usage.from_json(data[:usage]),
+            duration: data[:duration])
+      end
+    end
+
     # attributes that must be initialized/specified during construction
     attr_reader :id, :task, :agent, :model, :index,
                 :profile_digest, :task_digest, :revision
 
     attr_accessor :tags, :metadata
 
-    attr_reader :phases
+    attr_reader :phases, :steps
 
     # outcome-related attributes (we use setter-like methods, not accessors)
     attr_reader :reward, :outcome, :usage
@@ -141,6 +165,7 @@ module Lemans
       @tags = []
       @metadata = {}
       @phases = []
+      @steps = nil
 
       @id = id || "#{task}__#{SecureRandom.alphanumeric(7)}"
       @outcome = Outcome.new(:pending)
@@ -184,6 +209,14 @@ module Lemans
       self
     end
 
+    def step_completed!(outcome, usage = nil, duration: nil)
+      outcome = outcome.is_a?(Outcome) ? outcome : Outcome.new(outcome)
+      @steps ||= []
+      steps << Step.new(outcome:, usage:, duration:)
+      # aggregate right away (so we don't lose data on failure)
+      completed!(outcome, aggregate_usage)
+    end
+
     def graded!(reward)
       @reward = reward
       self
@@ -199,12 +232,15 @@ module Lemans
       self
     end
 
+    private def aggregate_usage = steps.filter_map(&:usage).reduce(:+)
+
     def as_json(**)
       {
         trial: id, task:, agent:, model:, index:,
         profile_digest:, task_digest:, revision: revision&.as_json,
         lemans_version: VERSION,
         tags:, metadata:, phases: phases.map(&:as_json),
+        steps: steps&.map(&:as_json),
         reward:, outcome: outcome.as_json, usage: usage&.as_json, duration:,
         started_at: started_at&.iso8601,
         finished_at: finished_at&.iso8601
@@ -222,6 +258,10 @@ module Lemans
         result.tags = data[:tags] || []
         result.metadata = data[:metadata] || {}
         phases_from(data).each { result.phases << it }
+        # Steps first: the stored outcome/usage below override the aggregates.
+        data[:steps]&.map { Step.from_json(it) }&.each do |step|
+          result.step_completed!(step.outcome, step.usage, duration: step.duration)
+        end
         if data[:outcome]
           result.completed!(
             Outcome.from_json(data[:outcome]),

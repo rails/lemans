@@ -31,6 +31,24 @@ class OracleTest < Minitest::Test
     end
   end
 
+  def test_a_step_projection_hands_the_oracle_its_indexed_solution
+    with_task_dir("multi") do |dir|
+      dir.join("instruction.md").write("---\nmultistep: true\n---\nP.\n\n---\n\nS1.\n\n---\n\nS2.\n")
+      dir.join("solution.1.patch").write("diff a\n")
+      task = Lemans::TaskDefinition.load_from_directory(load_config, dir)
+      fake = TestEnvironment.new
+
+      oracle.run(task.for_step(1), fake)
+
+      assert_includes fake.uploads.map(&:last), "/solution/solution.patch"
+      assert_includes fake.commands.fetch(0), "git apply"
+
+      error = assert_raises(Lemans::ConfigError) { oracle.run(task.for_step(2), fake) }
+
+      assert_includes error.message, "no solution/ to run"
+    end
+  end
+
   def test_a_solution_with_neither_entrypoint_nor_patch_is_the_authors_bug
     with_solution("README.md" => "nothing runnable") do |task|
       error = assert_raises(Lemans::ConfigError) { oracle.run(task, TestEnvironment.new) }

@@ -19,6 +19,14 @@ module Lemans
     FLAT_SEED = "environment.patch"
 
     FRONTMATTER = /\A---\n(.*?)\n---\n/m
+    STEP_SEPARATOR = /^---[ \t]*\n/
+
+    STEP_TESTS = { "tests.%d" => :dir, "verification_test.%d.rb" => FLAT_TEST, "verify.%d" => "verify" }.freeze
+    STEP_SOLUTIONS = { "solution.%d" => :dir, "solution.%d.patch" => FLAT_SOLUTION,
+                       "solve.%d" => "solve", "solve.%d.sh" => "solve.sh" }.freeze
+
+    STEP_FILE = /\A(?:tests\.(?<step>\d+)|verification_test\.(?<step>\d+)\.rb|verify\.(?<step>\d+)|
+                     solution\.(?<step>\d+)(?:\.patch)?|solve\.(?<step>\d+)(?:\.sh)?)\z/x
 
     class << self
       def load_from_directory(config, dir)
@@ -31,6 +39,7 @@ module Lemans
         task.tags = Array(data["tags"]).map(&:to_s) if data["tags"]
         task.metadata = data["metadata"] if data["metadata"]
         task.environment_profile = data["environment"] if data["environment"]
+        task.multistep = data["multistep"] if data.key?("multistep")
 
         declared_setup = Config::Setup.from_config(data["setup"], root: dir)
         refuse_config_collisions!(task, declared_setup, config.setup)
@@ -94,10 +103,36 @@ module Lemans
         raise ConfigError, "#{task.dir}: #{ENVIRONMENT_DIR}/Dockerfile is required when the bench declares no shared image or dockerfile and the task names no environment" unless
           task.environment_profile || task.config.environment.image || task.config.environment.dockerfile || task.environment_dockerfile.file?
 
+        validate_steps!(task)
+
         return unless task.test_files.empty?
 
         raise ConfigError, "#{task.dir}: #{TESTS_DIR}/ or a flat #{FLAT_TEST} is required — " \
                            "the verifier uploads it at verification time"
+      end
+
+      def validate_steps!(task)
+        if task.multistep? && task.steps < 2
+          raise ConfigError, "#{task.dir}: multistep: true but #{INSTRUCTION} holds a single section — " \
+                             "separate step instructions with --- (the first section is the shared preamble)"
+        end
+
+        task.dir.children.each do |entry|
+          match = STEP_FILE.match(entry.basename.to_s) or next
+          name = entry.basename
+
+          raise ConfigError, "#{task.dir}: #{name} is an indexed step file, but the task is not multistep: true" unless
+            task.multistep?
+
+          step = match[:step].to_i
+          if step == task.steps
+            raise ConfigError, "#{task.dir}: #{name} indexes the final step — the final step keeps " \
+                               "the unindexed names"
+          end
+
+          raise ConfigError, "#{task.dir}: #{name} names step #{step}, but the task has #{task.steps} steps" unless
+            step.between?(1, task.steps - 1)
+        end
       end
 
       # Collisions would be resolved by upload order, so a task never gets to
@@ -115,7 +150,9 @@ module Lemans
 
     attr_reader :config, :name, :dir
 
-    attr_accessor :difficulty, :tags, :description, :metadata, :environment_profile
+    attr_accessor :difficulty, :tags, :description, :metadata, :environment_profile, :multistep
+
+    alias multistep? multistep
 
     def initialize(config, name, dir: nil)
       @config = config
@@ -126,13 +163,25 @@ module Lemans
       @description = ""
       @metadata = {}
       @environment_profile = nil
+      @multistep = false
 
+      @step = nil
       @dir = dir || config.tasks_dir.join(name)
     end
 
-    # The story alone: frontmatter is for the harness, never for the agent.
+    # A copy of the task definition for a particular step
+    # (so we can generated correct paths and instructions)
+    def for_step(index) = dup.tap { it.step = index }
+
+    def final_step? = !multistep? || step == steps
+
+    def steps = multistep? ? sections.size - 1 : 1
+
     def instruction
-      @instruction ||= dir.join(INSTRUCTION).read.sub(FRONTMATTER, "")
+      return body unless multistep?
+      raise ArgumentError, "#{name} is multistep — only a step projection (for_step) has an instruction" unless step
+
+      "#{sections[0].strip}\n\n#{sections.fetch(step).strip}\n"
     end
 
     def digest
@@ -161,14 +210,24 @@ module Lemans
     # [absolute, remote-relative] pairs. Tests stay on the harness side while
     # the agent works; uploaded into the sandbox only at verification.
     def test_files
+      return step_files(STEP_TESTS) if step && !final_step?
+
       tests_dir.directory? ? expand(tests_dir) : flat(FLAT_TEST)
     end
 
+    def verifiable? = test_files.any?
+
     def solution_files
+      return step_files(STEP_SOLUTIONS) if step && !final_step?
+
       solution_dir.directory? ? expand(solution_dir) : flat(FLAT_SOLUTION)
     end
 
-    def solution? = solution_files.any?
+    def solution?
+      return (1..steps).all? { for_step(it).solution? } if multistep? && step.nil?
+
+      solution_files.any?
+    end
 
     def tests_dir = dir.join(TESTS_DIR)
 
@@ -192,7 +251,30 @@ module Lemans
       end
     end
 
+    protected attr_writer :step
+
     private
+
+    attr_reader :step
+
+    def body
+      @body ||= dir.join(INSTRUCTION).read.sub(FRONTMATTER, "")
+    end
+
+    def sections
+      @sections ||= body.split(STEP_SEPARATOR)
+    end
+
+    def step_files(patterns)
+      patterns.flat_map do |pattern, remote|
+        path = dir.join(format(pattern, step))
+        if remote == :dir
+          path.directory? ? expand(path) : []
+        else
+          path.file? ? [ [ path, remote ] ] : []
+        end
+      end
+    end
 
     def own_setup_with_seed
       declared = @declared_setup || Config::Setup.new

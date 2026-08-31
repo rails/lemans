@@ -1,7 +1,17 @@
 diff --git a/fizzbuzz.rb b/fizzbuzz.rb
-index 345b032..2c15f7d 100644
+index 98ae4cf..2c15f7d 100644
 --- a/fizzbuzz.rb
 +++ b/fizzbuzz.rb
-@@ -1 +1 @@
--1.upto(100) { |i| puts i }
+@@ -1,11 +1 @@
+-1.upto(100) do |i|
+-  if i % 15 == 0
+-    puts "FizzBuzz"
+-  elsif i % 3 == 0
+-    puts "Fizz"
+-  elsif i % 5 == 0
+-    puts "Buzz"
+-  else
+-    puts i
+-  end
+-end
 +1.upto(100) { |i| s = "#{"Fizz" if i % 3 == 0}#{"Buzz" if i % 5 == 0}"; puts s.empty? ? i : s }

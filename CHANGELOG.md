@@ -1,5 +1,6 @@
 ## [Unreleased]
 
+- Multistep tasks support.
 - Support named Docker envs via `environment.profiles` and `environment: <name>` in a task's frontmatter.
 
 ## [1.1.0] - 2026-08-28

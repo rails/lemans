@@ -18,6 +18,7 @@ class TestEnvironment < Lemans::Environment
     @commands = []
     @policies = []
     @stopped = false
+    @trees = 0
   end
 
   def start = self
@@ -34,6 +35,8 @@ class TestEnvironment < Lemans::Environment
     when /\Arm -f (\S+)\z/ then removed(Regexp.last_match(1))
     when /\Atest -e (\S+)\z/ then present(Regexp.last_match(1))
     when /\Atest -d (\S+)\z/ then directory(Regexp.last_match(1))
+    when /write-tree/ then result(0, format("%040x", @trees += 1))
+    when /diff --binary (\S+) (\S+) > (\S+)/ then diff(Regexp.last_match(1), Regexp.last_match(2), Regexp.last_match(3))
     else
       notify_on_command(command)
       result(0, "the suite ran")
@@ -70,6 +73,11 @@ class TestEnvironment < Lemans::Environment
   end
 
   def read(path) = files.key?(path) ? result(0, files[path]) : result(1, "cat: #{path}: No such file")
+
+  def diff(from, to, destination)
+    files[destination] = "diff #{from}..#{to}\n"
+    result(0, "")
+  end
 
   def present(path) = files.key?(path) ? result(0, "") : result(1, "")
 
