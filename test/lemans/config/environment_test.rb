@@ -33,6 +33,7 @@ class ConfigEnvironmentTest < Minitest::Test
     assert_equal Resources.new(cpus: 2, memory: 2048, storage: 5120), env.resources
     assert_equal 600, env.build_timeout
     assert_equal "public", env.network.mode
+    assert_empty env.profiles
   end
 
   def test_partial_resources
@@ -51,6 +52,30 @@ class ConfigEnvironmentTest < Minitest::Test
     end
 
     assert_includes error.message, "mutually exclusive"
+  end
+
+  def test_profiles
+    env = Lemans::Config::Environment.from_config(full_config.merge(
+      "profiles" => {
+        "campfire" => { "dockerfile" => "docker/campfire/Dockerfile" },
+        "fizzy" => { "image" => "ghcr.io/x/fizzy" }
+      }
+    ))
+
+    assert_equal "docker/campfire/Dockerfile", env.profiles["campfire"].dockerfile
+    assert_equal "ghcr.io/x/fizzy", env.profiles["fizzy"].image
+
+    error = assert_raises(Lemans::ConfigError) do
+      Lemans::Config::Environment.from_config({ "profiles" => { "both" => { "image" => "a", "dockerfile" => "b" } } })
+    end
+
+    assert_equal "environment.profiles.both: image and dockerfile are mutually exclusive", error.message
+
+    error = assert_raises(Lemans::ConfigError) do
+      Lemans::Config::Environment.from_config({ "profiles" => { "bare" => {} } })
+    end
+
+    assert_equal "environment.profiles.bare must declare image or dockerfile", error.message
   end
 
   def test_relative_workdir

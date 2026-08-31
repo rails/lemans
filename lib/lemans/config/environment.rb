@@ -4,6 +4,7 @@ module Lemans
   class Config
     class Environment # :nodoc:
       Resources = Struct.new(:cpus, :memory, :storage, keyword_init: true)
+      Profile = Struct.new(:image, :dockerfile, keyword_init: true)
 
       class << self
         include Conversion
@@ -17,6 +18,8 @@ module Lemans
           conf.dockerfile = data["dockerfile"] if data["dockerfile"]
           raise ConfigError, "environment.image and environment.dockerfile are mutually exclusive" if conf.image && conf.dockerfile
 
+          data["profiles"]&.each { |name, entry| conf.profiles[name] = profile!(name, entry) }
+
           conf.workdir = absolute_path!(data["workdir"]) if data["workdir"]
           conf.build_timeout = seconds!(data["build_timeout"]) if data["build_timeout"]
           conf.network = NetworkPolicy.from_config(data["network"]) if data["network"]
@@ -27,14 +30,25 @@ module Lemans
 
           conf
         end
+
+        private
+
+        def profile!(name, entry)
+          image, dockerfile = entry&.values_at("image", "dockerfile")
+          raise ConfigError, "environment.profiles.#{name}: image and dockerfile are mutually exclusive" if image && dockerfile
+          raise ConfigError, "environment.profiles.#{name} must declare image or dockerfile" unless image || dockerfile
+
+          Profile.new(image:, dockerfile:)
+        end
       end
 
       attr_accessor :image, :dockerfile, :workdir, :backend,
-                    :resources, :build_timeout, :network
+                    :resources, :build_timeout, :network, :profiles
 
       def initialize
         @image = nil
         @dockerfile = nil
+        @profiles = {}
         @backend = "daytona"
         @workdir = "/app"
         @resources = Resources.new(cpus: 2, memory: 2048, storage: 5120)

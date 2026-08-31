@@ -132,6 +132,40 @@ class TaskDefinitionTest < Minitest::Test
     end
   end
 
+  def test_environment_profile_resolution
+    with_task_dir("profiled") do |dir|
+      config = Lemans::Config.new
+      campfire = dir.parent.join("docker/campfire")
+      campfire.mkpath
+      campfire.join("Dockerfile").write("FROM scratch\n")
+      config.environment.profiles["campfire"] = Lemans::Config::Environment::Profile.new(dockerfile: campfire.join("Dockerfile"))
+      config.environment.profiles["fizzy"] = Lemans::Config::Environment::Profile.new(image: "ghcr.io/x/fizzy")
+      dir.join("instruction.md").write("---\nenvironment: campfire\n---\nGo.\n")
+
+      error = assert_raises(Lemans::ConfigError) { Lemans::TaskDefinition.load_from_directory(config, dir) }
+
+      assert_includes error.message, "mutually exclusive"
+
+      FileUtils.rm_rf(dir.join("environment"))
+      task = Lemans::TaskDefinition.load_from_directory(config, dir)
+
+      assert_equal "campfire", task.environment_profile
+      assert_predicate task.environment_image, :built?
+      assert_equal campfire, task.environment_image.context_dir
+      assert_equal "campfire", task.environment_image.slug
+
+      dir.join("instruction.md").write("---\nenvironment: fizzy\n---\nGo.\n")
+      task = Lemans::TaskDefinition.load_from_directory(config, dir)
+
+      assert_equal "ghcr.io/x/fizzy", task.environment_image.name
+
+      dir.join("instruction.md").write("---\nenvironment: writebook\n---\nGo.\n")
+      error = assert_raises(Lemans::ConfigError) { Lemans::TaskDefinition.load_from_directory(config, dir) }
+
+      assert_includes error.message, "unknown environment writebook — bench.yml declares campfire, fizzy"
+    end
+  end
+
   def test_unclosed_frontmatter
     with_task_dir("broken") do |dir|
       dir.join("instruction.md").write("---\ndescription: broken\nFix it.\n")

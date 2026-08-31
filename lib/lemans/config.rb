@@ -62,6 +62,7 @@ module Lemans
       @environment = environment
       @environment.dockerfile = root.join(@environment.dockerfile) if @environment.dockerfile
       @environment.dockerfile ||= default_dockerfile unless @environment.image
+      @environment.profiles.each_value { it.dockerfile = root.join(it.dockerfile) if it.dockerfile }
       @verifier = verifier
       @verifier.root = root
       @concurrency = 4
@@ -94,6 +95,7 @@ module Lemans
         sha = Digest::SHA256.new
         sha << TreeDigest.call(root.join(Verifier::VERIFICATION_DIR))
         sha << TreeDigest.call(environment.dockerfile.dirname) if environment.dockerfile
+        environment.profiles.each_value { sha << TreeDigest.call(it.dockerfile.dirname) if it.dockerfile }
         sha << Digest::SHA256.file(config_path.to_s).hexdigest if config_path.file?
         sha.hexdigest[0, 16]
       end

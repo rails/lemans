@@ -30,6 +30,7 @@ module Lemans
         task.difficulty = data["difficulty"].to_sym if data["difficulty"]
         task.tags = Array(data["tags"]).map(&:to_s) if data["tags"]
         task.metadata = data["metadata"] if data["metadata"]
+        task.environment_profile = data["environment"] if data["environment"]
 
         declared_setup = Config::Setup.from_config(data["setup"], root: dir)
         refuse_config_collisions!(task, declared_setup, config.setup)
@@ -79,8 +80,19 @@ module Lemans
           raise ConfigError, "#{task.dir}: a task may only override verifier.setup, not verifier.#{extras.first}"
         end
 
-        raise ConfigError, "#{task.dir}: #{ENVIRONMENT_DIR}/Dockerfile is required when the bench declares no shared image or dockerfile" unless
-          task.config.environment.image || task.config.environment.dockerfile || task.environment_dockerfile.file?
+        if (profile = task.environment_profile)
+          unless task.config.environment.profiles.key?(profile)
+            declared = task.config.environment.profiles.keys
+            listing = declared.any? ? "declares #{declared.join(", ")}" : "declares none"
+            raise ConfigError, "#{task.dir}: unknown environment #{profile} — bench.yml #{listing}"
+          end
+
+          raise ConfigError, "#{task.dir}: environment #{profile} and a local #{ENVIRONMENT_DIR}/Dockerfile are mutually exclusive" if
+            task.environment_dockerfile.file?
+        end
+
+        raise ConfigError, "#{task.dir}: #{ENVIRONMENT_DIR}/Dockerfile is required when the bench declares no shared image or dockerfile and the task names no environment" unless
+          task.environment_profile || task.config.environment.image || task.config.environment.dockerfile || task.environment_dockerfile.file?
 
         return unless task.test_files.empty?
 
@@ -103,7 +115,7 @@ module Lemans
 
     attr_reader :config, :name, :dir
 
-    attr_accessor :difficulty, :tags, :description, :metadata
+    attr_accessor :difficulty, :tags, :description, :metadata, :environment_profile
 
     def initialize(config, name, dir: nil)
       @config = config
@@ -113,6 +125,7 @@ module Lemans
       @tags = []
       @description = ""
       @metadata = {}
+      @environment_profile = nil
 
       @dir = dir || config.tasks_dir.join(name)
     end
@@ -164,7 +177,13 @@ module Lemans
     def environment_dockerfile = dir.join(ENVIRONMENT_DIR, "Dockerfile")
 
     def environment_image
-      if environment_dockerfile.file?
+      if (profile = environment.profiles[environment_profile])
+        if profile.image
+          Config::ImageSpec.registry(profile.image)
+        else
+          Config::ImageSpec.dockerfile(profile.dockerfile, slug: environment_profile)
+        end
+      elsif environment_dockerfile.file?
         Config::ImageSpec.dockerfile(environment_dockerfile, slug: name)
       elsif environment.image
         Config::ImageSpec.registry(environment.image)

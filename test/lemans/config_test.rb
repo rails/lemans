@@ -57,6 +57,26 @@ class ConfigTest < Minitest::Test
     end
   end
 
+  def test_profile_dockerfile_resolution
+    Dir.mktmpdir do |dir|
+      root = Pathname(dir)
+      root.join("bench.yml").write(<<~YAML)
+        environment:
+          image: ruby:3.4
+          profiles:
+            campfire:
+              dockerfile: docker/campfire/Dockerfile
+            fizzy:
+              image: ghcr.io/x/fizzy
+      YAML
+
+      config = Lemans::Config.load_file(dir)
+
+      assert_equal root.join("docker/campfire/Dockerfile"), config.environment.profiles["campfire"].dockerfile
+      assert_equal "ghcr.io/x/fizzy", config.environment.profiles["fizzy"].image
+    end
+  end
+
   def test_load_options
     config = load_config
     config.load_options(agent: "oracle", model: "test-model", attempts: 3, concurrency: 2, backend: "shell", bench: ".")

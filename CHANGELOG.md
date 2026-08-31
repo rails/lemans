@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Support named Docker envs via `environment.profiles` and `environment: <name>` in a task's frontmatter.
+
 ## [1.1.0] - 2026-08-28
 
 - A `#<effort>` model suffix (`openrouter/openai/gpt-5.6-luna#xhigh`) pins the reasoning effort; results land in `<model>-<effort>/`.
