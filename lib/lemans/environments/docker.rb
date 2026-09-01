@@ -152,7 +152,7 @@ module Lemans
           end
 
           status = wait.value
-          [ timed_out ? 124 : (status.exitstatus || 1), output.scrub ]
+          [ timed_out ? 124 : (status.exitstatus || 1), output.force_encoding(Encoding::UTF_8).scrub ]
         end
       rescue Errno::ENOENT
         raise ConfigError, "docker: CLI not found — install Docker or pick another backend"
