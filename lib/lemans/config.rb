@@ -7,15 +7,17 @@ require "pathname"
 module Lemans
   # Benchmark configuration and task definitions container.
   class Config
-    attr_reader :root, :config_path, :tasks_dir,
-                :tasks, :version,
+    attr_reader :root, :config_path, :tasks_dir, :version,
                 :backend, :concurrency, :attempts
 
     # Nested configs
     attr_reader :environment, :agent, :verifier, :setup
 
+    using Ext::DeepMerge
+
     class << self
       def load_file(path)
+        path = File.dirname(path) if File.file?(path)
         raise ConfigError, "bench directory not found: #{path}" unless File.directory?(path)
 
         config_name = %w[bench.yaml bench.yml].find { File.file?(File.join(path, it)) }
@@ -28,6 +30,15 @@ module Lemans
         raise ConfigError, "#{path}: #{config_name} must be a mapping of sections" unless contents.is_a?(Hash)
 
         root = Pathname(path)
+
+        if (inherited = contents["inherit_from"])
+          # Local conventions win over the inherited config (unless declared, even as ~)
+          environment = (contents["environment"] ||= {})
+          environment["dockerfile"] = root.join("environment/Dockerfile").to_s if root.join("environment/Dockerfile").file? && !environment.key?("dockerfile")
+          verifier = (contents["verifier"] ||= {})
+          verifier["verification"] = root.join(Verifier::VERIFICATION_DIR).to_s if root.join(Verifier::VERIFICATION_DIR).directory? && !verifier.key?("verification")
+          contents = load_file(root.join(inherited)).to_h.deep_merge(contents)
+        end
 
         sections = {}
         sections[:version] = contents["version"]
@@ -64,12 +75,13 @@ module Lemans
       @environment.dockerfile ||= default_dockerfile unless @environment.image
       @environment.profiles.each_value { it.dockerfile = root.join(it.dockerfile) if it.dockerfile }
       @verifier = verifier
-      @verifier.root = root
+      @verifier.verification ||= root.join(Verifier::VERIFICATION_DIR)
       @concurrency = 4
       @attempts = 1
       @backend = @environment.backend
-      @tasks = parse_tasks
     end
+
+    def tasks = @tasks ||= parse_tasks
 
     def load_options(agent: nil, model: nil, attempts: nil, concurrency: nil, backend: nil, **)
       @agent.name = agent if agent
@@ -83,6 +95,18 @@ module Lemans
 
     def models = agent.models
 
+    # The bench.yml this config reads as, paths resolved: what a bench
+    # inheriting from it merges over. Tasks are a bench's own.
+    def to_h
+      {
+        "version" => version,
+        "setup" => setup.to_h,
+        "agent" => agent.to_h,
+        "environment" => environment.to_h,
+        "verifier" => verifier.to_h
+      }.compact
+    end
+
     # Resolved once: an hours-long run reports the bench it started from, not
     # later tree drift.
     def revision
@@ -93,7 +117,7 @@ module Lemans
     def digest
       @digest ||= begin
         sha = Digest::SHA256.new
-        sha << TreeDigest.call(root.join(Verifier::VERIFICATION_DIR))
+        sha << TreeDigest.call(verifier.verification)
         sha << TreeDigest.call(environment.dockerfile.dirname) if environment.dockerfile
         environment.profiles.each_value { sha << TreeDigest.call(it.dockerfile.dirname) if it.dockerfile }
         sha << Digest::SHA256.file(config_path.to_s).hexdigest if config_path.file?

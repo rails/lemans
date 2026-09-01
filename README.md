@@ -59,6 +59,9 @@ The `bench.yml` looks like this:
 ```yaml
 version: 1
 
+# inherit_from: ../bench.yml      # [optional] start from another bench.yml; the sections below are
+#                                 # deep-merged over it (lists replace; set a key to ~ to drop it)
+
 # setup:                          # [optional] sandbox preparation, run before the agent starts
 #   files: [fixtures/seed.sql]    # uploaded for the commands to consume, then wiped
 #   commands: [bin/sandbox-setup]

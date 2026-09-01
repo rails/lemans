@@ -16,7 +16,6 @@ module Lemans
           conf.backend = data["backend"] if data["backend"]
           conf.image = data["image"] if data["image"]
           conf.dockerfile = data["dockerfile"] if data["dockerfile"]
-          raise ConfigError, "environment.image and environment.dockerfile are mutually exclusive" if conf.image && conf.dockerfile
 
           data["profiles"]&.each { |name, entry| conf.profiles[name] = profile!(name, entry) }
 
@@ -54,6 +53,19 @@ module Lemans
         @resources = Resources.new(cpus: 2, memory: 2048, storage: 5120)
         @build_timeout = 10 * 60
         @network = NetworkPolicy.new
+      end
+
+      def to_h
+        {
+          "backend" => backend,
+          "image" => image,
+          "dockerfile" => dockerfile&.to_s,
+          "profiles" => profiles.transform_values { { "image" => it.image, "dockerfile" => it.dockerfile&.to_s }.compact },
+          "workdir" => workdir,
+          "build_timeout" => build_timeout,
+          "network" => network.to_h,
+          "resources" => resources.to_h.transform_keys(&:to_s)
+        }.compact
       end
     end
   end

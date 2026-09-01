@@ -93,6 +93,81 @@ class ConfigTest < Minitest::Test
     assert_match(/\A[0-9a-f]{16}\z/, load_config.digest)
   end
 
+  def test_inherit_from
+    Dir.mktmpdir do |dir|
+      root = Pathname(dir)
+      root.join("environment").mkpath
+      root.join("environment/Dockerfile").write("FROM scratch\n")
+      root.join("fixtures").mkpath
+      root.join("fixtures/seed.sql").write("select 1;\n")
+      root.join("verification").mkpath
+      root.join("bench.yml").write(<<~YAML)
+        version: 1
+        setup: { files: [fixtures/seed.sql], commands: [bin/prep] }
+        agent:
+          name: miniswen
+          model: m
+          timeout: 30m
+          cost_limit: 5.0
+          environment:
+            network: { mode: allowlist, hosts: [openrouter.ai] }
+        verifier:
+          timeout: 10m
+      YAML
+      stage = root.join("stage-2")
+      stage.join("tasks/heavy/tests").mkpath
+      stage.join("tasks/heavy/tests/test.sh").write("exit 0\n")
+      stage.join("tasks/heavy/instruction.md").write("Go.\n")
+      stage.join("bench.yml").write(<<~YAML)
+        inherit_from: ../bench.yml
+        agent:
+          timeout: 2h
+          environment:
+            network: { hosts: [openrouter.ai, rubygems.org] }
+        verifier: { timeout: 1h }
+      YAML
+
+      config = Lemans::Config.load_file(stage.to_s)
+
+      assert_equal 1, config.version
+      assert_equal "miniswen", config.agent_name
+      assert_in_delta 7200, config.agent.timeout
+      assert_in_delta 5.0, config.agent.cost_limit
+      assert_equal %w[openrouter.ai rubygems.org], config.agent.environment.network.hosts
+      assert_in_delta 3600, config.verifier.timeout
+      assert_equal [ "heavy" ], config.tasks.map(&:name)
+      # The parent's paths come resolved; the tasks are the suite's own.
+      assert_equal root.join("environment/Dockerfile"), config.environment.dockerfile
+      assert_equal [ [ root.join("fixtures/seed.sql"), "fixtures/seed.sql" ] ], config.setup.files
+      assert_equal [ "bin/prep" ], config.setup.commands
+      assert_equal root.join("verification"), config.verifier.verification
+
+      # The suite's own conventions win over the inherited ones.
+      stage.join("environment").mkpath
+      stage.join("environment/Dockerfile").write("FROM ruby\n")
+      stage.join("verification").mkpath
+      config = Lemans::Config.load_file(stage.to_s)
+
+      assert_equal stage.join("environment/Dockerfile"), config.environment.dockerfile
+      assert_equal stage.join("verification"), config.verifier.verification
+
+      # A Dockerfile wins over an image, declared or inherited.
+      stage.join("bench.yml").write("inherit_from: ../bench.yml\nenvironment: { image: ruby:3.4 }\n")
+      config = Lemans::Config.load_file(stage.to_s)
+
+      assert_equal "ruby:3.4", config.environment.image
+      assert_equal stage.join("environment/Dockerfile"), config.environment.dockerfile
+      assert_predicate config.tasks.fetch(0).environment_image, :built?
+
+      # An explicit ~ opts out of both the local and the inherited Dockerfile.
+      stage.join("bench.yml").write("inherit_from: ../bench.yml\nenvironment: { image: ruby:3.4, dockerfile: ~ }\n")
+      config = Lemans::Config.load_file(stage.to_s)
+
+      assert_nil config.environment.dockerfile
+      assert_equal "ruby:3.4", config.tasks.fetch(0).environment_image.name
+    end
+  end
+
   def test_missing_bench
     error = assert_raises(Lemans::ConfigError) { Lemans::Config.load_file(BenchFixture::ROOT.parent.to_s) }
 

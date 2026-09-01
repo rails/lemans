@@ -266,10 +266,10 @@ module Lemans
         end
       elsif environment_dockerfile.file?
         Config::ImageSpec.dockerfile(environment_dockerfile, slug: name)
-      elsif environment.image
-        Config::ImageSpec.registry(environment.image)
-      else
+      elsif environment.dockerfile
         Config::ImageSpec.dockerfile(environment.dockerfile, slug: "shared")
+      else
+        Config::ImageSpec.registry(environment.image)
       end
     end
 

@@ -35,6 +35,18 @@ module Lemans
 
       def model = models.first
 
+      def to_h
+        {
+          "name" => name,
+          "model" => models,
+          "timeout" => timeout,
+          "step_limit" => step_limit,
+          "cost_limit" => cost_limit,
+          "exec_timeout" => exec_timeout,
+          "environment" => { "network" => environment.network.to_h }
+        }.compact
+      end
+
       Environment = Struct.new(:network, keyword_init: true)
 
       def initialize(name, model)

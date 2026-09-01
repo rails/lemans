@@ -47,11 +47,10 @@ class ConfigEnvironmentTest < Minitest::Test
 
     assert_equal "docker/Dockerfile", env.dockerfile
 
-    error = assert_raises(Lemans::ConfigError) do
-      Lemans::Config::Environment.from_config({ "image" => "ruby:3.4", "dockerfile" => "docker/Dockerfile" })
-    end
+    both = Lemans::Config::Environment.from_config({ "image" => "ruby:3.4", "dockerfile" => "docker/Dockerfile" })
 
-    assert_includes error.message, "mutually exclusive"
+    assert_equal "ruby:3.4", both.image
+    assert_equal "docker/Dockerfile", both.dockerfile
   end
 
   def test_profiles

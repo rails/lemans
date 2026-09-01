@@ -33,6 +33,8 @@ module Lemans
         @hosts = hosts
       end
 
+      def to_h = { "mode" => mode, "hosts" => hosts }.compact
+
       # Backends allowlist domains and IP ranges through separate APIs.
       def domains = partitioned_hosts.last
 

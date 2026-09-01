@@ -13,7 +13,10 @@ module Lemans
           case data
           when Hash
             conf.commands = Array(data["commands"])
-            conf.files = Array(data["files"]).map { [ root.join(it), it ] }
+            conf.files = Array(data["files"]).map do |entry|
+              local, remote = entry.is_a?(Array) ? entry : [ entry, entry ]
+              [ root.join(local), remote ]
+            end
           else
             conf.commands = Array(data)
           end
@@ -38,6 +41,8 @@ module Lemans
       end
 
       def empty? = files.empty? && commands.empty?
+
+      def to_h = { "commands" => commands, "files" => files.map { |local, remote| [ local.to_s, remote ] } }
     end
   end
 end

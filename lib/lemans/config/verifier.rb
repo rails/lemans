@@ -24,6 +24,7 @@ module Lemans
           conf.preverify = data["preverify"] if data["preverify"]
           conf.restore_paths = restore_paths!(data["restore"]) if data["restore"]
           conf.logs_dir = absolute_path!(data["logs_dir"]) if data["logs_dir"]
+          conf.verification = root.join(data["verification"]) if data["verification"]
 
           conf
         end
@@ -41,31 +42,41 @@ module Lemans
         end
       end
 
-      attr_accessor :root, :timeout, :setup, :command, :preverify, :restore_paths, :logs_dir
+      attr_accessor :timeout, :setup, :command, :preverify, :restore_paths, :logs_dir, :verification
 
       def initialize
-        @root = Pathname("./")
         @timeout = 10 * 60
         @setup = Setup.new
         @command = DEFAULT_COMMAND
         @preverify = nil
         @restore_paths = []
         @logs_dir = "/logs/verifier"
+        @verification = nil
       end
 
       def reward_path = "#{logs_dir.chomp("/")}/reward.txt"
 
+      def to_h
+        {
+          "timeout" => timeout,
+          "setup" => setup.to_h,
+          "command" => command,
+          "preverify" => preverify,
+          "restore" => restore_paths,
+          "logs_dir" => logs_dir,
+          "verification" => verification&.to_s
+        }.compact
+      end
+
       # [absolute, remote-relative] pairs. Shared verification files grade
       # every trial, so they ship alongside each task's own tests.
       def files
-        @files ||= begin
-          dir = root.join(VERIFICATION_DIR)
-          if dir.directory?
-            dir.glob("**/*", File::FNM_DOTMATCH).select(&:file?).map { [ it, it.relative_path_from(dir).to_s ] }
+        @files ||=
+          if verification&.directory?
+            verification.glob("**/*", File::FNM_DOTMATCH).select(&:file?).map { [ it, it.relative_path_from(verification).to_s ] }
           else
             []
           end
-        end
       end
     end
   end
