@@ -237,18 +237,27 @@ class TaskDefinitionTest < Minitest::Test
     with_multistep_dir do |dir|
       dir.join("verification_test.1.rb").write("checks\n")
       dir.join("solution.1.patch").write("diff\n")
-      dir.join("solution.patch").write("diff final\n")
+      dir.join("solve.2.sh").write("apply\n")
       task = load_task(dir)
 
       assert_equal [ "verification_test.rb" ], task.for_step(1).test_files.map(&:last)
       assert_predicate task.for_step(1), :verifiable?
-      # The final step is verified and solved as always: the unindexed files.
+      # The final step is verified as always: the regular tests/ directory.
       assert_equal [ "test.sh" ], task.for_step(2).test_files.map(&:last)
-      assert_equal [ [ "solution.1.patch", "solution.patch" ] ],
-                   task.for_step(1).solution_files.map { |local, remote| [ local.basename.to_s, remote ] }
-      assert_equal [ [ "solution.patch", "solution.patch" ] ],
-                   task.for_step(2).solution_files.map { |local, remote| [ local.basename.to_s, remote ] }
-      assert_predicate task, :solution?
+      # Solutions chain, so an indexed final one completes the sequence.
+      assert_equal [ "solution.patch" ], task.for_step(1).solution_files.map(&:last)
+      assert_equal [ "solve.sh" ], task.for_step(2).solution_files.map(&:last)
+      assert_predicate task.for_step(2), :solution?
+    end
+  end
+
+  def test_a_lone_solution_patch_solves_the_whole_multistep_task
+    with_multistep_dir do |dir|
+      dir.join("solution.patch").write("diff all\n")
+      task = load_task(dir)
+
+      assert_empty task.for_step(1).solution_files
+      assert_equal [ "solution.patch" ], task.for_step(2).solution_files.map(&:last)
     end
   end
 
@@ -262,8 +271,7 @@ class TaskDefinitionTest < Minitest::Test
 
       assert_equal [ "verify" ], task.for_step(1).test_files.map(&:last)
       assert_equal [ "solve.sh" ], task.for_step(1).solution_files.map(&:last)
-      # Step 2 has no solution, so the oracle cannot prove the whole task.
-      refute_predicate task, :solution?
+      assert_empty task.for_step(2).solution_files
     end
   end
 
@@ -281,15 +289,16 @@ class TaskDefinitionTest < Minitest::Test
 
       error = assert_raises(Lemans::ConfigError) { load_task(dir) }
 
-      assert_includes error.message, "final step keeps the unindexed names"
+      assert_includes error.message, "final verification keeps the unindexed name"
     end
 
     with_multistep_dir do |dir|
-      dir.join("solution.2.patch").write("diff\n")
+      dir.join("solution.1.patch").write("diff\n")
+      dir.join("solution.patch").write("diff all\n")
 
       error = assert_raises(Lemans::ConfigError) { load_task(dir) }
 
-      assert_includes error.message, "final step keeps the unindexed names"
+      assert_includes error.message, "one or the other, not both"
     end
 
     with_multistep_dir do |dir|

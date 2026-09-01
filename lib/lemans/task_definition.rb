@@ -25,8 +25,8 @@ module Lemans
     STEP_SOLUTIONS = { "solution.%d" => :dir, "solution.%d.patch" => FLAT_SOLUTION,
                        "solve.%d" => "solve", "solve.%d.sh" => "solve.sh" }.freeze
 
-    STEP_FILE = /\A(?:tests\.(?<step>\d+)|verification_test\.(?<step>\d+)\.rb|verify\.(?<step>\d+)|
-                     solution\.(?<step>\d+)(?:\.patch)?|solve\.(?<step>\d+)(?:\.sh)?)\z/x
+    STEP_FILE = /\A(?:tests\.(?<test>\d+)|verification_test\.(?<test>\d+)\.rb|verify\.(?<test>\d+)|
+                     solution\.(?<solution>\d+)(?:\.patch)?|solve\.(?<solution>\d+)(?:\.sh)?)\z/x
 
     class << self
       def load_from_directory(config, dir)
@@ -117,6 +117,7 @@ module Lemans
                              "separate step instructions with --- (the first section is the shared preamble)"
         end
 
+        indexed_solutions = false
         task.dir.children.each do |entry|
           match = STEP_FILE.match(entry.basename.to_s) or next
           name = entry.basename
@@ -124,15 +125,22 @@ module Lemans
           raise ConfigError, "#{task.dir}: #{name} is an indexed step file, but the task is not multistep: true" unless
             task.multistep?
 
-          step = match[:step].to_i
-          if step == task.steps
-            raise ConfigError, "#{task.dir}: #{name} indexes the final step — the final step keeps " \
-                               "the unindexed names"
-          end
-
+          step = (match[:test] || match[:solution]).to_i
           raise ConfigError, "#{task.dir}: #{name} names step #{step}, but the task has #{task.steps} steps" unless
-            step.between?(1, task.steps - 1)
+            step.between?(1, task.steps)
+
+          if match[:solution]
+            indexed_solutions = true
+          elsif step == task.steps
+            raise ConfigError, "#{task.dir}: #{name} indexes the final step — the final verification keeps " \
+                               "the unindexed name"
+          end
         end
+
+        return unless indexed_solutions && task.solution_files.any?
+
+        raise ConfigError, "#{task.dir}: #{FLAT_SOLUTION} is the whole task's solution while indexed step solutions " \
+                           "chain step by step — ship one or the other, not both"
       end
 
       # Collisions would be resolved by upload order, so a task never gets to
@@ -218,16 +226,15 @@ module Lemans
     def verifiable? = test_files.any?
 
     def solution_files
-      return step_files(STEP_SOLUTIONS) if step && !final_step?
+      if step
+        return step_files(STEP_SOLUTIONS) if indexed_solutions?
+        return [] unless final_step?
+      end
 
       solution_dir.directory? ? expand(solution_dir) : flat(FLAT_SOLUTION)
     end
 
-    def solution?
-      return (1..steps).all? { for_step(it).solution? } if multistep? && step.nil?
-
-      solution_files.any?
-    end
+    def solution? = solution_files.any?
 
     def tests_dir = dir.join(TESTS_DIR)
 
@@ -265,9 +272,11 @@ module Lemans
       @sections ||= body.split(STEP_SEPARATOR)
     end
 
-    def step_files(patterns)
+    def indexed_solutions? = (1..steps).any? { step_files(STEP_SOLUTIONS, it).any? }
+
+    def step_files(patterns, index = step)
       patterns.flat_map do |pattern, remote|
-        path = dir.join(format(pattern, step))
+        path = dir.join(format(pattern, index))
         if remote == :dir
           path.directory? ? expand(path) : []
         else

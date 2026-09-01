@@ -49,6 +49,25 @@ class OracleTest < Minitest::Test
     end
   end
 
+  def test_a_lone_solution_patch_lands_on_the_final_step_only
+    with_task_dir("whole") do |dir|
+      dir.join("instruction.md").write("---\nmultistep: true\n---\nP.\n\n---\n\nS1.\n\n---\n\nS2.\n")
+      dir.join("solution.patch").write("diff all\n")
+      task = Lemans::TaskDefinition.load_from_directory(load_config, dir)
+      fake = TestEnvironment.new
+
+      response = oracle.run(task.for_step(1), fake)
+
+      assert_equal :completed, response.outcome.status
+      assert_empty fake.commands
+
+      oracle.run(task.for_step(2), fake)
+
+      assert_includes fake.uploads.map(&:last), "/solution/solution.patch"
+      assert_includes fake.commands.fetch(0), "git apply"
+    end
+  end
+
   def test_a_solution_with_neither_entrypoint_nor_patch_is_the_authors_bug
     with_solution("README.md" => "nothing runnable") do |task|
       error = assert_raises(Lemans::ConfigError) { oracle.run(task, TestEnvironment.new) }
