@@ -7,7 +7,7 @@ require "pathname"
 module Lemans
   # Benchmark configuration and task definitions container.
   class Config
-    attr_reader :root, :config_path, :tasks_dir, :version,
+    attr_reader :root, :config_path, :parent, :tasks_dir, :version,
                 :backend, :concurrency, :attempts
 
     # Nested configs
@@ -15,12 +15,16 @@ module Lemans
 
     using Ext::DeepMerge
 
+    FILENAMES = %w[bench.yaml bench.yml].freeze
+
     class << self
-      def load_file(path)
+      # A task directory's bench.yml is loaded with the bench as its `parent`:
+      # inherit_from is implied.
+      def load_file(path, parent: nil)
         path = File.dirname(path) if File.file?(path)
         raise ConfigError, "bench directory not found: #{path}" unless File.directory?(path)
 
-        config_name = %w[bench.yaml bench.yml].find { File.file?(File.join(path, it)) }
+        config_name = FILENAMES.find { File.file?(File.join(path, it)) }
 
         raise ConfigError, "bench.yml not found" unless config_name
 
@@ -31,13 +35,15 @@ module Lemans
 
         root = Pathname(path)
 
-        if (inherited = contents["inherit_from"])
+        parent = load_file(root.join(contents["inherit_from"])) if contents["inherit_from"]
+
+        if parent
           # Local conventions win over the inherited config (unless declared, even as ~)
           environment = (contents["environment"] ||= {})
           environment["dockerfile"] = root.join("environment/Dockerfile").to_s if root.join("environment/Dockerfile").file? && !environment.key?("dockerfile")
           verifier = (contents["verifier"] ||= {})
           verifier["verification"] = root.join(Verifier::VERIFICATION_DIR).to_s if root.join(Verifier::VERIFICATION_DIR).directory? && !verifier.key?("verification")
-          contents = load_file(root.join(inherited)).to_h.deep_merge(contents)
+          contents = parent.to_h.deep_merge(contents)
         end
 
         sections = {}
@@ -55,17 +61,18 @@ module Lemans
           sections[:setup].commands = Array(commands) + sections[:setup].commands
         end
 
-        new(root, config_path:, **sections)
+        new(root, config_path:, parent:, **sections)
       rescue Psych::Exception => e
         raise ConfigError, "#{path}: #{e.message}"
       end
     end
 
-    def initialize(root = Pathname("./"), config_path: Pathname("./bench.yml"), version: nil, tasks_dir: "tasks",
+    def initialize(root = Pathname("./"), config_path: Pathname("./bench.yml"), parent: nil, version: nil, tasks_dir: "tasks",
                    setup: nil, agent: Agent.new("miniswen", "openrouter/z-ai/glm-5.2"),
                    environment: Environment.new, verifier: Verifier.new)
       @root = root
       @config_path = config_path
+      @parent = parent
       @version = version
       @tasks_dir = root.join(tasks_dir)
       @setup = setup || Setup.new
@@ -89,6 +96,7 @@ module Lemans
       @attempts = attempts if attempts
       @concurrency = concurrency if concurrency
       @backend = environment.backend = backend if backend
+      tasks.each { it.config.load_options(agent:, model:, attempts:, concurrency:, backend:) unless it.config.equal?(self) }
     end
 
     def agent_name = agent.name
@@ -121,6 +129,7 @@ module Lemans
         sha << TreeDigest.call(environment.dockerfile.dirname) if environment.dockerfile
         environment.profiles.each_value { sha << TreeDigest.call(it.dockerfile.dirname) if it.dockerfile }
         sha << Digest::SHA256.file(config_path.to_s).hexdigest if config_path.file?
+        sha << parent.digest if parent
         sha.hexdigest[0, 16]
       end
     end

@@ -69,7 +69,7 @@ module Lemans
         run.task == task.name &&
           run.model == (model || config.agent.model) &&
           run.agent == config.agent_name &&
-          run.profile_digest == config.digest &&
+          run.profile_digest == task.config.digest &&
           run.task_digest == task.digest &&
           run.scored?
       end

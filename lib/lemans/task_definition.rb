@@ -36,6 +36,7 @@ module Lemans
       def load_from_directory(config, dir)
         dir = Pathname(dir)
         data = frontmatter(dir)
+        config = Config.load_file(dir, parent: config) if Config::FILENAMES.any? { dir.join(it).file? }
 
         task = new(config, data["name"] || dir.basename.to_s, dir:)
         task.description = data["description"].to_s if data["description"]

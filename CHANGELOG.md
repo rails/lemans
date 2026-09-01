@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-- Add `inherit_from: ../bench.yml`.
+- Add `inherit_from: ../bench.yml` and support per-task overrides via `bench.yml` in a task directory.
 - Multistep tasks support.
 - Support named Docker envs via `environment.profiles` and `environment: <name>` in a task's frontmatter.
 
