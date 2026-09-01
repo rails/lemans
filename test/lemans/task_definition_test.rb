@@ -275,6 +275,59 @@ class TaskDefinitionTest < Minitest::Test
     end
   end
 
+  def test_a_shared_tests_directory_ships_its_helpers_with_every_step
+    with_multistep_dir do |dir|
+      dir.join("tests/helpers.rb").write("module Helpers; end\n")
+      dir.join("tests/fixtures").mkpath
+      dir.join("tests/fixtures/seed.json").write("{}\n")
+      dir.join("tests/verification_test.1.rb").write("step one checks\n")
+      dir.join("tests/verification_test.rb").write("final checks\n")
+      task = load_task(dir)
+
+      first = task.for_step(1).test_files.to_h { |local, remote| [ remote, local.basename.to_s ] }
+
+      # The helpers ride along, the step's own test takes the unindexed name,
+      # and the final step's checks stay out of reach.
+      assert_equal({ "helpers.rb" => "helpers.rb", "fixtures/seed.json" => "seed.json",
+                     "verification_test.rb" => "verification_test.1.rb" }, first)
+
+      last = task.for_step(2).test_files.to_h { |local, remote| [ remote, local.basename.to_s ] }
+
+      assert_equal({ "helpers.rb" => "helpers.rb", "fixtures/seed.json" => "seed.json", "test.sh" => "test.sh",
+                     "verification_test.rb" => "verification_test.rb" }, last)
+    end
+  end
+
+  def test_a_step_without_its_own_test_runs_unverified_despite_shared_helpers
+    with_multistep_dir do |dir|
+      dir.join("tests/helpers.rb").write("module Helpers; end\n")
+      task = load_task(dir)
+
+      assert_empty task.for_step(1).test_files
+      refute_predicate task.for_step(1), :verifiable?
+      assert_equal %w[helpers.rb test.sh], task.for_step(2).test_files.map(&:last).sort
+    end
+  end
+
+  def test_indexed_tests_inside_the_shared_directory_are_validated
+    with_multistep_dir do |dir|
+      dir.join("tests/verification_test.2.rb").write("checks\n")
+
+      error = assert_raises(Lemans::ConfigError) { load_task(dir) }
+
+      assert_includes error.message, "tests/verification_test.2.rb"
+      assert_includes error.message, "final verification keeps the unindexed name"
+    end
+
+    with_multistep_dir do |dir|
+      dir.join("tests/verify.3").write("#!/bin/sh\n")
+
+      error = assert_raises(Lemans::ConfigError) { load_task(dir) }
+
+      assert_includes error.message, "the task has 2 steps"
+    end
+  end
+
   def test_indexed_step_files_are_validated
     with_task_dir("stray") do |dir|
       dir.join("verification_test.1.rb").write("checks\n")

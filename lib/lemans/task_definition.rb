@@ -22,6 +22,10 @@ module Lemans
     STEP_SEPARATOR = /^---[ \t]*\n/
 
     STEP_TESTS = { "tests.%d" => :dir, "verification_test.%d.rb" => FLAT_TEST, "verify.%d" => "verify" }.freeze
+    # The same step files, kept inside the shared tests/ directory
+    SHARED_STEP_TESTS = { "verification_test.%d.rb" => FLAT_TEST, "verify.%d" => "verify" }.freeze
+    # What the final step alone runs (see Config::Verifier::DEFAULT_COMMAND): never shipped to an earlier step
+    FINAL_STEP_TESTS = [ FLAT_TEST, "verify", "test.sh" ].freeze
     STEP_SOLUTIONS = { "solution.%d" => :dir, "solution.%d.patch" => FLAT_SOLUTION,
                        "solve.%d" => "solve", "solve.%d.sh" => "solve.sh" }.freeze
 
@@ -118,9 +122,12 @@ module Lemans
         end
 
         indexed_solutions = false
-        task.dir.children.each do |entry|
+        entries = task.dir.children
+        # Only step tests may carry an index inside tests/; a solution there is just a file.
+        entries += task.tests_dir.children.select { |entry| entry.file? && STEP_FILE.match(entry.basename.to_s)&.[](:test) } if task.tests_dir.directory?
+        entries.each do |entry|
           match = STEP_FILE.match(entry.basename.to_s) or next
-          name = entry.basename
+          name = entry.relative_path_from(task.dir)
 
           raise ConfigError, "#{task.dir}: #{name} is an indexed step file, but the task is not multistep: true" unless
             task.multistep?
@@ -217,10 +224,18 @@ module Lemans
 
     # [absolute, remote-relative] pairs. Tests stay on the harness side while
     # the agent works; uploaded into the sandbox only at verification.
+    #
+    # A multistep task keeps one tests/ directory: whatever in it carries no
+    # step index (helpers, fixtures) ships with every verified step, the
+    # step's own verification_test.N.rb ships as verification_test.rb, and
+    # the unindexed verification_test.rb stays with the final step.
     def test_files
-      return step_files(STEP_TESTS) if step && !final_step?
+      return final_test_files unless step && !final_step?
 
-      tests_dir.directory? ? expand(tests_dir) : flat(FLAT_TEST)
+      indexed = step_files(STEP_TESTS) + step_files(SHARED_STEP_TESTS, root: tests_dir)
+      return [] if indexed.empty?
+
+      shared_test_files.reject { |_, remote| FINAL_STEP_TESTS.include?(remote) } + indexed
     end
 
     def verifiable? = test_files.any?
@@ -274,9 +289,18 @@ module Lemans
 
     def indexed_solutions? = (1..steps).any? { step_files(STEP_SOLUTIONS, it).any? }
 
-    def step_files(patterns, index = step)
+    def final_test_files = tests_dir.directory? ? shared_test_files : flat(FLAT_TEST)
+
+    # Everything under tests/ that no step claims for itself
+    def shared_test_files
+      return [] unless tests_dir.directory?
+
+      expand(tests_dir).reject { |_, remote| STEP_FILE.match?(remote) }
+    end
+
+    def step_files(patterns, index = step, root: dir)
       patterns.flat_map do |pattern, remote|
-        path = dir.join(format(pattern, index))
+        path = root.join(format(pattern, index))
         if remote == :dir
           path.directory? ? expand(path) : []
         else
