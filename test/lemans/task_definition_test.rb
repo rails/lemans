@@ -251,13 +251,15 @@ class TaskDefinitionTest < Minitest::Test
     end
   end
 
-  def test_a_lone_solution_patch_solves_the_whole_multistep_task
+  def test_a_lone_solution_patch_solves_the_whole_multistep_task_from_step_one
     with_multistep_dir do |dir|
       dir.join("solution.patch").write("diff all\n")
       task = load_task(dir)
 
-      assert_empty task.for_step(1).solution_files
-      assert_equal [ "solution.patch" ], task.for_step(2).solution_files.map(&:last)
+      assert_equal [ "solution.patch" ], task.for_step(1).solution_files.map(&:last)
+      assert_empty task.for_step(2).solution_files
+      refute_predicate task.for_step(1), :solution_applied_earlier?
+      assert_predicate task.for_step(2), :solution_applied_earlier?
     end
   end
 
@@ -295,6 +297,19 @@ class TaskDefinitionTest < Minitest::Test
 
       assert_equal({ "helpers.rb" => "helpers.rb", "fixtures/seed.json" => "seed.json", "test.sh" => "test.sh",
                      "verification_test.rb" => "verification_test.rb" }, last)
+    end
+  end
+
+  def test_a_flat_final_test_rides_with_the_shared_directory
+    with_multistep_dir do |dir|
+      dir.join("tests/helpers.rb").write("module Helpers; end\n")
+      dir.join("verification_test.rb").write("final checks\n")
+      dir.join("verification_test.1.rb").write("step one checks\n")
+      task = load_task(dir)
+
+      assert_equal %w[helpers.rb test.sh verification_test.rb],
+                   task.for_step(2).test_files.map(&:last).sort
+      assert_equal "verification_test.rb", task.for_step(2).test_files.to_h { |l, r| [ r, l.basename.to_s ] }.dig("verification_test.rb")
     end
   end
 

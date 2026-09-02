@@ -241,13 +241,21 @@ module Lemans
 
     def verifiable? = test_files.any?
 
+    # A lone whole-task solution is applied before the first step: intermediate
+    # gates must see it, and later steps have nothing left to add.
     def solution_files
       if step
         return step_files(STEP_SOLUTIONS) if indexed_solutions?
-        return [] unless final_step?
+        return [] if multistep? && step > 1
       end
 
       solution_dir.directory? ? expand(solution_dir) : flat(FLAT_SOLUTION)
+    end
+
+    # True for the later steps of a multistep task whose lone solution already
+    # shipped with step 1
+    def solution_applied_earlier?
+      !!(step && step > 1 && !indexed_solutions? && (solution_dir.directory? || dir.join(FLAT_SOLUTION).file?))
     end
 
     def solution? = solution_files.any?
@@ -290,7 +298,12 @@ module Lemans
 
     def indexed_solutions? = (1..steps).any? { step_files(STEP_SOLUTIONS, it).any? }
 
-    def final_test_files = tests_dir.directory? ? shared_test_files : flat(FLAT_TEST)
+    # A task may keep its final test flat at the root and use tests/ for shared files
+    def final_test_files
+      return flat(FLAT_TEST) unless tests_dir.directory?
+
+      shared_test_files + flat(FLAT_TEST)
+    end
 
     # Everything under tests/ that no step claims for itself
     def shared_test_files

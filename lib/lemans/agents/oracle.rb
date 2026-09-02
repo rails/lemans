@@ -16,7 +16,8 @@ module Lemans
       def run(task, environment)
         files = task.solution_files
         if files.empty?
-          raise ConfigError, "#{task.name}: no solution/ to run — the oracle has nothing to prove" if task.verifiable?
+          raise ConfigError, "#{task.name}: no solution/ to run — the oracle has nothing to prove" if
+            task.verifiable? && !task.solution_applied_earlier?
 
           return Response.new(outcome: Result::Outcome.new(:completed), usage: Result::Usage.zero)
         end
