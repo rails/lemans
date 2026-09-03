@@ -13,13 +13,13 @@
 #     exe/lemans-remote provision
 #
 #   Fire-and-forget a bench run on remote Daytona sandboxes — one sandbox
-#   per task (--run-in-band for a single sandbox, --attempts N to repeat
-#   each task in N sandboxes); results are archived to the
+#   per task × model (--run-in-band for a single sandbox, --attempts N to
+#   repeat each task in N sandboxes); results are archived to the
 #   lemans-remote-runs volume. Add --sync to wait for a single sandbox
 #   and download into ./runs directly instead:
 #
 #     exe/lemans-remote run --bench ../ai-evals --task hello-world
-#     exe/lemans-remote run --bench ../ai-evals --model openrouter/z-ai/glm-5.2 --args="-k 2 -c 8"
+#     exe/lemans-remote run --bench ../ai-evals --model openrouter/z-ai/glm-5.2 --model openrouter/qwen/qwen3.5-coder --args="-k 2 -c 8"
 #
 #   Retry invalid local results (agent/infra errors, not negative rewards):
 #   launches one sandbox per invalid (task, model) group — a single retried
@@ -834,7 +834,8 @@ module LemansRemote # :nodoc: all
           retry_groups.each { say_status :retry, "#{it.task} (#{it.model}) — #{it.dirs.size} invalid attempt(s), retrying one" }
           retry_groups.map { [ [ it.task ], models.any? ? models : [ it.model ].compact, nil, it ] }
         else
-          plan_batches(bench, tasks).flat_map { |batch| (1..attempts).map { [ batch, models, attempts > 1 ? it : nil, nil ] } }
+          plan_batches(bench, tasks).product(plan_models(bench, models), (1..attempts).to_a)
+                                    .map { |batch, batch_models, attempt| [ batch, batch_models, attempts > 1 ? attempt : nil, nil ] }
         end
       raise Thor::Error, "lemans-remote: --sync runs a single sandbox — #{jobs.size} invalid group(s) to retry" if options[:sync] && jobs.size > 1
 
@@ -851,8 +852,8 @@ module LemansRemote # :nodoc: all
 
       fanout =
         if retry_groups then "one per invalid (task, model) group"
-        elsif attempts > 1 then "#{jobs.size / attempts} task batch(es) × #{attempts} attempts"
-        else "one per task"
+        elsif attempts > 1 then "#{jobs.size / attempts} task × model batch(es) × #{attempts} attempts"
+        else "one per task × model"
         end
       say_status :fanout, "#{jobs.size} sandboxes, #{fanout}, #{options[:concurrency].to_i} at a time"
       failures, retried = launch_batches(bench, jobs, provisioner)
@@ -1096,6 +1097,13 @@ module LemansRemote # :nodoc: all
 
       expanded = tasks.any? ? tasks : bench.tasks.map(&:name)
       expanded.map { [ it ] }
+    end
+
+    def plan_models(bench, models)
+      return [ models ] if options[:sync] || options[:run_in_band]
+
+      expanded = models.any? ? models : bench.models
+      expanded.size > 1 ? expanded.map { [ it ] } : [ models ]
     end
 
     def launch_batch(bench, tasks, models, provisioner, attempt: nil)
