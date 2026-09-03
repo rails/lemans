@@ -55,17 +55,18 @@ class TaskDefinitionTest < Minitest::Test
 
   def test_base_reward
     with_task_dir("weighted") do |dir|
-      dir.join("instruction.md").write("---\nbase_reward: 25\n---\nFix it.\n")
-      task = load_task(dir)
+      [ 0, 0.8, 1 ].each do |value|
+        dir.join("instruction.md").write("---\nbase_reward: #{value}\n---\nFix it.\n")
 
-      assert_in_delta 25.0, task.base_reward
+        assert_in_delta value, load_task(dir).base_reward
+      end
 
-      [ 0, -1, ".nan", "many" ].each do |value|
+      [ -0.1, 1.1, ".nan", ".inf", "-.inf", "many" ].each do |value|
         dir.join("instruction.md").write("---\nbase_reward: #{value}\n---\nFix it.\n")
 
         error = assert_raises(Lemans::ConfigError) { load_task(dir) }
 
-        assert_includes error.message, "base_reward must be finite and greater than zero"
+        assert_includes error.message, "base_reward must be between 0 and 1"
       end
     end
   end

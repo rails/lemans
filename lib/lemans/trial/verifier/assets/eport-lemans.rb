@@ -12,7 +12,7 @@ module LemansReport
     @registered = true
     require_relative "lemans_minitest_reporter"
     ::Minitest.singleton_class.define_method(:plugin_lemans_report_init) do |_options|
-      LemansReport.finish_test_dsl!
+      LemansReport.finish_extra_test_dsl!
       dir = ENV["LOGS"]
       reporter << Reporter.new(dir) if dir && File.directory?(dir)
     end

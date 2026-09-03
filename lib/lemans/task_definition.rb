@@ -119,12 +119,12 @@ module Lemans
 
       def base_reward!(value)
         reward = Float(value)
-        raise ConfigError, "base_reward must be finite and greater than zero, got #{value.inspect}" unless
-          reward.finite? && reward.positive?
+        raise ConfigError, "base_reward must be between 0 and 1, got #{value.inspect}" unless
+          reward.finite? && reward.between?(0.0, 1.0)
 
         reward
       rescue ArgumentError, TypeError
-        raise ConfigError, "base_reward must be finite and greater than zero, got #{value.inspect}"
+        raise ConfigError, "base_reward must be between 0 and 1, got #{value.inspect}"
       end
 
       def validate_steps!(task)
