@@ -50,12 +50,14 @@ module Lemans
         # One definition of the numbers everyone quotes — total, scored,
         # invalid, solved — so the views can never drift apart.
         def tally(rows)
-          scored = rows.count { it[:scored] }
+          scored_rows = rows.select { it[:scored] }
+          rewards = scored_rows.filter_map { it[:reward] }
           {
             total: rows.size,
-            scored:,
-            invalid: rows.size - scored,
-            solved: rows.count { it[:reward].to_f >= 1.0 }
+            scored: scored_rows.size,
+            invalid: rows.size - scored_rows.size,
+            solved: scored_rows.count { it[:reward].to_f >= 1.0 },
+            score: rewards.empty? ? nil : rewards.sum(0.0) / rewards.size
           }
         end
 
@@ -136,8 +138,9 @@ module Lemans
       def stats(group)
         totals = self.class.tally(group).merge(cost_usd: group.sum { it[:cost_usd].to_f })
         rank = totals[:scored].positive? ? " (#{(100.0 * totals[:solved] / totals[:scored]).round}%)" : ""
+        score = totals[:score] && " · score #{format("%g", totals[:score].round(4))}"
         "#{totals[:total]} trials: #{totals[:scored]} scored, #{totals[:invalid]} invalid, " \
-          "#{totals[:solved]} solved#{rank} · $#{format("%.4f", totals[:cost_usd])}#{pass_at_k(group)}"
+          "#{totals[:solved]} solved#{rank}#{score} · $#{format("%.4f", totals[:cost_usd])}#{pass_at_k(group)}"
       end
 
       def pass_at_k(group)

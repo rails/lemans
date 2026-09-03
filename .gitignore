@@ -6,6 +6,7 @@
 /pkg/
 /spec/reports/
 /tmp/
+.vscode/
 
 Gemfile.lock
 runs/

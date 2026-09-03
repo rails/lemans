@@ -52,6 +52,7 @@ class CLIReportTest < Minitest::Test
       assert_equal "-", invalid[rows.first.index("reward")]
       assert_equal "-", invalid[rows.first.index("tokens")]
       assert_includes report.summary_lines.join("\n"), "3 trials: 2 scored, 1 invalid, 1 solved (50%)"
+      assert_includes report.summary_lines.join("\n"), "score 0.5"
     end
   end
 

@@ -92,6 +92,7 @@ module Lemans
         env = { "WORKDIR" => task.environment.workdir,
                 "TESTS" => TESTS_DIR,
                 "LOGS" => task.verifier.logs_dir }
+        env["LEMANS_BASE_REWARD"] = task.base_reward.to_s if task.base_reward
         command = "cd #{Shellwords.escape(task.environment.workdir)} && " \
                   "export RUBYOPT=\"${RUBYOPT:+$RUBYOPT }-I#{TESTS_DIR}\" && " \
                   "#{verifier_script}"

@@ -38,7 +38,7 @@ module Lemans
             if keys.include?(column)
               Report.sort_rows(@groups) { it[column].to_s }
             elsif column == :score
-              Report.sort_rows(@groups, descending: true) { [ Rational(it[:solved], it[:attempts]), it[:attempts] ] }
+              Report.sort_rows(@groups, descending: true) { it[:score] }
             else
               Report.sort_rows(@groups, descending: true) { it[METRIC_SOURCES.fetch(column)] }
             end
@@ -49,7 +49,7 @@ module Lemans
           [ keys.map(&:to_s) + METRICS.map(&:to_s) ] +
             @groups.map do |group|
               keys.map { |key| display_key(key, group[key]) } + [
-                "#{group[:solved]}/#{group[:attempts]}",
+                mean_display(group[:score], 4),
                 time(group[:duration]),
                 cost(group[:cost_usd]),
                 mean_display(group[:steps], 1),
@@ -59,7 +59,7 @@ module Lemans
         end
 
         def to_csv
-          columns = keys + %i[solved attempts duration cost_usd steps tokens]
+          columns = keys + %i[score solved attempts duration cost_usd steps tokens]
           CSV.generate do |csv|
             csv << columns
             @groups.each { |group| csv << columns.map { group[it] } }
@@ -75,8 +75,10 @@ module Lemans
         # Attempts count every run; means and the median skip runs that never
         # measured the value, so one invalid trial cannot zero out a cell.
         def build(values, group)
+          tally = Report.tally(group)
           keys.zip(values).to_h.merge(
-            solved: Report.tally(group)[:solved],
+            score: tally[:score],
+            solved: tally[:solved],
             attempts: group.size,
             duration: median(group.filter_map { it[:duration] }),
             cost_usd: mean(group.filter_map { it[:cost_usd] }),

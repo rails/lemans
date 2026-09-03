@@ -142,18 +142,41 @@ A minimal task example—checking whether an agent can write "Hello, world" into
   +Hello, world
   ```
 
-- `verification_test.rb`: a Ruby test that grades the solution (pass → 1, fail → 0; for partial credit, write a float in 0.0..1.0 to `$LOGS/reward.txt` instead). We use Minitest:
+- `verification_test.rb`: a Ruby test that grades the solution. Tests without a
+  reward are required; if any of them fail, error, or skip, the task scores 0.
+  A test declared with `reward:` is optional and adds that many points when it
+  passes. Lemans divides earned points by all available points, so the stored
+  reward is always in 0.0..1.0. We use Minitest:
 
   ```ruby
   require "minitest/autorun"
 
   class HelloWorldTest < Minitest::Test
-    def test_the_greeting_landed
+    test "the greeting landed" do
       assert File.exist?("/app/hello_world.md"), "expected /app/hello_world.md to exist"
+    end
+
+    test "the greeting is exact", reward: 10 do
       assert_equal "Hello, world", File.read("/app/hello_world.md").strip
     end
   end
   ```
+
+  Set the points awarded for passing all required tests in the task's
+  `instruction.md` frontmatter:
+
+  ```yaml
+  ---
+  base_reward: 40
+  ---
+  ```
+
+  In this example, passing the required test earns 40 points and the optional
+  test earns another 10, producing normalized rewards of 0, 0.8, or 1.0.
+  `base_reward` defaults to 1 when weighted tests are present. Positive integer
+  and decimal weights are accepted. A suite without weighted tests keeps the
+  original binary behavior; a custom verifier can still write its own float in
+  0.0..1.0 to `$LOGS/reward.txt`.
 
 The task's contents go to `my-bench/tasks/hello-world`.
 
@@ -215,7 +238,7 @@ ar-announce-once        miniswen-installed  gpt-5.6-luna  1       completed  0.0
 ar-announce-once        miniswen-installed  gpt-5.6-luna  1       completed  0.0106    11     118691  117.8     ar-announce-once__mo6a6zQ
 ar-archive-book-access  miniswen-installed  gpt-5.6-luna  1       completed  0.0128    12     149867  136.2     ar-archive-book-access__oSRKzQc
 ar-archive-book-access  miniswen-installed  gpt-5.6-luna  1       completed  0.0137    13     163943  149.6     ar-archive-book-access__XB5PRL3
-6 trials: 6 scored, 0 invalid, 6 solved (100%) · $0.0801 · pass@2 3/3 tasks (100%)
+6 trials: 6 scored, 0 invalid, 6 solved (100%) · score 1 · $0.0801 · pass@2 3/3 tasks (100%)
 ```
 
 `lemans run` runs all the tasks for the model defined in `bench.yml` and prints the report at the end. You can override the model(s) to use (`--model`), the number of attempts (`--attempts`), or select specific tasks by name (`--task=ac-throttle-search`, may be repeated).
@@ -235,16 +258,16 @@ You can also run `lemans report` with various flags to see aggregated results, e
 $ lemans report -A model # aggregate by model
 
 model         score  time    cost     steps  tokens
-gpt-5.6-luna  6/6    2m 21s  $0.0134  12     145101
-6 trials: 6 scored, 0 invalid, 6 solved (100%) · $0.0801 · pass@2 3/3 tasks (100%)
+gpt-5.6-luna  1      2m 21s  $0.0134  12     145101
+6 trials: 6 scored, 0 invalid, 6 solved (100%) · score 1 · $0.0801 · pass@2 3/3 tasks (100%)
 
 $ lemans report -A model-task # aggregate by model and task
 
 model         task                    score  time    cost     steps  tokens
-gpt-5.6-luna  ac-throttle-search      2/2    2m 21s  $0.0137  11.5   137836
-gpt-5.6-luna  ar-announce-once        2/2    2m 32s  $0.0132  12     140562
-gpt-5.6-luna  ar-archive-book-access  2/2    2m 23s  $0.0132  12.5   156905
-6 trials: 6 scored, 0 invalid, 6 solved (100%) · $0.0801 · pass@2 3/3 tasks (100%)
+gpt-5.6-luna  ac-throttle-search      1      2m 21s  $0.0137  11.5   137836
+gpt-5.6-luna  ar-announce-once        1      2m 32s  $0.0132  12     140562
+gpt-5.6-luna  ar-archive-book-access  1      2m 23s  $0.0132  12.5   156905
+6 trials: 6 scored, 0 invalid, 6 solved (100%) · score 1 · $0.0801 · pass@2 3/3 tasks (100%)
 ```
 
 ## CLI
@@ -254,7 +277,7 @@ gpt-5.6-luna  ar-archive-book-access  2/2    2m 23s  $0.0132  12.5   156905
 | `lemans init` | Scaffold a new bench directory: an annotated `bench.yml` and two example tasks |
 | `lemans tasks` | List the tasks in a bench (`--tag` to filter) |
 | `lemans run` | Run tasks and grade them (`--task`, `--tag`, `--agent`, `--model`, `-k`, `-c`, `--resume`) |
-| `lemans report` | Summarize `runs/` as a table or CSV (`--tag`, `-A [task-agent-model]` to aggregate, `-S <column>` to sort); repeated attempts add pass@k per model × task |
+| `lemans report` | Summarize `runs/` as a table or CSV (`--tag`, `-A [task-agent-model]` to aggregate normalized rewards by their mean, `-S <column>` to sort); repeated attempts add pass@k per model × task |
 | `lemans clobber` | Delete run results (`--task`, `--ttl 10m\|2h\|1d`, `--invalid`, `-f` to skip the confirmation) |
 
 ## miniswen

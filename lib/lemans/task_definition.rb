@@ -45,6 +45,7 @@ module Lemans
         task.metadata = data["metadata"] if data["metadata"]
         task.environment_profile = data["environment"] if data["environment"]
         task.multistep = data["multistep"] if data.key?("multistep")
+        task.base_reward = base_reward!(data["base_reward"]) if data.key?("base_reward")
 
         declared_setup = Config::Setup.from_config(data["setup"], root: dir)
         refuse_config_collisions!(task, declared_setup, config.setup)
@@ -116,6 +117,16 @@ module Lemans
                            "the verifier uploads it at verification time"
       end
 
+      def base_reward!(value)
+        reward = Float(value)
+        raise ConfigError, "base_reward must be finite and greater than zero, got #{value.inspect}" unless
+          reward.finite? && reward.positive?
+
+        reward
+      rescue ArgumentError, TypeError
+        raise ConfigError, "base_reward must be finite and greater than zero, got #{value.inspect}"
+      end
+
       def validate_steps!(task)
         if task.multistep? && task.steps < 2
           raise ConfigError, "#{task.dir}: multistep: true but #{INSTRUCTION} holds a single section — " \
@@ -166,7 +177,7 @@ module Lemans
 
     attr_reader :config, :name, :dir
 
-    attr_accessor :difficulty, :tags, :description, :metadata, :environment_profile, :multistep
+    attr_accessor :difficulty, :tags, :description, :metadata, :environment_profile, :multistep, :base_reward
 
     alias multistep? multistep
 
@@ -180,6 +191,7 @@ module Lemans
       @metadata = {}
       @environment_profile = nil
       @multistep = false
+      @base_reward = nil
 
       @step = nil
       @dir = dir || config.tasks_dir.join(name)

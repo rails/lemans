@@ -1,5 +1,6 @@
 ## [Unreleased]
 
+- Add weighted optional verification tests with `test "...", reward:`, task-level `base_reward`, normalized rewards, and mean aggregate scores.
 - Add `inherit_from: ../bench.yml` and support per-task overrides via `bench.yml` in a task directory.
 - Multistep tasks support.
 - Support named Docker envs via `environment.profiles` and `environment: <name>` in a task's frontmatter.

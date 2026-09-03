@@ -49,6 +49,24 @@ class TaskDefinitionTest < Minitest::Test
       assert_equal :easy, task.difficulty
       assert_empty task.tags
       assert_empty task.metadata
+      assert_nil task.base_reward
+    end
+  end
+
+  def test_base_reward
+    with_task_dir("weighted") do |dir|
+      dir.join("instruction.md").write("---\nbase_reward: 25\n---\nFix it.\n")
+      task = load_task(dir)
+
+      assert_in_delta 25.0, task.base_reward
+
+      [ 0, -1, ".nan", "many" ].each do |value|
+        dir.join("instruction.md").write("---\nbase_reward: #{value}\n---\nFix it.\n")
+
+        error = assert_raises(Lemans::ConfigError) { load_task(dir) }
+
+        assert_includes error.message, "base_reward must be finite and greater than zero"
+      end
     end
   end
 
