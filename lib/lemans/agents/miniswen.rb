@@ -92,7 +92,7 @@ module Lemans
           **totals,
           cost_usd: result.cost_usd,
           # FIXME: need a better way to map Miniswen's cost source to Lemans'
-          cost_source: Result::CostSource.new(**result.cost_source.to_h)
+          cost_source: Result::CostSource.build(**result.cost_source.to_h)
         )
       end
 

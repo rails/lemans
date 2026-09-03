@@ -224,7 +224,7 @@ module Miniswen
     end
 
     CostSource = Data.define(:name, :model, :priced_as, :registry) do
-      def to_h = { name: name, model: model, priced_as: priced_as, registry: registry }.compact
+      def to_h = { name:, model:, priced_as:, registry: }.compact
     end
 
     attr_reader :messages, :environment
