@@ -30,7 +30,7 @@
 #
 #   Then watch, fetch, and clean up:
 #
-#     exe/lemans-remote status [--history] [--running | --complete]
+#     exe/lemans-remote status [--history] [--running | --complete] [-W [INTERVAL]]
 #     exe/lemans-remote pull-runs [RUN_ID ...] [--all] [--dry-run]
 #     exe/lemans-remote drop-orphans [--min-age 10m]
 #     exe/lemans-remote clobber RUN_ID ... | --all
@@ -868,15 +868,19 @@ module LemansRemote # :nodoc: all
     option :history, type: :boolean, default: false, desc: "Also read the vault manifests (spins a short-lived helper sandbox)"
     option :running, type: :boolean, default: false, desc: "Only show runs still in flight"
     option :complete, type: :boolean, default: false, desc: "Only show finished runs (success, failed, or stale)"
-    option :watch, type: :boolean, default: false, aliases: "-W", desc: "Redraw the table every 5 seconds until interrupted"
+    option :watch, aliases: "-W", banner: "INTERVAL", lazy_default: "5s",
+                   desc: "Redraw the table every INTERVAL (default 5s) until interrupted"
     def status
       no_watch_history = "lemans-remote: --watch cannot be combined with --history (each refresh would spin a helper sandbox)"
       raise Thor::Error, no_watch_history if options[:watch] && options[:history]
       return print_status unless options[:watch]
 
+      interval = seconds!(options[:watch])
+      raise Thor::Error, "lemans-remote: --watch interval must be positive" unless interval.positive?
+
       loop do
         print "\e[H\e[2J"
-        say "lemans-remote status — #{Time.now.strftime("%H:%M:%S")}, refreshing every 5s (^C to stop)"
+        say "lemans-remote status — #{Time.now.strftime("%H:%M:%S")}, refreshing every #{interval.to_i}s (^C to stop)"
         begin
           unless print_status
             say_status :done, "no running sandboxes — stopping watch", :green
@@ -885,7 +889,7 @@ module LemansRemote # :nodoc: all
         rescue StandardError => e
           say_status :error, e.message, :red
         end
-        sleep 5
+        sleep interval
       end
     rescue Interrupt
       say ""
