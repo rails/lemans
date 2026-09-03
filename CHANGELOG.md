@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Fix Dockerfile resolution when profiles are used and per-task `bench.yml` exists.
+
 ## [1.2.0] - 2026-09-02
 
 - `allow_failure { ... }` (`LemansReport::Assertions`) for verification checks that are recorded in `checks.json` but do not grade the run.

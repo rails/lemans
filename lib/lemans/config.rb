@@ -33,7 +33,7 @@ module Lemans
         contents = YAML.safe_load_file(config_path.to_s, aliases: true) || {}
         raise ConfigError, "#{path}: #{config_name} must be a mapping of sections" unless contents.is_a?(Hash)
 
-        root = Pathname(path)
+        root = Pathname(path).expand_path
 
         parent = load_file(root.join(contents["inherit_from"])) if contents["inherit_from"]
 

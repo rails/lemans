@@ -77,6 +77,45 @@ class ConfigTest < Minitest::Test
     end
   end
 
+  def test_inherited_paths_anchor_once
+    Dir.mktmpdir do |dir|
+      root = Pathname(dir)
+      root.join("fixtures").mkpath
+      root.join("fixtures/seed.sql").write("select 1;\n")
+      root.join("verification").mkpath
+      root.join("bench.yml").write(<<~YAML)
+        setup: { files: [fixtures/seed.sql] }
+        environment:
+          image: ruby:3.4
+          profiles:
+            campfire:
+              dockerfile: docker/campfire/Dockerfile
+      YAML
+      root.join("docker/campfire").mkpath
+      root.join("docker/campfire/Dockerfile").write("FROM scratch\n")
+      root.join("tasks/bots/tests").mkpath
+      root.join("tasks/bots/tests/test.sh").write("exit 0\n")
+      root.join("tasks/bots/instruction.md").write("---\nenvironment: campfire\n---\nGo.\n")
+      root.join("tasks/bots/bench.yml").write("verifier: { timeout: 1h }\n")
+      root.join("tasks/local/tests").mkpath
+      root.join("tasks/local/tests/test.sh").write("exit 0\n")
+      root.join("tasks/local/instruction.md").write("Go.\n")
+      root.join("tasks/local/environment").mkpath
+      root.join("tasks/local/environment/Dockerfile").write("FROM ruby\n")
+      root.join("tasks/local/bench.yml").write("verifier: { timeout: 1h }\n")
+
+      config = Lemans::Config.load_file(root.relative_path_from(Pathname.pwd).to_s)
+      bots, local = %w[bots local].map { |name| config.tasks.find { it.name == name } }
+
+      assert_equal root, config.root
+      assert_equal root.join("docker/campfire/Dockerfile"), bots.config.environment.profiles["campfire"].dockerfile
+      assert_equal root.join("docker/campfire/Dockerfile"), bots.environment_image.dockerfile_path
+      assert_equal root.join("tasks/local/environment/Dockerfile"), local.config.environment.dockerfile
+      assert_equal [ [ root.join("fixtures/seed.sql"), "fixtures/seed.sql" ] ], local.config.setup.files
+      assert_equal root.join("verification"), local.config.verifier.verification
+    end
+  end
+
   def test_load_options
     config = load_config
     config.load_options(agent: "oracle", model: "test-model", attempts: 3, concurrency: 2, backend: "shell", bench: ".")
