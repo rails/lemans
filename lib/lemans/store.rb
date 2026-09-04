@@ -37,7 +37,13 @@ module Lemans
 
     # Persist the result's file artifact
     # (contents could be eiher IO (file) or text).
-    def save_artifact(result, contents, path:)
+    # An existing artifact is kept unless force is set.
+    def save_artifact(result, contents, path:, force: false)
+      raise NotImplementedError
+    end
+
+    # Returns the artifact's text, nil when the result never stored it
+    def read_artifact(result, path)
       raise NotImplementedError
     end
   end

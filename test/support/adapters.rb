@@ -119,7 +119,11 @@ class TestStore < Lemans::Store
 
   def save(result) = results << result
 
-  def save_artifact(_result, contents, path:)
+  def save_artifact(_result, contents, path:, force: false)
+    return if artifacts.key?(path.to_s) && !force
+
     artifacts[path.to_s] = contents.is_a?(String) ? contents : File.read(contents)
   end
+
+  def read_artifact(_result, path) = artifacts[path.to_s]
 end

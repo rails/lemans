@@ -70,9 +70,9 @@ module Lemans
         raise ConfigError, "cannot record trial #{result.id}: #{e.message}"
       end
 
-      def save_artifact(result, contents, path:)
+      def save_artifact(result, contents, path:, force: false)
         destination = result_dir(result).join(path)
-        if destination.exist?
+        if destination.exist? && !force
           warn "lemans: artifact #{path} collides with an existing file and was dropped"
           return
         end
@@ -83,6 +83,11 @@ module Lemans
       rescue SystemCallError => e
         warn "lemans: could not save artifact #{path} for #{result.id}: #{e.message}"
         nil
+      end
+
+      def read_artifact(result, path)
+        file = result_dir(result).join(path)
+        file.read if file.file?
       end
 
       private
