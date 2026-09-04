@@ -79,6 +79,12 @@ class MiniswenAgentTest < Minitest::Test
 
     assert_equal :submitted, result.status
     assert(result.messages.any? { it[:content].include?("reached the output token limit") })
+
+    stub_llm({ content: "ramble", finish_reason: "model_context_window_exceeded" }, "true", SUBMIT)
+    result = agent.run("task")
+
+    assert_equal :submitted, result.status
+    assert(result.messages.any? { it[:content].include?("finish_reason=model_context_window_exceeded") })
   end
 
   def test_three_malformed_answers_in_a_row_end_the_run
@@ -289,26 +295,32 @@ class MiniswenAgentTest < Minitest::Test
     ENV.delete("OPENROUTER_PROVIDER_ORDER")
   end
 
-  def test_every_request_caps_the_output_tokens
+  def test_the_output_cap_is_sent_only_when_set_and_clamped_to_the_advertised_maximum
     with_api_key(:openrouter) { build_agent(model: "openrouter/anthropic/test") }
     stub_llm(SUBMIT)
     agent.run("task")
 
-    assert_equal Miniswen::Agent::MAX_OUTPUT_TOKENS, RubyLLM::Test.last_request.params[:max_tokens]
+    assert_equal({}, RubyLLM::Test.last_request.params)
 
-    with_api_key(:openrouter) { build_agent(model: "openrouter/ai21/jamba-large-1.7") }
+    with_api_key(:openrouter) { build_agent(model: "openrouter/anthropic/test", max_output_tokens: 32_768) }
+    stub_llm(SUBMIT)
+    agent.run("task")
+
+    assert_equal 32_768, RubyLLM::Test.last_request.params[:max_tokens]
+
+    with_api_key(:openrouter) { build_agent(model: "openrouter/ai21/jamba-large-1.7", max_output_tokens: 32_768) }
     stub_llm(SUBMIT)
     agent.run("task")
 
     assert_equal 4096, RubyLLM::Test.last_request.params[:max_tokens]
 
-    with_api_key(:openai) { build_agent(model: "openai/gpt-5.5") }
+    with_api_key(:openai) { build_agent(model: "openai/gpt-5.5", max_output_tokens: 32_768) }
     stub_llm(SUBMIT)
     agent.run("task")
 
-    assert_equal({ max_completion_tokens: Miniswen::Agent::MAX_OUTPUT_TOKENS }, RubyLLM::Test.last_request.params)
+    assert_equal({ max_completion_tokens: 32_768 }, RubyLLM::Test.last_request.params)
 
-    build_agent
+    build_agent(max_output_tokens: 32_768)
     stub_llm(SUBMIT)
     agent.run("task")
 

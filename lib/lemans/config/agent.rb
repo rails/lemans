@@ -18,6 +18,7 @@ module Lemans
           conf.cost_limit = float!(data["cost_limit"]) if data["cost_limit"]
           conf.timeout = seconds!(data["timeout"]) if data["timeout"]
           conf.exec_timeout = seconds!(data["exec_timeout"]) if data["exec_timeout"]
+          conf.max_output_tokens = integer!(data["max_output_tokens"]) if data.key?("max_output_tokens")
 
           if (network_data = data.dig("environment", "network"))
             conf.environment = Environment.new(network: NetworkPolicy.from_config(network_data))
@@ -30,7 +31,7 @@ module Lemans
       end
 
       attr_accessor :name, :models, :timeout,
-                    :step_limit, :cost_limit, :exec_timeout,
+                    :step_limit, :cost_limit, :exec_timeout, :max_output_tokens,
                     :environment
 
       def model = models.first
@@ -43,6 +44,7 @@ module Lemans
           "step_limit" => step_limit,
           "cost_limit" => cost_limit,
           "exec_timeout" => exec_timeout,
+          "max_output_tokens" => max_output_tokens,
           "environment" => { "network" => environment.network.to_h }
         }.compact
       end
@@ -55,6 +57,7 @@ module Lemans
         @step_limit = 100
         @cost_limit = nil
         @exec_timeout = 300
+        @max_output_tokens = 0
         @timeout = 30 * 60
         @environment = Environment.new(network: NetworkPolicy.new)
       end

@@ -90,13 +90,18 @@ module Lemans
 
     def tasks = @tasks ||= parse_tasks
 
-    def load_options(agent: nil, model: nil, attempts: nil, concurrency: nil, backend: nil, **)
+    def load_options(agent: nil, model: nil, max_output_tokens: nil, attempts: nil, concurrency: nil, backend: nil, **)
       @agent.name = agent if agent
       @agent.models = Array(model) if model
+      @agent.max_output_tokens = max_output_tokens if max_output_tokens
       @attempts = attempts if attempts
       @concurrency = concurrency if concurrency
       @backend = environment.backend = backend if backend
-      tasks.each { it.config.load_options(agent:, model:, attempts:, concurrency:, backend:) unless it.config.equal?(self) }
+      tasks.each do |task|
+        next if task.config.equal?(self)
+
+        task.config.load_options(agent:, model:, max_output_tokens:, attempts:, concurrency:, backend:)
+      end
     end
 
     def agent_name = agent.name

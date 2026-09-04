@@ -59,7 +59,8 @@ module Lemans
           max_steps: profile.step_limit,
           max_time: profile.timeout,
           max_cost: profile.cost_limit,
-          exec_timeout: profile.exec_timeout
+          exec_timeout: profile.exec_timeout,
+          max_output_tokens: profile.max_output_tokens
         )
       end
 
@@ -114,6 +115,7 @@ module Lemans
           cost_limit: profile.cost_limit,
           wall_time_limit_seconds: profile.timeout,
           exec_timeout_seconds: profile.exec_timeout,
+          max_output_tokens: profile.max_output_tokens,
           max_consecutive_format_errors: ::Miniswen::Agent::MAX_CONSECUTIVE_FORMAT_ERRORS
         }.compact }
       end

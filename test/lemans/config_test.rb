@@ -118,10 +118,12 @@ class ConfigTest < Minitest::Test
 
   def test_load_options
     config = load_config
-    config.load_options(agent: "oracle", model: "test-model", attempts: 3, concurrency: 2, backend: "shell", bench: ".")
+    config.load_options(agent: "oracle", model: "test-model", max_output_tokens: 32_768, attempts: 3, concurrency: 2,
+                        backend: "shell", bench: ".")
 
     assert_equal "oracle", config.agent_name
     assert_equal [ "test-model" ], config.models
+    assert_equal 32_768, config.agent.max_output_tokens
     assert_equal 3, config.attempts
     assert_equal 2, config.concurrency
     assert_equal "shell", config.backend
@@ -248,10 +250,11 @@ class ConfigTest < Minitest::Test
       refute_equal config.digest, heavy.config.digest
 
       # Run-level choices reach every task's config.
-      config.load_options(agent: "oracle", model: "other", attempts: 3)
+      config.load_options(agent: "oracle", model: "other", max_output_tokens: 65_536, attempts: 3)
 
       assert_equal "oracle", heavy.config.agent_name
       assert_equal [ "other" ], heavy.config.models
+      assert_equal 65_536, heavy.config.agent.max_output_tokens
       assert_equal 3, heavy.config.attempts
 
       # The task's digest tracks the bench it extends.

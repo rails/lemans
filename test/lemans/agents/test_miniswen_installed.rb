@@ -60,6 +60,7 @@ class MiniswenInstalledTest < Minitest::Test
     assert_includes command, "-m openrouter/z-ai/glm-5.2"
     assert_includes command, "--results-path /tmp/lemans-miniswen.result.json"
     assert_includes command, "--max-steps 100"
+    assert_includes command, "--max-output-tokens 0"
     assert_includes command, "--max-cost 5"
 
     response.trajectory.session_id = "test-session"

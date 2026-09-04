@@ -14,7 +14,7 @@ module Miniswen
 
     # Both finish_reason dialects accepted raw: OpenAI-shaped providers say
     # "length"/"tool_calls", Anthropic says "max_tokens"/"tool_use".
-    TRUNCATION_FINISH_REASONS = %w[length max_tokens].freeze
+    TRUNCATION_FINISH_REASONS = %w[length max_tokens model_context_window_exceeded].freeze
     CLAIMED_TOOL_FINISH_REASONS = %w[tool_calls tool_use].freeze
     # A safety stop, which arrives looking exactly like a model that forgot
     # to call the tool: no content, no tool call, and — since the provider
@@ -26,11 +26,6 @@ module Miniswen
 
     # The breakpoint marker Anthropic reads, shaped the way OpenRouter forwards it.
     CACHE_CONTROL = { type: "ephemeral" }.freeze
-
-    # Left unset, the provider reserves the model's advertised maximum output
-    # ahead of the prompt (qwen3.8-27b: 128K of a 256K window), halving the
-    # history an agent turn of a few hundred tokens can build on.
-    MAX_OUTPUT_TOKENS = 32_768
 
     EXEC_ENV = {
       "PAGER" => "cat",
@@ -234,14 +229,15 @@ module Miniswen
 
     attr_reader :messages, :environment
 
-    private attr_reader :max_steps, :max_time, :max_cost, :exec_timeout,
+    private attr_reader :max_steps, :max_time, :max_cost, :exec_timeout, :max_output_tokens,
                         :clock, :reporter
 
     # `model` is a litellm-style name ("openrouter/z-ai/glm-5.2"), optionally
     # suffixed with a reasoning effort ("openrouter/openai/gpt-5.6-luna#xhigh").
     # Limits of 0 or nil are disabled.
     def initialize(model:, environment:, max_steps: 0, max_time: 0, max_cost: nil,
-                   exec_timeout: 30, clock: -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) },
+                   exec_timeout: 30, max_output_tokens: 0,
+                   clock: -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) },
                    reporter: nil)
       name, @effort = model.split("#", 2)
       @provider, @id = name.split("/", 2)
@@ -259,6 +255,7 @@ module Miniswen
       @max_time = max_time.to_f
       @max_cost = max_cost
       @exec_timeout = exec_timeout
+      @max_output_tokens = max_output_tokens.to_i
 
       @clock = clock
       @reporter = reporter
@@ -551,7 +548,9 @@ module Miniswen
     # OpenAI itself retired `max_tokens` for its reasoning models; the
     # OpenAI-compatible providers and Anthropic still read it.
     def output_cap_params(model_info)
-      cap = [ info&.max_tokens, MAX_OUTPUT_TOKENS ].compact.min
+      return {} if max_output_tokens.zero?
+
+      cap = [ info&.max_tokens, max_output_tokens ].compact.min
       provider_class = RubyLLM::Provider.providers[model_info.provider.to_sym]
       if [ RubyLLM::Providers::OpenAI, RubyLLM::Providers::Azure ].include?(provider_class)
         { max_completion_tokens: cap }

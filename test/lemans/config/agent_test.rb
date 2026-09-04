@@ -11,6 +11,7 @@ class ConfigAgentTest < Minitest::Test
       "step_limit" => 200,
       "cost_limit" => 5.0,
       "exec_timeout" => "5m",
+      "max_output_tokens" => 65_536,
       "environment" => {
         "network" => { "mode" => "allowlist", "hosts" => [ "openrouter.ai" ] }
       }
@@ -26,6 +27,7 @@ class ConfigAgentTest < Minitest::Test
     assert_equal 200, agent.step_limit
     assert_in_delta 5.0, agent.cost_limit
     assert_in_delta 300.0, agent.exec_timeout
+    assert_equal 65_536, agent.max_output_tokens
     assert_equal "allowlist", agent.environment.network.mode
     assert_equal [ "openrouter.ai" ], agent.environment.network.hosts
   end
@@ -37,6 +39,7 @@ class ConfigAgentTest < Minitest::Test
     assert_nil agent.cost_limit
     assert_equal 30 * 60, agent.timeout
     assert_equal 300, agent.exec_timeout
+    assert_equal 0, agent.max_output_tokens
     assert_equal "public", agent.environment.network.mode
     assert_nil agent.environment.network.hosts
   end

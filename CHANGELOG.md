@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- `agent.max_output_tokens` and `lemans run --max-output-tokens`
+
 ## [1.3.0] - 2026-09-04
 
 - Miniswen: send an explicit `max_tokens` on every request (otherwise defaults could eat a lot of context, e.g., for `qwen3.8-27b`).

@@ -62,7 +62,8 @@ module Lemans
                 "-m", model.to_s, "-p", task.instruction,
                 "--results-path", RESULTS_PATH,
                 "--max-steps", profile.step_limit, "--max-time", profile.timeout.to_i,
-                "--exec-timeout", profile.exec_timeout.to_i ]
+                "--exec-timeout", profile.exec_timeout.to_i,
+                "--max-output-tokens", profile.max_output_tokens ]
         argv += [ "--max-cost", profile.cost_limit.to_i ] if profile.cost_limit
         argv.map { Shellwords.escape(it.to_s) }.join(" ")
       end

@@ -123,6 +123,10 @@ module Miniswen
           options[:exec_timeout] = v
         end
 
+        opts.on("--max-output-tokens=TOKENS", Integer, "Output cap per model call (default: the provider's)") do |v|
+          options[:max_output_tokens] = v
+        end
+
         opts.on("-q", "--quiet", "Disable progress output") do
           @quiet = true
         end

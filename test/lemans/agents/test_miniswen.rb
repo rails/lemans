@@ -125,6 +125,7 @@ class MiniswenAdapterTest < Minitest::Test
 
     assert_equal 100, loop_config.instance_variable_get(:@max_steps)
     assert_equal 300, loop_config.instance_variable_get(:@exec_timeout)
+    assert_equal 0, loop_config.instance_variable_get(:@max_output_tokens)
     assert_in_delta 5.0, loop_config.instance_variable_get(:@max_cost)
   end
 end
