@@ -12,7 +12,7 @@ module Lemans
         # instead of wrapping them, so both dialects have to be caught.
         SDK_ERRORS = [ ::Daytona::Sdk::Error, *::Daytona::Sdk::API_ERROR_CLASSES ].freeze
 
-        READ_ATTEMPTS = 3
+        READ_ATTEMPTS = 5
         RETRY_DELAY_SEC = 2
 
         private
@@ -25,7 +25,7 @@ module Lemans
             attempts += 1
             raise if attempts >= READ_ATTEMPTS || !retryable?(e)
 
-            sleep RETRY_DELAY_SEC
+            sleep RETRY_DELAY_SEC * 2**(attempts - 1)
             retry
           end
         end
@@ -33,9 +33,11 @@ module Lemans
         # Transport failures surface as status 0 (libcurl stamps refused/reset/
         # DNS with code 0) or none, and throttling and server errors heal on
         # their own; any other 4xx would fail the same way again.
+        # A 408 is the daemon giving up on a read that outran its own exec
+        # timeout; a sandbox that wedged and recovered serves it fine next time.
         def retryable?(error)
           status = status_code(error)
-          status.nil? || status.zero? || status == 429 || status >= 500
+          status.nil? || status.zero? || status == 408 || status == 429 || status >= 500
         end
 
         def status_code(error)

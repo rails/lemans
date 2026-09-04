@@ -30,7 +30,7 @@ module Lemans
             if timeout && timeout > SHORT_COMMAND_SEC
               exec_in_session(command, timeout: timeout, env: env)
             else
-              exec_directly(command, timeout: timeout, env: env)
+              exec_short(command, timeout: timeout, env: env)
             end
 
           Environment::ExecResult.new(command: command, duration: (now - started).round(3), **response)
@@ -49,6 +49,16 @@ module Lemans
 
             raise ConfigError, "environment variable #{key.inspect} is not a shell identifier"
           end
+        end
+
+        # A 408 means the daemon already killed the command at its budget, so
+        # the model reads a plain timeout, the same as it would on docker.
+        def exec_short(command, timeout:, env:)
+          exec_directly(command, timeout: timeout, env: env)
+        rescue *SDK_ERRORS => e
+          raise unless status_code(e) == 408
+
+          { exit_code: 124, output: "<command timed out after #{timeout} seconds>" }
         end
 
         def exec_directly(command, timeout:, env:)

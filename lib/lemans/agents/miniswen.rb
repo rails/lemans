@@ -43,7 +43,7 @@ module Lemans
         agent = agent_for(environment)
         begin
           agent.run(task.instruction)
-        rescue ::Miniswen::InfrastructureError => e
+        rescue InfrastructureError, ::Miniswen::InfrastructureError => e
           agent.partial_result(e.message)
         end
       end

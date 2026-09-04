@@ -119,6 +119,15 @@ class DaytonaEnvironmentTest < Minitest::Test
     assert_equal 3, snapshots.calls
   end
 
+  def test_a_snapshot_lookup_retries_a_daemon_timeout
+    snapshots = FlakySnapshotService.new(failures: 2, snapshot: failed_snapshot, status_code: 408)
+
+    found = store_for(reference_image, snapshots: snapshots).send(:find, "any")
+
+    assert_equal failed_snapshot, found
+    assert_equal 3, snapshots.calls
+  end
+
   def test_a_snapshot_lookup_does_not_retry_a_missing_snapshot
     snapshots = FlakySnapshotService.new(failures: 5, snapshot: failed_snapshot, status_code: 404)
 

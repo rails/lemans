@@ -50,6 +50,18 @@ class ShellTest < Minitest::Test
     refute_equal(*process.created_sessions)
   end
 
+  def test_a_short_command_that_outruns_its_budget_is_a_timeout_not_an_outage
+    process = FakeProcess.new(hang: true)
+    shell = build_shell(process)
+
+    result = shell.exec("sleep 1000", timeout: 30, env: {})
+
+    assert_equal 124, result.exit_code
+    assert_includes result.output, "timed out after 30 seconds"
+    assert_empty process.deleted_sessions
+    assert_equal 1, process.created_sessions.size
+  end
+
   def test_a_status_poll_survives_a_dropped_connection
     process = FakeProcess.new(status_after: 1, status: "0", log: "fine", drop_polls: 2)
     shell = build_shell(process)
@@ -70,7 +82,8 @@ class ShellTest < Minitest::Test
 
     Response = Struct.new(:exit_code, :result)
 
-    def initialize(status_after: 0, status: "0", log: "", drop_polls: 0)
+    def initialize(status_after: 0, status: "0", log: "", drop_polls: 0, hang: false)
+      @hang = hang
       @status_after = status_after
       @status = status
       @log = log
@@ -95,8 +108,14 @@ class ShellTest < Minitest::Test
       case command
       when /\Acat .*status/ then poll
       when /\Atail / then Response.new(0, @log)
-      else Response.new(0, "ok")
+      else hang? ? timeout! : Response.new(0, "ok")
       end
+    end
+
+    def hang? = @hang
+
+    def timeout!
+      raise ::Daytona::Sdk::Error.new("Failed to execute command: command execution timeout", status_code: 408)
     end
 
     private
