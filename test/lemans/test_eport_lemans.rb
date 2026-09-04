@@ -23,6 +23,19 @@ class EportLemansTest < Minitest::Test
     FakeResult.new(klass, name, true, false, false, [ file, 1 ], LemansReport::AllowedFailure.new(message))
   end
 
+  def teardown
+    LemansReport.points.clear
+    LemansReport.base_credit = nil
+  end
+
+  def extra_test
+    Class.new do
+      include LemansReport::Assertions
+
+      def name = "test_extra"
+    end
+  end
+
   def with_reporter(results)
     Dir.mktmpdir do |dir|
       original = ENV.fetch("TESTS", nil)
@@ -85,14 +98,59 @@ class EportLemansTest < Minitest::Test
     end
   end
 
-  def test_allow_failure_downgrades_assertions_but_not_skips_or_errors
-    harness = Class.new { include LemansReport::Assertions }.new
+  def test_the_points_land_in_checks_json_and_merge_across_runs
+    LemansReport.base_credit = 0.7
+    LemansReport.points["VerifierTest#test_nice_to_have"] = 2
 
-    error = assert_raises(LemansReport::AllowedFailure) { harness.allow_failure { raise Minitest::Assertion, "expected 1, got 2" } }
+    with_reporter([ allowed("VerifierTest", "test_nice_to_have") ]) do |_reporter, checks, dir|
+      assert_equal({ "base_credit" => 0.7, "points" => { "VerifierTest#test_nice_to_have" => 2 } }, checks["grading"])
+
+      LemansReport.base_credit = nil
+      LemansReport.points.replace("VerifierTest#test_bonus" => 1)
+      second = LemansReport::Reporter.new(dir)
+      second.record(passing("VerifierTest", "test_bonus", file: "/tests/verification_test.rb"))
+      second.report
+
+      grading = JSON.parse(File.read(File.join(dir, "checks.json")))["grading"]
+
+      assert_in_delta 0.7, grading["base_credit"]
+      assert_equal({ "VerifierTest#test_bonus" => 1, "VerifierTest#test_nice_to_have" => 2 }, grading["points"])
+    end
+
+    LemansReport.points.clear
+
+    with_reporter([ passing("VerifierTest", "test_graded", file: "/tests/verification_test.rb") ]) do |_reporter, checks|
+      refute checks.key?("grading")
+    end
+  end
+
+  # One harness per call: a test may call allow_failure once.
+  def fresh_extra = extra_test.new.tap { LemansReport.points.clear }
+
+  def test_allow_failure_downgrades_assertions_but_not_skips_or_errors
+    error = assert_raises(LemansReport::AllowedFailure) { fresh_extra.allow_failure { raise Minitest::Assertion, "expected 1, got 2" } }
     assert_equal "expected 1, got 2", error.message
-    assert_raises(Minitest::Skip) { harness.allow_failure { raise Minitest::Skip, "not today" } }
-    assert_raises(RuntimeError) { harness.allow_failure { raise "boom" } }
-    assert_equal :ran, harness.allow_failure { :ran }
+    assert_raises(Minitest::Skip) { fresh_extra.allow_failure { raise Minitest::Skip, "not today" } }
+    assert_raises(RuntimeError) { fresh_extra.allow_failure { raise "boom" } }
+    assert_equal :ran, fresh_extra.allow_failure { :ran }
+  end
+
+  def test_allow_failure_registers_the_points_once_per_test
+    harness = extra_test.new
+    check = "#{harness.class}#test_extra"
+
+    harness.allow_failure(points: 2) { :ran }
+
+    assert_equal 2, LemansReport.points[check]
+
+    error = assert_raises(ArgumentError) { harness.allow_failure { :again } }
+
+    assert_includes error.message, "calls allow_failure twice"
+
+    LemansReport.points.clear
+    harness.allow_failure { :ran }
+
+    assert_equal 1, LemansReport.points[check]
   end
 
   def test_a_skip_in_the_graded_tests_fails_the_run_but_an_app_skip_does_not

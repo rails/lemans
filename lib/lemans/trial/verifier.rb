@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "json"
 require "pathname"
 require "shellwords"
 require "tmpdir"
@@ -9,7 +10,7 @@ module Lemans
     # Verifies a trial in the sandbox the agent worked in, after Trial has closed
     # its network. The tests are uploaded fresh at verification time, never before.
     class Verifier
-      Verification = Data.define(:reward, :logs)
+      Verification = Data.define(:reward, :credit, :logs)
 
       REWARD_RANGE = (0.0..1.0)
 
@@ -40,7 +41,7 @@ module Lemans
         prepare_env!
 
         # A baseline the agent made unrestorable is a verdict, not an error.
-        return Verification.new(reward: 0.0, logs: TAMPERED) unless snapshot.restore!
+        return Verification.new(reward: 0.0, credit: 0.0, logs: TAMPERED) unless snapshot.restore!
 
         verification = run_tests!
 
@@ -98,7 +99,8 @@ module Lemans
 
         result = environment.exec(command, timeout:, env:)
 
-        Verification.new(reward: read_reward(result), logs: result.output.to_s)
+        reward = read_reward(result)
+        Verification.new(reward:, credit: read_credit(reward), logs: result.output.to_s)
       end
 
       def verifier_script
@@ -122,6 +124,31 @@ module Lemans
         raise VerifierError, "reward #{value} is outside #{REWARD_RANGE}" unless REWARD_RANGE.cover?(value)
 
         value
+      end
+
+      def read_credit(reward)
+        path = File.join(task.verifier.logs_dir, "checks.json")
+        return reward unless environment.exec("test -e #{Shellwords.escape(path)}").success?
+
+        result = environment.exec("cat #{Shellwords.escape(path)}")
+        raise VerifierError, "could not read #{path}: #{result.output.to_s[0, 500]}" unless result.success?
+
+        checks = begin
+          JSON.parse(result.output.to_s)
+        rescue JSON::ParserError => e
+          raise VerifierError, "#{path} is not JSON: #{e.message[0, 500]}"
+        end
+
+        grading = checks["grading"]
+        return reward unless grading && (base_credit = grading["base_credit"])
+        return 0.0 if reward.zero?
+
+        points = grading.fetch("points", {})
+        total = points.values.sum
+        return reward if total.zero?
+
+        passed = points.sum { |check, value| checks.dig("checks", check) == "pass" ? value : 0 }
+        (base_credit + (1 - base_credit) * (passed.to_f / total)).round(2)
       end
 
       def reward_from_exit(command_result)

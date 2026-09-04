@@ -10,8 +10,8 @@ module Lemans
       # task, agent, model — "task-model" reads as two columns.
       class Aggregate
         KEYS = %i[task agent model].freeze
-        METRICS = %i[score time cost steps tokens].freeze
-        METRIC_SOURCES = { time: :duration, cost: :cost_usd, steps: :steps, tokens: :tokens }.freeze
+        METRICS = %i[score credit time cost steps tokens].freeze
+        METRIC_SOURCES = { credit: :credit, time: :duration, cost: :cost_usd, steps: :steps, tokens: :tokens }.freeze
 
         attr_reader :report, :keys
 
@@ -46,20 +46,15 @@ module Lemans
         end
 
         def to_rows
-          [ keys.map(&:to_s) + METRICS.map(&:to_s) ] +
+          metrics = report.fractional? ? METRICS : METRICS - [ :credit ]
+          [ keys.map(&:to_s) + metrics.map(&:to_s) ] +
             @groups.map do |group|
-              keys.map { |key| display_key(key, group[key]) } + [
-                "#{group[:solved]}/#{group[:attempts]}",
-                time(group[:duration]),
-                cost(group[:cost_usd]),
-                mean_display(group[:steps], 1),
-                mean_display(group[:tokens], 0)
-              ]
+              keys.map { |key| display_key(key, group[key]) } + metrics.map { cell(it, group) }
             end
         end
 
         def to_csv
-          columns = keys + %i[solved attempts duration cost_usd steps tokens]
+          columns = keys + %i[solved attempts credit duration cost_usd steps tokens]
           CSV.generate do |csv|
             csv << columns
             @groups.each { |group| csv << columns.map { group[it] } }
@@ -78,11 +73,23 @@ module Lemans
           keys.zip(values).to_h.merge(
             solved: Report.tally(group)[:solved],
             attempts: group.size,
+            credit: mean(group.filter_map { it[:credit] }),
             duration: median(group.filter_map { it[:duration] }),
             cost_usd: mean(group.filter_map { it[:cost_usd] }),
             steps: mean(group.filter_map { it[:steps] }),
             tokens: mean(group.filter_map { it[:tokens] })
           )
+        end
+
+        def cell(metric, group)
+          case metric
+          when :score then "#{group[:solved]}/#{group[:attempts]}"
+          when :credit then mean_display(group[:credit], 2)
+          when :time then time(group[:duration])
+          when :cost then cost(group[:cost_usd])
+          when :steps then mean_display(group[:steps], 1)
+          when :tokens then mean_display(group[:tokens], 0)
+          end
         end
 
         def mean(values) = values.empty? ? nil : values.sum(0.0) / values.size

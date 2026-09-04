@@ -7,10 +7,10 @@ module Lemans
     # Renders stored results as a table or CSV. The store is the source of
     # truth; rows are plain hashes derived from Result records.
     class Report
-      COLUMNS = %i[task agent model reward outcome scored cost_usd steps tokens duration started_at trial tags
-                   detail].freeze
-      TABLE_COLUMNS = %i[task agent model reward outcome cost_usd steps tokens duration trial].freeze
-      NUMERIC_COLUMNS = %i[reward cost_usd steps tokens duration].freeze
+      COLUMNS = %i[task agent model reward credit outcome scored cost_usd steps tokens duration started_at trial
+                   tags detail].freeze
+      TABLE_COLUMNS = %i[task agent model reward credit outcome cost_usd steps tokens duration trial].freeze
+      NUMERIC_COLUMNS = %i[reward credit cost_usd steps tokens duration].freeze
 
       attr_reader :rows, :unreadable
 
@@ -28,6 +28,7 @@ module Lemans
             agent: result.agent,
             model: result.model,
             reward: result.reward,
+            credit: result.credit,
             outcome: result.status,
             scored: result.scored?,
             detail: result.detail,
@@ -98,10 +99,14 @@ module Lemans
         self.class.tally(rows).merge(cost_usd: rows.sum { it[:cost_usd].to_f })
       end
 
+      def fractional? = rows.any? { it[:credit] && it[:credit] != it[:reward] }
+
+      def table_columns = fractional? ? TABLE_COLUMNS : TABLE_COLUMNS - [ :credit ]
+
       def to_rows
-        [ TABLE_COLUMNS.map(&:to_s) ] +
+        [ table_columns.map(&:to_s) ] +
           rows.map do |row|
-            TABLE_COLUMNS.map do |column|
+            table_columns.map do |column|
               display(column == :model ? short_model(row[:model]) : row[column])
             end
           end

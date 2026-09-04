@@ -3,6 +3,12 @@
 # Loaded when a verifier command opts in with `ruby -report-lemans …`
 # (that is `-r eport-lemans`, resolved from /tests on the LOAD_PATH).
 module LemansReport
+  class << self
+    attr_accessor :base_credit
+
+    def points = @points ||= {}
+  end
+
   def self.registered? = @registered
 
   def self.register

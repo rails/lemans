@@ -4,7 +4,7 @@ require "test_helper"
 require "csv"
 
 class CLIReportTest < Minitest::Test
-  def store_result(store, trial:, task: "hello-world", agent: "miniswen", reward: 1.0,
+  def store_result(store, trial:, task: "hello-world", agent: "miniswen", reward: 1.0, credit: reward,
                    outcome: :completed, detail: nil, cost: 0.0001, tags: [],
                    model: "openrouter/deepseek/deepseek-v4-flash",
                    tokens: { input_tokens: 900, output_tokens: 100 }, duration: 10, steps: 2)
@@ -16,7 +16,7 @@ class CLIReportTest < Minitest::Test
 
     usage = tokens && Lemans::Result::Usage.new(cached_tokens: 0, steps:, cost_usd: cost, cost_source: nil, **tokens)
     result.completed!(Lemans::Result::Outcome.new(outcome, detail), usage)
-    result.graded!(reward) unless reward.nil?
+    result.graded!(reward, credit:) unless reward.nil?
     store.save(result)
     result
   end
@@ -27,7 +27,7 @@ class CLIReportTest < Minitest::Test
       store_result(store, trial: "hello-world__aaa", reward: 1.0, tags: %w[infra])
       store_result(store, trial: "hello-world__bbb", reward: nil, outcome: :environment_error,
                           detail: "the daemon is down", cost: nil, tokens: nil)
-      store_result(store, trial: "other-task__ccc", task: "other-task", reward: 0.0)
+      store_result(store, trial: "other-task__ccc", task: "other-task", reward: 0.0, credit: 0.4)
       yield store
     end
   end
@@ -37,21 +37,41 @@ class CLIReportTest < Minitest::Test
       report = Lemans::CLI::Report.load(store)
       rows = report.to_rows
 
-      assert_equal %w[task agent model reward outcome cost_usd steps tokens duration trial], rows.first
+      assert_equal %w[task agent model reward credit outcome cost_usd steps tokens duration trial], rows.first
       assert_includes rows.flatten, "hello-world__aaa"
 
       solved = rows.find { it.include?("hello-world__aaa") }
 
       # Tokens sum input and output, leaving cache reads out.
       assert_equal "1000", solved[rows.first.index("tokens")]
+      assert_equal "1", solved[rows.first.index("credit")]
+
+      partial = rows.find { it.include?("other-task__ccc") }
+
+      assert_equal "0", partial[rows.first.index("reward")]
+      assert_equal "0.4", partial[rows.first.index("credit")]
 
       invalid = rows.find { it.include?("hello-world__bbb") }
 
       assert_includes invalid, "environment_error"
       # A missing reward reads as absent, not as zero.
       assert_equal "-", invalid[rows.first.index("reward")]
+      assert_equal "-", invalid[rows.first.index("credit")]
       assert_equal "-", invalid[rows.first.index("tokens")]
       assert_includes report.summary_lines.join("\n"), "3 trials: 2 scored, 1 invalid, 1 solved (50%)"
+    end
+  end
+
+  def test_the_credit_column_appears_only_once_a_credit_differs_from_its_reward
+    Dir.mktmpdir do |dir|
+      store = Lemans::Stores::FS.new(dir)
+      store_result(store, trial: "hello-world__aaa", reward: 1.0)
+      store_result(store, trial: "hello-world__bbb", reward: nil, outcome: :environment_error, cost: nil, tokens: nil)
+      report = Lemans::CLI::Report.load(store)
+
+      refute_includes report.to_rows.first, "credit"
+      refute_includes Lemans::CLI::Report::Aggregate.new(report, keys: %i[task]).to_rows.first, "credit"
+      assert_includes report.to_csv.lines.first, "credit"
     end
   end
 
@@ -95,6 +115,7 @@ class CLIReportTest < Minitest::Test
       assert_equal "the daemon is down", parsed.find { it["trial"] == "hello-world__bbb" }["detail"]
       assert_nil parsed.find { it["trial"] == "hello-world__bbb" }["reward"]
       assert_equal "1.0", parsed.find { it["trial"] == "hello-world__aaa" }["reward"]
+      assert_equal "0.4", parsed.find { it["trial"] == "other-task__ccc" }["credit"]
     end
   end
 

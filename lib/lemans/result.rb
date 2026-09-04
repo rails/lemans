@@ -155,7 +155,7 @@ module Lemans
     attr_reader :phases, :steps
 
     # outcome-related attributes (we use setter-like methods, not accessors)
-    attr_reader :reward, :outcome, :usage
+    attr_reader :reward, :credit, :outcome, :usage
 
     def initialize(task:, agent:, model:, id: nil, index: nil,
                    profile_digest: nil, task_digest: nil, revision: nil)
@@ -222,8 +222,9 @@ module Lemans
       completed!(outcome, aggregate_usage)
     end
 
-    def graded!(reward)
+    def graded!(reward, credit: reward)
       @reward = reward
+      @credit = credit
       self
     end
 
@@ -234,6 +235,7 @@ module Lemans
 
       @outcome = Outcome.new(reason, detail)
       @reward = nil
+      @credit = nil
       self
     end
 
@@ -246,7 +248,7 @@ module Lemans
         lemans_version: VERSION,
         tags:, metadata:, phases: phases.map(&:as_json),
         steps: steps&.map(&:as_json),
-        reward:, outcome: outcome.as_json, usage: usage&.as_json, duration:,
+        reward:, credit:, outcome: outcome.as_json, usage: usage&.as_json, duration:,
         started_at: started_at&.iso8601,
         finished_at: finished_at&.iso8601
       }.compact
@@ -263,10 +265,12 @@ module Lemans
         result.tags = data[:tags] || []
         result.metadata = data[:metadata] || {}
         phases_from(data).each { result.phases << it }
+
         # Steps first: the stored outcome/usage below override the aggregates.
         data[:steps]&.map { Step.from_json(it) }&.each do |step|
           result.step_completed!(step.outcome, step.usage, duration: step.duration)
         end
+
         if data[:outcome]
           result.completed!(
             Outcome.from_json(data[:outcome]),
@@ -276,7 +280,8 @@ module Lemans
             duration: data[:duration] || data[:duration_sec]
           )
         end
-        result.graded!(data[:reward]) unless data[:reward].nil?
+
+        result.graded!(data[:reward], credit: data[:credit] || data[:reward]) unless data[:reward].nil?
         result
       end
 

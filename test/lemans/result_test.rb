@@ -20,6 +20,12 @@ class ResultTest < Minitest::Test
     assert_predicate result, :scored?
     assert_equal :completed, result.status
     assert_in_delta 0.5, result.reward
+    assert_in_delta 0.5, result.credit
+
+    result.graded!(1.0, credit: 0.7)
+
+    assert_in_delta 1.0, result.reward
+    assert_in_delta 0.7, result.credit
     assert_kind_of Float, result.duration
   end
 
@@ -31,6 +37,7 @@ class ResultTest < Minitest::Test
     assert_equal :agent_error, result.status
     assert_equal "first", result.detail
     assert_nil result.reward
+    assert_nil result.credit
   end
 
   def test_phases_enforce_order
@@ -93,7 +100,7 @@ class ResultTest < Minitest::Test
     result.phase_started(:agent)
     result.phase_finished(:agent)
     result.completed!(:completed, Lemans::Result::Usage.zero)
-    result.graded!(1.0)
+    result.graded!(1.0, credit: 0.8)
 
     data = JSON.parse(JSON.generate(result.as_json), symbolize_names: true)
     restored = Lemans::Result.from_json(data)
@@ -104,6 +111,7 @@ class ResultTest < Minitest::Test
     assert_equal :completed, restored.status
     assert_predicate restored, :scored?
     assert_in_delta 1.0, restored.reward
+    assert_in_delta 0.8, restored.credit
     assert_equal %i[agent], restored.phases.map(&:name)
     assert_equal 0, restored.usage.steps
   end
@@ -120,6 +128,7 @@ class ResultTest < Minitest::Test
 
     assert_equal :completed, result.status
     assert_predicate result, :scored?
+    assert_in_delta 1.0, result.credit
     assert_in_delta 12.3, result.duration
     assert_equal "abc", result.revision.commit
     assert_equal %i[environment_setup], result.phases.map(&:name)

@@ -47,12 +47,17 @@ module Lemans
       end
 
       def finished(result)
-        status = result.scored? ? "reward=#{result.reward.inspect}" : result.status.to_s
+        status = result.scored? ? grade(result) : result.status.to_s
         @shell.say_status STATUS_VERBS.fetch(result.status, result.status),
                           "#{result.task.ljust(@task_width)}  #{status.ljust(12)}  #{result.duration}s",
                           color(result)
 
         @shell.say_status :error, first_line(result.detail), :red unless result.scored? || result.detail.nil?
+      end
+
+      def grade(result)
+        grade = "reward=#{result.reward.inspect}"
+        result.credit == result.reward ? grade : "#{grade} credit=#{result.credit.inspect}"
       end
 
       def first_line(detail) = detail.to_s.lines.first.to_s.strip[0, MAX_DETAIL_CHARS]

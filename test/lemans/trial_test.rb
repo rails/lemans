@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "test_helper"
+require "json"
 
 class TrialTest < Minitest::Test
   include BenchFixture
@@ -77,6 +78,20 @@ class TrialTest < Minitest::Test
       assert_equal "the suite ran", run_dir.join("verifier.log").read
       assert_equal "ran", run_dir.join("checks.txt").read
     end
+  end
+
+  def test_the_credit_lands_on_the_result_next_to_the_reward
+    env = TestEnvironment.new(on_command: lambda { |files|
+      files["/logs/verifier/reward.txt"] = "1"
+      files["/logs/verifier/checks.json"] = JSON.generate(
+        checks: { "T#test_extra" => "fail (allowed)", "T#test_bonus" => "pass" },
+        grading: { base_credit: 0.6, points: { "T#test_extra" => 1, "T#test_bonus" => 1 } }
+      )
+    })
+    result = build_trial(env).run
+
+    assert_in_delta 1.0, result.reward
+    assert_in_delta 0.8, result.credit
   end
 
   def test_a_nop_trial_is_scored_zero_rather_than_invalid
