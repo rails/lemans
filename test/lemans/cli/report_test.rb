@@ -6,10 +6,11 @@ require "csv"
 class CLIReportTest < Minitest::Test
   def store_result(store, trial:, task: "hello-world", agent: "miniswen", reward: 1.0, credit: reward,
                    outcome: :completed, detail: nil, cost: 0.0001, tags: [],
-                   model: "openrouter/deepseek/deepseek-v4-flash",
+                   model: "openrouter/deepseek/deepseek-v4-flash", metadata: {},
                    tokens: { input_tokens: 900, output_tokens: 100 }, duration: 10, steps: 2)
     result = Lemans::Result.new(task:, agent:, model:, id: trial)
     result.tags = tags
+    result.metadata = metadata
     started = Time.utc(2026, 8, 11, 10, trial.length % 10)
     result.phase_started(:agent, started)
     result.phase_finished(:agent, started + duration)
@@ -24,10 +25,12 @@ class CLIReportTest < Minitest::Test
   def with_store
     Dir.mktmpdir do |runs_dir|
       store = Lemans::Stores::FS.new(runs_dir)
-      store_result(store, trial: "hello-world__aaa", reward: 1.0, tags: %w[infra])
+      store_result(store, trial: "hello-world__aaa", reward: 1.0, tags: %w[infra],
+                          metadata: { "category" => "full-features", "app" => "campfire" })
       store_result(store, trial: "hello-world__bbb", reward: nil, outcome: :environment_error,
                           detail: "the daemon is down", cost: nil, tokens: nil)
-      store_result(store, trial: "other-task__ccc", task: "other-task", reward: 0.0, credit: 0.4)
+      store_result(store, trial: "other-task__ccc", task: "other-task", reward: 0.0, credit: 0.4,
+                          metadata: { "app" => "campfire" })
       yield store
     end
   end
@@ -83,6 +86,25 @@ class CLIReportTest < Minitest::Test
       assert_equal(%w[other-task__ccc], by_name.rows.map { it[:trial] })
       assert_equal(%w[hello-world__aaa], by_tag.rows.map { it[:trial] })
       assert_predicate Lemans::CLI::Report.load(store, tags: %w[nope]), :empty?
+
+      by_metadata = Lemans::CLI::Report.load(store, metadata: { "app" => "campfire", "category" => "full-features" })
+      by_app = Lemans::CLI::Report.load(store, metadata: { "app" => "campfire" })
+
+      assert_equal(%w[hello-world__aaa], by_metadata.rows.map { it[:trial] })
+      assert_equal(%w[hello-world__aaa other-task__ccc], by_app.rows.map { it[:trial] })
+    end
+  end
+
+  def test_the_metadata_filter_reads_key_value_pairs
+    assert_nil Lemans::CLI::Report.metadata_filter(nil)
+    assert_nil Lemans::CLI::Report.metadata_filter([])
+    assert_equal({ "category" => "full-features", "app" => "campfire:v2" },
+                 Lemans::CLI::Report.metadata_filter(%w[category:full-features app:campfire:v2]))
+
+    [ "category", ":full-features" ].each do |spec|
+      error = assert_raises(Lemans::ConfigError) { Lemans::CLI::Report.metadata_filter([ spec ]) }
+
+      assert_includes error.message, "expected key:value"
     end
   end
 

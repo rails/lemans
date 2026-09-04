@@ -30,12 +30,13 @@ module Lemans
       end
 
       # The file system keeps no index, so filtering happens in memory.
-      def query(task: nil, agent: nil, model: nil, tags: nil)
+      def query(task: nil, agent: nil, model: nil, tags: nil, metadata: nil)
         results = fetch
         results.select! { Array(task).include?(it.task) } if task
         results.select! { it.agent == agent } if agent
         results.select! { it.model == model } if model
         results.select! { Array(tags).intersect?(it.tags) } if tags
+        results.select! { |result| metadata.all? { |key, value| result.metadata.transform_keys(&:to_s)[key].to_s == value } } if metadata
         results
       end
 

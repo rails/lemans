@@ -131,13 +131,16 @@ module Lemans
     option :runs_dir, default: "runs", desc: "Directory holding run directories"
     option :tag, desc: "Only runs whose result carries this tag", repeatable: true
     option :task, desc: "Only these tasks' runs", repeatable: true
+    option :metadata, banner: "KEY:VALUE", desc: "Only runs whose task metadata has this value (every pair must match)",
+                      repeatable: true
     option :format, default: "table", enum: %w[table csv], desc: "Output format"
     option :aggregate, aliases: "-A", banner: "COLUMNS", lazy_default: "task-model",
                        desc: "Group results by 1-3 dash-joined columns (task, agent, model)"
     option :sort, aliases: "-S", banner: "COLUMN", desc: "Sort by a column"
     def report
       store = Stores::FS.new(options[:runs_dir])
-      results = Report.load(store, tags: options[:tag], names: options[:task])
+      results = Report.load(store, tags: options[:tag], names: options[:task],
+                                   metadata: Report.metadata_filter(options[:metadata]))
       raise Thor::Error, "lemans: no matching results found" if results.empty?
 
       results = Report::Aggregate.new(results, keys: Report::Aggregate.keys(options[:aggregate])) if options[:aggregate]

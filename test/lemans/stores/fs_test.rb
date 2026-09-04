@@ -4,9 +4,10 @@ require "test_helper"
 require "tempfile"
 
 class StoresFSTest < Minitest::Test
-  def build_result(task: "hello-world", agent: "oracle", model: "m/model-a", tags: [])
+  def build_result(task: "hello-world", agent: "oracle", model: "m/model-a", tags: [], metadata: {})
     result = Lemans::Result.new(task:, agent:, model:)
     result.tags = tags
+    result.metadata = metadata
     result.completed!(:completed, Lemans::Result::Usage.zero).graded!(1.0)
   end
 
@@ -28,14 +29,17 @@ class StoresFSTest < Minitest::Test
 
   def test_query_filters_in_memory
     with_store do |store|
-      store.save(build_result(task: "a", tags: %w[infra]))
-      store.save(build_result(task: "b", model: "m/model-b"))
+      store.save(build_result(task: "a", tags: %w[infra], metadata: { "category" => "full-features", "app" => "campfire" }))
+      store.save(build_result(task: "b", model: "m/model-b", metadata: { "app" => "campfire" }))
       store.save(build_result(task: "c", agent: "nop"))
 
       assert_equal %w[a], store.query(task: %w[a]).map(&:task)
       assert_equal %w[a], store.query(tags: %w[infra]).map(&:task)
       assert_equal %w[b], store.query(model: "m/model-b").map(&:task)
       assert_equal %w[c], store.query(agent: "nop").map(&:task)
+      assert_equal %w[a b], store.query(metadata: { "app" => "campfire" }).map(&:task).sort
+      assert_equal %w[a], store.query(metadata: { "app" => "campfire", "category" => "full-features" }).map(&:task)
+      assert_empty store.query(metadata: { "category" => "nope" })
       assert_equal 3, store.query.size
     end
   end

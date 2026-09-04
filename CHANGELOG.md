@@ -1,5 +1,6 @@
 ## [Unreleased]
 
+- `lemans report --metadata category:full-features` filters runs by task metadata.
 - Fractional credit support (in addition to reward).
 - Make Daytona TTL inferred from the task timeout settings.
 - Fix Dockerfile resolution when profiles are used and per-task `bench.yml` exists.

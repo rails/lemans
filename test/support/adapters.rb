@@ -107,13 +107,14 @@ class TestStore < Lemans::Store
 
   def fetch = results
 
-  def query(task: nil, agent: nil, model: nil, tags: nil)
-    matched = results.dup
-    matched.select! { Array(task).include?(it.task) } if task
-    matched.select! { it.agent == agent } if agent
-    matched.select! { it.model == model } if model
-    matched.select! { Array(tags).intersect?(it.tags) } if tags
-    matched
+  def query(task: nil, agent: nil, model: nil, tags: nil, metadata: nil)
+    results = self.results.dup
+    results.select! { Array(task).include?(it.task) } if task
+    results.select! { it.agent == agent } if agent
+    results.select! { it.model == model } if model
+    results.select! { Array(tags).intersect?(it.tags) } if tags
+    results.select! { |result| metadata.all? { |key, value| result.metadata.transform_keys(&:to_s)[key].to_s == value } } if metadata
+    results
   end
 
   def save(result) = results << result

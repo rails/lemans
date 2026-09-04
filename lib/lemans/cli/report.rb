@@ -15,8 +15,8 @@ module Lemans
       attr_reader :rows, :unreadable
 
       class << self
-        def load(store, tags: nil, names: nil)
-          rows = store.query(task: names, tags:).map { row_from(it) }
+        def load(store, tags: nil, names: nil, metadata: nil)
+          rows = store.query(task: names, tags:, metadata:).map { row_from(it) }
           new(rows.sort_by { [ it[:task].to_s, it[:started_at].to_s, it[:trial].to_s ] },
               unreadable: store.unreadable.size)
         end
@@ -58,6 +58,18 @@ module Lemans
             invalid: rows.size - scored,
             solved: rows.count { it[:reward].to_f >= 1.0 }
           }
+        end
+
+        # `--metadata category:full-features`, repeated, means every pair must match.
+        def metadata_filter(specs)
+          return if specs.nil? || specs.empty?
+
+          specs.to_h do |spec|
+            key, value = spec.split(":", 2)
+            raise ConfigError, "--metadata: expected key:value (got #{spec.inspect})" if value.nil? || key.empty?
+
+            [ key, value ]
+          end
         end
 
         # One sorting rule for every view: validate the column name and keep
