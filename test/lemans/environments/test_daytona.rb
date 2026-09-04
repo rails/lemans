@@ -159,6 +159,30 @@ class DaytonaEnvironmentTest < Minitest::Test
     assert sandbox.deleted
   end
 
+  # ttl_minutes is a hard lifetime cap: a sandbox reaped under a legitimate
+  # long run fails its next exec with a vague "is the Sandbox started?".
+  def test_the_sandbox_lives_as_long_as_the_trial_asked_for
+    assert_equal 90, environment_for(reference_image, ttl: 90 * 60).send(:ttl_minutes)
+    assert_equal 61, environment_for(reference_image, ttl: 3601).send(:ttl_minutes)
+    assert_equal 60, environment_for(reference_image).send(:ttl_minutes)
+  end
+
+  def test_an_exec_failing_past_the_ttl_says_so
+    environment = environment_for(reference_image, ttl: 60)
+    environment.instance_variable_set(:@shell, BrokenShell.new)
+    environment.instance_variable_set(:@started_at, Process.clock_gettime(Process::CLOCK_MONOTONIC))
+
+    error = assert_raises(Lemans::InfrastructureError) { environment.exec("true") }
+
+    assert_equal "daytona: exec failed: no IP address found", error.message
+
+    environment.instance_variable_set(:@started_at, Process.clock_gettime(Process::CLOCK_MONOTONIC) - 61)
+    error = assert_raises(Lemans::InfrastructureError) { environment.exec("true") }
+
+    assert_equal "daytona: exec failed after the sandbox's 1m TTL expired (raise environment.sandbox_ttl): no IP address found",
+                 error.message
+  end
+
   def test_it_says_both_names_it_accepts_when_there_are_no_credentials
     config = FakeDaytonaConfig.new
 
@@ -227,6 +251,10 @@ class DaytonaEnvironmentTest < Minitest::Test
     def delete(wait: false) = @deleted = true
   end
 
+  class BrokenShell
+    def exec(_command, timeout: nil, env: {}) = raise ::Daytona::Sdk::Error, "no IP address found"
+  end
+
   FakeStartClient = Struct.new(:snapshot, :sandbox) do
     def create(_params, on_snapshot_create_logs: nil) = sandbox
   end
@@ -270,8 +298,8 @@ class DaytonaEnvironmentTest < Minitest::Test
     store_for(image, resources: resources).name
   end
 
-  def environment_for(image, resources: resources_with, build_timeout: 4)
-    Lemans::Environments::Daytona.new(image: image, resources: resources,
+  def environment_for(image, resources: resources_with, build_timeout: 4, ttl: 3600)
+    Lemans::Environments::Daytona.new(image: image, resources: resources, ttl: ttl,
                                       network: Lemans::Config::NetworkPolicy.new("none"), build_timeout: build_timeout)
   end
 

@@ -21,6 +21,7 @@ module Lemans
 
           conf.workdir = absolute_path!(data["workdir"]) if data["workdir"]
           conf.build_timeout = seconds!(data["build_timeout"]) if data["build_timeout"]
+          conf.sandbox_ttl = seconds!(data["sandbox_ttl"]) if data["sandbox_ttl"]
           conf.network = NetworkPolicy.from_config(data["network"]) if data["network"]
 
           conf.resources.cpus = integer!(data.dig("resources", "cpus")) if data.dig("resources", "cpus")
@@ -42,7 +43,7 @@ module Lemans
       end
 
       attr_accessor :image, :dockerfile, :workdir, :backend,
-                    :resources, :build_timeout, :network, :profiles
+                    :resources, :build_timeout, :sandbox_ttl, :network, :profiles
 
       def initialize
         @image = nil
@@ -52,6 +53,7 @@ module Lemans
         @workdir = "/app"
         @resources = Resources.new(cpus: 2, memory: 2048, storage: 5120)
         @build_timeout = 10 * 60
+        @sandbox_ttl = nil
         @network = NetworkPolicy.new
       end
 
@@ -63,6 +65,7 @@ module Lemans
           "profiles" => profiles.transform_values { { "image" => it.image, "dockerfile" => it.dockerfile&.to_s }.compact },
           "workdir" => workdir,
           "build_timeout" => build_timeout,
+          "sandbox_ttl" => sandbox_ttl,
           "network" => network.to_h,
           "resources" => resources.to_h.transform_keys(&:to_s)
         }.compact

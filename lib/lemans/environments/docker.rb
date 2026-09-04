@@ -15,8 +15,8 @@ module Lemans
 
       attr_reader :container
 
-      def initialize(image:, resources:, network:, env: {}, labels: {}, logger: nil, build_timeout: nil)
-        super(image:, resources:, network:, env:, labels:,
+      def initialize(image:, resources:, network:, env: {}, labels: {}, logger: nil, build_timeout: nil, ttl: nil)
+        super(image:, resources:, network:, env:, labels:, ttl:,
               build_timeout: build_timeout || DEFAULT_BUILD_TIMEOUT)
         @logger = logger
         @name = "lemans-#{SecureRandom.hex(6)}"

@@ -32,8 +32,17 @@ class ConfigEnvironmentTest < Minitest::Test
     assert_equal "/app", env.workdir
     assert_equal Resources.new(cpus: 2, memory: 2048, storage: 5120), env.resources
     assert_equal 600, env.build_timeout
+    assert_nil env.sandbox_ttl
     assert_equal "public", env.network.mode
     assert_empty env.profiles
+  end
+
+  def test_sandbox_ttl
+    env = Lemans::Config::Environment.from_config(full_config.merge("sandbox_ttl" => "5h"))
+
+    assert_equal 18_000.0, env.sandbox_ttl
+    assert_equal 18_000.0, env.to_h["sandbox_ttl"]
+    refute Lemans::Config::Environment.new.to_h.key?("sandbox_ttl")
   end
 
   def test_partial_resources

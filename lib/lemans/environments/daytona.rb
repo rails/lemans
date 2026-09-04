@@ -9,8 +9,6 @@ module Lemans
     # Daytona sandboxes. Daytona builds images server-side into reusable content-named
     # snapshots and enforces the network policy itself.
     class Daytona < Environment
-      TTL_MINUTES = 120
-
       DEFAULT_BUILD_TIMEOUT = 600
 
       # Workspace tarballs ride uploads/downloads, so transfers get their own
@@ -41,14 +39,16 @@ module Lemans
         config
       end
 
-      def initialize(image:, resources:, network:, env: {}, labels: {}, logger: nil, build_timeout: nil)
-        super(image:, resources:, network:, env:, labels:,
+      def initialize(image:, resources:, network:, env: {}, labels: {}, logger: nil, build_timeout: nil, ttl: 3600)
+        super(image:, resources:, network:, env:, labels:, ttl:,
               build_timeout: build_timeout || DEFAULT_BUILD_TIMEOUT)
         @logger = logger
+        @started_at = nil
       end
 
       def start
         @sandbox = client.create(create_params, on_snapshot_create_logs: @logger)
+        @started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         @shell = Shell.new(sandbox)
         self
       rescue *Retries::SDK_ERRORS => e
@@ -61,7 +61,7 @@ module Lemans
       def exec(command, timeout: nil, env: {})
         @shell.exec(command, timeout: timeout || DEFAULT_TIMEOUT, env: env)
       rescue *Retries::SDK_ERRORS => e
-        raise InfrastructureError, "daytona: exec failed: #{e.message}"
+        raise InfrastructureError, "daytona: exec failed#{ttl_note}: #{e.message}"
       end
 
       def upload(local_path, remote_path)
@@ -127,9 +127,19 @@ module Lemans
           auto_delete_interval: 60,
           # A real ceiling: without it a harness that dies mid-run leaves a
           # running sandbox billing forever.
-          ttl_minutes: TTL_MINUTES,
+          ttl_minutes: ttl_minutes,
           **network_kwargs(network)
         )
+      end
+
+      def ttl_minutes = (ttl / 60.0).ceil
+
+      # Daytona destroys a sandbox at its TTL whatever it is doing; the next
+      # exec then fails with a vague "is the Sandbox started?".
+      def ttl_note
+        return "" unless @started_at && Process.clock_gettime(Process::CLOCK_MONOTONIC) - @started_at > ttl
+
+        " after the sandbox's #{ttl_minutes}m TTL expired (raise environment.sandbox_ttl)"
       end
 
       def snapshot_store

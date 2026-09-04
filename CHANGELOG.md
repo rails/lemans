@@ -1,5 +1,6 @@
 ## [Unreleased]
 
+- Make Daytona TTL inferred from the task timeout settings.
 - Fix Dockerfile resolution when profiles are used and per-task `bench.yml` exists.
 
 ## [1.2.0] - 2026-09-02

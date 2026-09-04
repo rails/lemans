@@ -13,17 +13,20 @@ module Lemans
 
     DEFAULT_TIMEOUT = 60
 
-    attr_reader :image, :resources, :network, :env, :labels, :build_timeout
+    attr_reader :image, :resources, :network, :env, :labels, :build_timeout, :ttl
 
     # `labels` is backend-agnostic trial metadata (task, trial id, phase);
-    # every backend receives it even if it has nowhere to put it.
-    def initialize(image:, resources:, network:, env: {}, labels: {}, build_timeout: nil)
+    # every backend receives it even if it has nowhere to put it. `ttl` is
+    # the longest the sandbox is expected to live: a backend that reaps
+    # sandboxes on a clock must not reap this one sooner.
+    def initialize(image:, resources:, network:, env: {}, labels: {}, build_timeout: nil, ttl: nil)
       @image = image
       @resources = resources
       @network = network
       @env = env
       @labels = labels
       @build_timeout = build_timeout
+      @ttl = ttl
     end
 
     # Build the image and bring the sandbox up under the network policy it was

@@ -35,6 +35,7 @@ module Lemans
             resources: task.environment.resources,
             network: task.environment.network,
             build_timeout: task.environment.build_timeout,
+            ttl: sandbox_ttl,
             labels: {
               "lemans.task" => task.name,
               "lemans.trial" => self.result.id,
@@ -180,6 +181,11 @@ module Lemans
       return "#{last}.#{current_step_index}" if pre.empty?
 
       [ *pre, current_step_index, last ].join(".")
+    end
+
+    def sandbox_ttl
+      task.environment.sandbox_ttl ||
+        [ 3600, task.environment.build_timeout + task.steps * (config.agent.timeout + task.verifier.timeout) + 600 ].max
     end
 
     def check_cost_limit!
