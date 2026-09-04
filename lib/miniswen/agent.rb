@@ -27,6 +27,11 @@ module Miniswen
     # The breakpoint marker Anthropic reads, shaped the way OpenRouter forwards it.
     CACHE_CONTROL = { type: "ephemeral" }.freeze
 
+    # Left unset, the provider reserves the model's advertised maximum output
+    # ahead of the prompt (qwen3.8-27b: 128K of a 256K window), halving the
+    # history an agent turn of a few hundred tokens can build on.
+    MAX_OUTPUT_TOKENS = 32_768
+
     EXEC_ENV = {
       "PAGER" => "cat",
       "MANPAGER" => "cat",
@@ -503,7 +508,7 @@ module Miniswen
         tools: { bash: @bash_tool },
         temperature: nil,
         model: model_info,
-        params: routing_params,
+        params: routing_params.merge(output_cap_params(model_info)),
         thinking: (RubyLLM::Thinking::Config.new(effort: @effort) if @effort)
       )
       payload(response)
@@ -542,6 +547,20 @@ module Miniswen
     end
 
     def provider_order = ENV["LEMANS_PROVIDER_ORDER"] || ENV["OPENROUTER_PROVIDER_ORDER"]
+
+    # OpenAI itself retired `max_tokens` for its reasoning models; the
+    # OpenAI-compatible providers and Anthropic still read it.
+    def output_cap_params(model_info)
+      cap = [ info&.max_tokens, MAX_OUTPUT_TOKENS ].compact.min
+      provider_class = RubyLLM::Provider.providers[model_info.provider.to_sym]
+      if [ RubyLLM::Providers::OpenAI, RubyLLM::Providers::Azure ].include?(provider_class)
+        { max_completion_tokens: cap }
+      elsif provider_class <= RubyLLM::Providers::OpenAI || provider_class <= RubyLLM::Providers::Anthropic
+        { max_tokens: cap }
+      else
+        {}
+      end
+    end
 
     def cost_source
       if local?

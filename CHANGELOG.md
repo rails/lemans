@@ -1,5 +1,6 @@
 ## [Unreleased]
 
+- Miniswen: send an explicit `max_tokens` on every request (otherwise defaults could eat a lot of context, e.g., for `qwen3.8-27b`).
 - `lemans report --metadata category:full-features` filters runs by task metadata.
 - Fractional credit support (in addition to reward).
 - Make Daytona TTL inferred from the task timeout settings.

@@ -251,7 +251,7 @@ class MiniswenAgentTest < Minitest::Test
   end
 
   def test_anthropic_over_openrouter_marks_cache_breakpoints
-    with_openrouter_key { build_agent(model: "openrouter/anthropic/test") }
+    with_api_key(:openrouter) { build_agent(model: "openrouter/anthropic/test") }
     stub_llm(SUBMIT)
     agent.run("task")
 
@@ -270,13 +270,13 @@ class MiniswenAgentTest < Minitest::Test
   end
 
   def test_provider_order_pins_openrouter_routing
-    with_openrouter_key { build_agent(model: "openrouter/anthropic/test") }
+    with_api_key(:openrouter) { build_agent(model: "openrouter/anthropic/test") }
     stub_llm(SUBMIT)
     ENV["OPENROUTER_PROVIDER_ORDER"] = "Chutes, Io Net"
     agent.run("task")
 
-    assert_equal({ provider: { order: [ "Chutes", "Io Net" ], allow_fallbacks: false } },
-                 RubyLLM::Test.last_request.params)
+    assert_equal({ order: [ "Chutes", "Io Net" ], allow_fallbacks: false },
+                 RubyLLM::Test.last_request.params[:provider])
     assert_equal "Chutes, Io Net", agent.provider_env["OPENROUTER_PROVIDER_ORDER"]
 
     ENV["LEMANS_PROVIDER_ORDER"] = "DeepInfra"
@@ -289,8 +289,34 @@ class MiniswenAgentTest < Minitest::Test
     ENV.delete("OPENROUTER_PROVIDER_ORDER")
   end
 
+  def test_every_request_caps_the_output_tokens
+    with_api_key(:openrouter) { build_agent(model: "openrouter/anthropic/test") }
+    stub_llm(SUBMIT)
+    agent.run("task")
+
+    assert_equal Miniswen::Agent::MAX_OUTPUT_TOKENS, RubyLLM::Test.last_request.params[:max_tokens]
+
+    with_api_key(:openrouter) { build_agent(model: "openrouter/ai21/jamba-large-1.7") }
+    stub_llm(SUBMIT)
+    agent.run("task")
+
+    assert_equal 4096, RubyLLM::Test.last_request.params[:max_tokens]
+
+    with_api_key(:openai) { build_agent(model: "openai/gpt-5.5") }
+    stub_llm(SUBMIT)
+    agent.run("task")
+
+    assert_equal({ max_completion_tokens: Miniswen::Agent::MAX_OUTPUT_TOKENS }, RubyLLM::Test.last_request.params)
+
+    build_agent
+    stub_llm(SUBMIT)
+    agent.run("task")
+
+    assert_equal({}, RubyLLM::Test.last_request.params)
+  end
+
   def test_an_effort_suffix_sets_the_reasoning_effort_and_stays_out_of_the_model_id
-    with_openrouter_key { build_agent(model: "openrouter/anthropic/test#xhigh") }
+    with_api_key(:openrouter) { build_agent(model: "openrouter/anthropic/test#xhigh") }
     stub_llm(SUBMIT)
     result = agent.run("task")
 
@@ -415,13 +441,13 @@ class MiniswenAgentTest < Minitest::Test
   end
 
   # The provider must construct before the test harness wraps it, and
-  # OpenRouter refuses to without a key.
-  def with_openrouter_key
-    original = RubyLLM.config.openrouter_api_key
-    RubyLLM.config.openrouter_api_key = "test-key"
+  # a hosted provider refuses to without a key.
+  def with_api_key(provider)
+    original = RubyLLM.config.public_send(:"#{provider}_api_key")
+    RubyLLM.config.public_send(:"#{provider}_api_key=", "test-key")
     yield
     agent.send(:resolved)
   ensure
-    RubyLLM.config.openrouter_api_key = original
+    RubyLLM.config.public_send(:"#{provider}_api_key=", original)
   end
 end
