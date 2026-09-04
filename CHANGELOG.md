@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [1.3.1] - 2026-09-04
+
 - `agent.max_output_tokens` and `lemans run --max-output-tokens`
 
 ## [1.3.0] - 2026-09-04
