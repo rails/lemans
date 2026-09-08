@@ -213,11 +213,7 @@ module LemansRemote # :nodoc: all
 
     def pack(to:)
       Dir.mktmpdir("lemans-remote-stage") do |stage|
-        @bench.root.children.each do |child|
-          next if EXCLUDES.include?(child.basename.to_s)
-
-          FileUtils.cp_r(child, File.join(stage, child.basename.to_s))
-        end
+        stage_files(stage)
         prune_tasks(stage) if @selected_tasks
         _, err, status = Open3.capture3("tar", "-czf", to, "-C", stage, ".")
         raise "could not pack the bench: #{err}" unless status.success?
@@ -226,6 +222,44 @@ module LemansRemote # :nodoc: all
     end
 
     private
+
+    # Every sandbox gets a copy, so a git bench ships what git would: tracked
+    # files plus untracked ones .gitignore lets through.
+    def stage_files(stage)
+      files = git_files
+      return copy_children(stage) unless files
+
+      files.each do |relative|
+        next if EXCLUDES.include?(relative.split("/", 2).first)
+
+        source = @bench.root.join(relative)
+        # The index still lists a file deleted from disk
+        next unless File.exist?(source) || File.symlink?(source)
+
+        destination = File.join(stage, relative)
+        FileUtils.mkdir_p(File.dirname(destination))
+        FileUtils.copy_entry(source, destination)
+      end
+    end
+
+    def copy_children(stage)
+      @bench.root.children.each do |child|
+        next if EXCLUDES.include?(child.basename.to_s)
+
+        FileUtils.cp_r(child, File.join(stage, child.basename.to_s))
+      end
+    end
+
+    # nil when the bench is not a git checkout; a nested repository lists as a
+    # bare directory, and is left out
+    def git_files
+      out, _err, status = Open3.capture3(
+        "git", "-C", @bench.root.to_s, "ls-files", "-z", "--cached", "--others", "--exclude-standard"
+      )
+      return nil unless status.success?
+
+      out.split("\0").reject { it.end_with?("/") }
+    end
 
     def prune_tasks(stage)
       tasks_rel = @bench.tasks_dir.relative_path_from(@bench.root).to_s

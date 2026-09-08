@@ -3,6 +3,7 @@
 - Miniswen: retry a lost provider connection for ~1 minute (was ~7 seconds).
 - `miniswen-installed`: wait `exec_timeout` past the agent's deadline (a command still running when time runs out no longer fails the whole run).
 - Collect the agent's patch when the agent phase fails.
+- `lemans-remote run`: pack the bench via `git ls-files` (a bench outside git ships whole, as before).
 
 ## [1.3.1] - 2026-09-04
 
