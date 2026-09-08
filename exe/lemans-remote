@@ -31,6 +31,7 @@
 #   Then watch, fetch, and clean up:
 #
 #     exe/lemans-remote status [--history] [--running | --complete] [-W [INTERVAL]]
+#     exe/lemans-remote logs RUN_ID [--tail N]
 #     exe/lemans-remote pull-runs [RUN_ID ...] [--all] [--dry-run]
 #     exe/lemans-remote drop-orphans [--min-age 10m]
 #     exe/lemans-remote clobber RUN_ID ... | --all
@@ -447,6 +448,14 @@ module LemansRemote # :nodoc: all
 
       body = response.result.to_s.strip
       body.empty? ? [] : JSON.parse(body)
+    end
+
+    def run_log(sandbox, run_id)
+      remote = "/vault/#{run_id}/run.log"
+      response = sandbox.process.exec(command: "cat #{Shellwords.escape(remote)}", timeout: 120)
+      raise "no log in the vault for #{run_id} (never launched, or still running on a sandbox that is gone)" unless response.exit_code.zero?
+
+      response.result.to_s
     end
 
     def archive_size(sandbox, run_id)
@@ -954,6 +963,22 @@ module LemansRemote # :nodoc: all
     rescue Interrupt
       say ""
     rescue Lemans::ConfigError, RuntimeError => e
+      raise Thor::Error, "lemans-remote: #{e.message}"
+    end
+
+    desc "logs RUN_ID", "Print a run's lemans output (live from its sandbox, or from the vault once it finished)"
+    option :tail, type: :numeric, desc: "Only the last N lines"
+    def logs(run_id)
+      row = Fleet.rows.find { it.run_id == run_id }
+      text =
+        if row && row.state == DaytonaApiClient::SandboxState::STARTED
+          row.sandbox.process.exec(command: "cat #{REMOTE_LOG} 2>/dev/null", timeout: 60).result.to_s
+        else
+          with_vault { |vault, sandbox| vault.run_log(sandbox, run_id) }
+        end
+      text = text.lines.last(options[:tail].to_i).join if options[:tail]
+      say text
+    rescue RuntimeError => e
       raise Thor::Error, "lemans-remote: #{e.message}"
     end
 
