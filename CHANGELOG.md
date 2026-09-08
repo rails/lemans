@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Miniswen: retry a lost provider connection for ~1 minute (was ~7 seconds).
+
 ## [1.3.1] - 2026-09-04
 
 - `agent.max_output_tokens` and `lemans run --max-output-tokens`

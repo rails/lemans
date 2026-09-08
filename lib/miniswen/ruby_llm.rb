@@ -8,9 +8,9 @@ RubyLLM.configure do |config|
   config.logger = Logger.new(IO::NULL) unless ENV["MINISWEN_DEBUG"] == "1"
 end
 
-# Increase retry window to handle egress network issues
+# About a minute of retries for egress blips (1, 2, 4, 8, 16, 32s plus jitter)
 RubyLLM.configure do |config|
-  config.max_retries = 3
+  config.max_retries = 6
   config.retry_interval = 1
 end
 
