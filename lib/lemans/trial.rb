@@ -79,6 +79,10 @@ module Lemans
             result.failed!(:agent_error, e.message)
             collect_patch!
             raise
+          rescue ::Miniswen::AccountingError
+            # Classified by the outer rescue; the work is still on disk
+            collect_patch!
+            raise
           end
 
         # Whatever the agent brought back is evidence, a failed run's included
