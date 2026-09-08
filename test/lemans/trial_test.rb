@@ -119,6 +119,15 @@ class TrialTest < Minitest::Test
     assert_predicate broken, :stopped
   end
 
+  def test_an_agent_killed_mid_run_still_leaves_its_patch
+    store = TestStore.new
+    env = sandbox(fails: /solve\.sh/)
+    result = Lemans::Trial.new(load_task, agent: "oracle", environment: env, store:).run
+
+    assert_equal :agent_error, result.status
+    assert_includes store.artifacts.keys, "agent.patch"
+  end
+
   def test_a_sandbox_that_dies_while_verifying_is_a_verifier_error
     result = build_trial(sandbox(fails: /test\.sh/)).run
 
@@ -207,6 +216,7 @@ class TrialTest < Minitest::Test
     assert_equal "the model went away", result.detail
     assert_equal result.id, trajectory.session_id
     assert_includes store.artifacts.keys, "trajectory.json"
+    assert_includes store.artifacts.keys, "agent.patch"
     assert_equal '{"status":"error"}', store.artifacts["agent.result.json"]
     # A failed agent phase grades nothing.
     assert_nil store.artifacts["verifier.log"]
