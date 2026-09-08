@@ -579,6 +579,8 @@ module LemansRemote # :nodoc: all
       end
     end
 
+    # Runs from the rescue of a failed creation, so it must not raise: an
+    # exception here would replace the creation error and end the retries.
     def drop_half_created
       query = ::Daytona::ListSandboxesQuery.new(labels: { RUN_ID_LABEL => @run_id })
       LemansRemote.client.list(query).each do |sandbox|
@@ -586,6 +588,8 @@ module LemansRemote # :nodoc: all
       rescue StandardError => e
         warn "lemans-remote: could not delete half-created sandbox #{sandbox.id}: #{e.message}"
       end
+    rescue StandardError => e
+      warn "lemans-remote: could not list the sandboxes of #{@run_id}: #{e.message}"
     end
 
     def sandbox_params(volume)
@@ -971,8 +975,12 @@ module LemansRemote # :nodoc: all
     def logs(run_id)
       row = Fleet.rows.find { it.run_id == run_id }
       text =
-        if row && row.state == DaytonaApiClient::SandboxState::STARTED
+        if row&.state == DaytonaApiClient::SandboxState::STARTED
           row.sandbox.process.exec(command: "cat #{REMOTE_LOG} 2>/dev/null", timeout: 60).result.to_s
+        elsif row && Fleet::LIVE_STATES.include?(row.state)
+          # The vault gets the log when the run exits, and a sandbox still
+          # coming up has nothing to read yet
+          raise "#{run_id} is #{row.state} — it has not started logging yet"
         else
           with_vault { |vault, sandbox| vault.run_log(sandbox, run_id) }
         end
