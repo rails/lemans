@@ -73,6 +73,15 @@ class MiniswenInstalledTest < Minitest::Test
     assert_equal "submitted", JSON.parse(response.raw_result)["status"]
   end
 
+  def test_the_outer_exec_outlasts_a_command_started_at_the_deadline
+    agent, task = build_agent
+    shell = TestEnvironment.new(files: { Lemans::Agents::MiniswenInstalled::RESULTS_PATH => remote_result_json })
+
+    with_openrouter_key { agent.run(task, shell) }
+
+    assert_equal (30 * 60) + 300 + Lemans::Agents::MiniswenInstalled::EXEC_SLACK_SEC, shell.timeouts.last
+  end
+
   def test_a_missing_result_file_is_an_infrastructure_failure_with_the_runs_output
     agent, task = build_agent
     shell = TestEnvironment.new
