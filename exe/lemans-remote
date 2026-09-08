@@ -501,6 +501,7 @@ module LemansRemote # :nodoc: all
     SETUP_TIMEOUT_SEC = 300
     TRANSFER_TIMEOUT_SEC = 900
     TIMED_OUT = 124
+    CREATE_ATTEMPTS = 3
 
     def initialize(bench:, snapshot:, run_id:, tasks:, models:, extra_args:, extra_env:,
                    timeout_sec:, runs_dir:, keep:, sync:, shell:)
@@ -552,8 +553,34 @@ module LemansRemote # :nodoc: all
       0
     end
 
+    # Daytona sometimes never starts a sandbox it accepted; the SDK gives up
+    # after a minute and the half-made sandbox stays behind under this run's
+    # labels, listed as running until Daytona flags it, then stale forever.
     def create_sandbox(volume = nil)
-      params = ::Daytona::CreateSandboxFromSnapshotParams.new(
+      attempt = 0
+      begin
+        attempt += 1
+        LemansRemote.client.create(sandbox_params(volume))
+      rescue *Backend::Retries::SDK_ERRORS => e
+        drop_half_created
+        raise if attempt >= CREATE_ATTEMPTS
+
+        say :retry, "sandbox did not start (#{e.message}), attempt #{attempt + 1}/#{CREATE_ATTEMPTS}", :yellow
+        retry
+      end
+    end
+
+    def drop_half_created
+      query = ::Daytona::ListSandboxesQuery.new(labels: { RUN_ID_LABEL => @run_id })
+      LemansRemote.client.list(query).each do |sandbox|
+        sandbox.delete
+      rescue StandardError => e
+        warn "lemans-remote: could not delete half-created sandbox #{sandbox.id}: #{e.message}"
+      end
+    end
+
+    def sandbox_params(volume)
+      ::Daytona::CreateSandboxFromSnapshotParams.new(
         snapshot: @snapshot,
         env_vars: env_vars,
         labels: {
@@ -567,7 +594,6 @@ module LemansRemote # :nodoc: all
         ttl_minutes: (@timeout_sec / 60.0).ceil + 60,
         volumes: volume ? [ Vault.mount_param(volume) ] : nil
       )
-      LemansRemote.client.create(params)
     end
 
     def env_vars
