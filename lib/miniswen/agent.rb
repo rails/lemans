@@ -8,7 +8,7 @@ module Miniswen
   # A Ruby port of mini-swe-agent's loop (mini.yaml at commit a83fcae): ask the
   # model for bash tool calls, run them, repeat until it submits or a limit trips.
   class Agent
-    SUBMIT_MARKER = "COMPLETE_TASK_AND_SUBMIT_FINAL_OUTPUT"
+    SUBMIT_MARKER = "DONE_HAND_OFF"
     MAX_OBSERVATION_CHARS = 10_000
     MAX_CONSECUTIVE_FORMAT_ERRORS = 3
 
@@ -39,11 +39,13 @@ module Miniswen
     LOCAL_PROVIDERS = %i[ollama gpustack].freeze
 
     SYSTEM_TEMPLATE = <<~PROMPT
-      You are a helpful assistant that can interact with a computer.
+      You are a one-off software engineering sub-agent working in a checked-out repository. You can run shell commands and edit files.
     PROMPT
 
     INSTANCE_TEMPLATE = <<~PROMPT.freeze
-      Please solve this issue: %<instruction>s
+      You have been handed the following task to work on in this repository:
+
+      %<instruction>s
 
       You can execute bash commands and edit files to implement the necessary changes.
 
@@ -52,12 +54,12 @@ module Miniswen
       This workflow should be done step-by-step so that you can iterate on your changes and any possible problems.
 
       1. Analyze the codebase by finding and reading relevant files
-      2. Create a script to reproduce the issue
-      3. Edit the source code to resolve the issue
-      4. Verify your fix works by running your script again
-      5. Test edge cases to ensure your fix is robust
-      6. Submit your changes and finish your work by issuing the following command: `echo #{SUBMIT_MARKER}`.
-         Do not combine it with any other command. <important>After this command, you cannot continue working on this task.</important>
+      2. Create a script to reproduce the issue / exercise the feature
+      3. Edit the source code to resolve the issue / implement the feature
+      4. Verify your fix or feature works by running your script again
+      5. Test edge cases to ensure your fix or feature is robust
+      6. Hand your work off by running exactly this command on its own: `echo #{SUBMIT_MARKER}`.
+         Nothing runs after it, so use it only once you are done.
 
       ## Command Execution Rules
 
@@ -79,10 +81,9 @@ module Miniswen
       - Your response MUST include AT LEAST ONE bash tool call
       - Directory or environment variable changes are not persistent. Every action is executed in a new subshell.
       - However, you can prefix any action with `MY_ENV_VAR=MY_VALUE cd /path/to/working/dir && ...` or write/load environment variables from files
-      - Submit your changes and finish your work by issuing the following command: `echo #{SUBMIT_MARKER}`.
-        Do not combine it with any other command. <important>After this command, you cannot continue working on this task.</important>
+      - Finish your work and hand off by running `echo #{SUBMIT_MARKER}` on its own. Do not combine it with any other command (otherwise the hand-off could fail). <important>After this command, you cannot continue working on this task: you are a one-off sub-agent.</important>
 
-      Example of a CORRECT response:
+      Example of a valid response:
       <example_response>
       I need to understand the structure of the repository first. Let me check what files are in the current directory to get a better understanding of the codebase.
 
@@ -98,10 +99,10 @@ module Miniswen
       ### Create a new file:
 
       ```bash
-      cat <<'EOF' > newfile.py
-      import numpy as np
+      cat <<'EOF' > newfile.rb
+      require "json"
       hello = "ciao"
-      print(hello)
+      puts JSON.generate(hello:)
       EOF
       ```
 
@@ -109,23 +110,23 @@ module Miniswen
       %<macos_sed_note>s
       ```bash
       # Replace all occurrences
-      sed -i 's/old_string/new_string/g' filename.py
+      sed -i 's/old_string/new_string/g' filename.rb
 
       # Replace only first occurrence
-      sed -i 's/old_string/new_string/' filename.py
+      sed -i 's/old_string/new_string/' filename.rb
 
       # Replace first occurrence on line 1
-      sed -i '1s/old_string/new_string/' filename.py
+      sed -i '1s/old_string/new_string/' filename.rb
 
       # Replace all occurrences in lines 1-10
-      sed -i '1,10s/old_string/new_string/g' filename.py
+      sed -i '1,10s/old_string/new_string/g' filename.rb
       ```
 
       ### View file content:
 
       ```bash
       # View specific lines with numbers
-      nl -ba filename.py | sed -n '10,20p'
+      nl -ba filename.rb | sed -n '10,20p'
       ```
 
       ### Any other command you want to run
@@ -162,8 +163,7 @@ module Miniswen
       - Tool: bash
       - Arguments: {"command": "your_command_here"}
 
-      If you want to end the task, please issue the following command: `echo #{SUBMIT_MARKER}`
-      without any other command.
+      To hand off when you are done, run `echo #{SUBMIT_MARKER}` on its own.
     MESSAGE
 
     # Thinking that also carries the provider's reasoning_details for verbatim replay.
