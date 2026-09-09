@@ -32,6 +32,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "concurrent-ruby", "~> 1.3"
   spec.add_dependency "csv", "~> 3.3"
   spec.add_dependency "daytona", "~> 0.203"
+  spec.add_dependency "json", "< 3" # positional args change is not yet supported by faraday
   spec.add_dependency "faraday", "~> 2.10"
   spec.add_dependency "faraday-multipart", "~> 1.1"
   spec.add_dependency "rexml", "~> 3.4"
