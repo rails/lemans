@@ -32,7 +32,7 @@
 #
 #     exe/lemans-remote status [--history] [--running | --complete] [-W [INTERVAL]]
 #     exe/lemans-remote logs RUN_ID [--tail N]
-#     exe/lemans-remote pull-runs [RUN_ID ...] [--all] [--dry-run]
+#     exe/lemans-remote pull-runs [RUN_ID ...] [--match SUBSTR] [--all] [--dry-run]
 #     exe/lemans-remote drop-orphans [--min-age 10m]
 #     exe/lemans-remote clobber RUN_ID ... | --all
 #     exe/lemans-remote snapshots
@@ -440,10 +440,43 @@ module LemansRemote # :nodoc: all
       end
     end
 
-    def manifests(sandbox)
-      code = 'require "json"; puts Dir.glob("/vault/*/manifest.json", File::FNM_DOTMATCH)' \
-             ".filter_map { |f| JSON.parse(File.read(f)) rescue nil }.to_json"
-      response = sandbox.process.exec(command: "ruby -e #{Shellwords.escape(code)}", timeout: 120)
+    # The vault is an S3-backed FUSE mount: listing /vault is one request,
+    # but every /vault/<run>/manifest.json is another round-trip, so a plain
+    # glob over hundreds of runs outlives the exec timeout. List once, then
+    # read the manifests concurrently (and only the requested ones, if any).
+    MANIFEST_READERS = 32
+    MANIFESTS_TIMEOUT_SEC = 120
+
+    MANIFESTS_CODE = <<~'RUBY'
+      require "json"
+      only = JSON.parse(ARGV[0])
+      match = ARGV[1]
+      ids = Dir.children("/vault")
+      ids &= only if only
+      ids.select! { it.include?(match) } if match && !match.empty?
+      queue = Queue.new
+      ids.each { queue << it }
+      queue.close
+      found = Queue.new
+      readers = Array.new([ids.size, ENV.fetch("LEMANS_MANIFEST_READERS", "32").to_i].min) do
+        Thread.new do
+          while (id = queue.pop)
+            found << JSON.parse(File.read("/vault/#{id}/manifest.json")) rescue nil
+          end
+        end
+      end
+      readers.each(&:join)
+      list = []
+      list << found.pop until found.empty?
+      puts list.to_json
+    RUBY
+
+    def manifests(sandbox, only: nil, match: nil)
+      args = [ only&.to_a.to_json, match.to_s ].map { Shellwords.escape(it) }.join(" ")
+      response = sandbox.process.exec(
+        command: "LEMANS_MANIFEST_READERS=#{MANIFEST_READERS} ruby -e #{Shellwords.escape(MANIFESTS_CODE)} #{args}",
+        timeout: MANIFESTS_TIMEOUT_SEC
+      )
       raise "could not read the vault manifests: #{response.result}" unless response.exit_code.zero?
 
       body = response.result.to_s.strip
@@ -995,10 +1028,11 @@ module LemansRemote # :nodoc: all
     option :all, type: :boolean, default: false, desc: "Pull every completed run, even ones already pulled"
     option :dry_run, type: :boolean, default: false, desc: "Preview what would be downloaded without pulling anything"
     option :runs_dir, default: "runs", desc: "Local directory to sync the results into"
+    option :match, desc: "Only consider runs whose id contains this substring (e.g. a task name)"
     def pull_runs(*run_ids)
       pulled = []
       with_vault do |vault, sandbox|
-        manifests = vault.manifests(sandbox)
+        manifests = vault.manifests(sandbox, only: (run_ids if run_ids.any?), match: options[:match])
         known = manifests.map { it["run_id"] }
         targets =
           if run_ids.any?
