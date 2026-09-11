@@ -159,6 +159,83 @@ class DaytonaEnvironmentTest < Minitest::Test
     assert sandbox.deleted
   end
 
+  # The SDK gives a sandbox one fixed minute to start; under load Daytona
+  # needs longer, and the sandbox it did make still carries the trial's labels.
+  def test_a_stalled_sandbox_is_adopted_or_reaped_before_creation_is_retried
+    stalled = ScriptedSandbox.new("sb-slow", state: "starting")
+    client = ScriptedClient.new(failures: 1, sandbox: ScriptedSandbox.new("sb-fresh"), half_created: [ stalled ])
+    environment = environment_for(reference_image, labels: TRIAL_LABELS)
+    start(environment, client)
+
+    assert_same stalled, environment.sandbox
+    assert_equal 1, client.creates
+    assert_equal [ TRIAL_LABELS ], client.queried_labels
+    refute stalled.deleted
+
+    stuck = ScriptedSandbox.new("sb-stuck", state: "creating", starts: false)
+    fresh = ScriptedSandbox.new("sb-fresh")
+    client = ScriptedClient.new(failures: 1, sandbox: fresh, half_created: [ stuck ])
+    log = []
+    environment = environment_for(reference_image, labels: TRIAL_LABELS, logger: ->(line) { log << line })
+    start(environment, client)
+
+    assert_same fresh, environment.sandbox
+    assert_equal 2, client.creates
+    assert stuck.deleted
+    assert_match(/attempt 2\/3/, log.join)
+  end
+
+  # The last attempt's leftover has no retry to reap it, so giving up must.
+  def test_creation_gives_up_after_three_attempts_and_reaps_the_last_leftover
+    leftover = ScriptedSandbox.new("sb-leftover", state: "error")
+    client = ScriptedClient.new(failures: 10, sandbox: nil, half_created: [ leftover ], appears_at: 3)
+    environment = environment_for(reference_image, labels: TRIAL_LABELS)
+
+    error = assert_raises(Lemans::InfrastructureError) { start(environment, client) }
+
+    assert_match(/could not start sandbox/, error.message)
+    assert_equal 3, client.creates
+    assert leftover.deleted
+  end
+
+  # A repeat while the original may still be running would double up: so
+  # would one made blind, without labels or with the listing down. A refused
+  # snapshot or key fails the same way every time.
+  def test_creation_is_not_retried_unless_the_half_made_sandbox_is_accounted_for
+    stuck = ScriptedSandbox.new("sb-stuck", state: "error", deletable: false)
+    client = ScriptedClient.new(failures: 10, sandbox: nil, half_created: [ stuck ])
+    error = assert_raises(Lemans::InfrastructureError) { start(environment_for(reference_image, labels: TRIAL_LABELS), client) }
+
+    assert_includes error.message, "sb-stuck may still be running"
+    assert_equal 1, client.creates
+
+    twins = [ ScriptedSandbox.new("sb-one", state: "error"), ScriptedSandbox.new("sb-two", state: "error") ]
+    client = ScriptedClient.new(failures: 10, sandbox: nil, half_created: twins)
+    error = assert_raises(Lemans::InfrastructureError) { start(environment_for(reference_image, labels: TRIAL_LABELS), client) }
+
+    assert_includes error.message, "sb-one, sb-two all carry"
+    assert_equal 1, client.creates
+    refute twins.any?(&:deleted)
+
+    client = ScriptedClient.new(failures: 10, sandbox: nil, half_created: [], lists: false)
+    error = assert_raises(Lemans::InfrastructureError) { start(environment_for(reference_image, labels: TRIAL_LABELS), client) }
+
+    assert_includes error.message, "listing them failed"
+    assert_equal 1, client.creates
+
+    client = ScriptedClient.new(failures: 10, sandbox: nil, half_created: [])
+    assert_raises(Lemans::InfrastructureError) { start(environment_for(reference_image), client) }
+
+    assert_equal 1, client.creates
+    assert_empty client.queried_labels
+
+    client = ScriptedClient.new(failures: 10, sandbox: nil, half_created: [], status_code: 404)
+    assert_raises(Lemans::InfrastructureError) { start(environment_for(reference_image, labels: TRIAL_LABELS), client) }
+
+    assert_equal 1, client.creates
+    assert_empty client.queried_labels
+  end
+
   # ttl_minutes is a hard lifetime cap: a sandbox reaped under a legitimate
   # long run fails its next exec with a vague "is the Sandbox started?".
   def test_the_sandbox_lives_as_long_as_the_trial_asked_for
@@ -196,6 +273,8 @@ class DaytonaEnvironmentTest < Minitest::Test
   # --- fakes ---
 
   FailedSnapshot = Struct.new(:name, :state, :error_reason)
+
+  TRIAL_LABELS = { "lemans.trial" => "t1" }.freeze
 
   class FakeSnapshotService
     attr_reader :deleted, :created
@@ -259,6 +338,79 @@ class DaytonaEnvironmentTest < Minitest::Test
     def create(_params, on_snapshot_create_logs: nil) = sandbox
   end
 
+  # A sandbox Daytona accepted but has not started: `state` is what a listing
+  # reports, `starts` whether waiting on it pays off.
+  class ScriptedSandbox
+    attr_reader :id, :state, :deleted
+
+    def initialize(id, state: "started", starts: true, deletable: true)
+      @id = id
+      @state = state
+      @starts = starts
+      @deletable = deletable
+      @deleted = false
+    end
+
+    # Like the SDK: a sandbox already in an error state fails the wait at once.
+    def wait_for_sandbox_start(_timeout)
+      raise ::Daytona::Sdk::Error, "Sandbox #{id} is in #{state} state" if %w[error build_failed].include?(@state)
+      raise ::Daytona::Sdk::TimeoutError, "Sandbox #{id} failed to start within the 180 seconds timeout period" unless @starts
+
+      @state = "started"
+    end
+
+    def delete(wait: false)
+      raise ::Daytona::Sdk::Error, "Failed to delete sandbox #{id}" unless @deletable
+
+      @deleted = true
+    end
+
+    def process
+      @process ||= Object.new.tap do |process|
+        def process.create_session(_id) = nil
+      end
+    end
+  end
+
+  # create fails N times, then answers; list answers with the half-created
+  # sandboxes (from the `appears_at`-th listing on) and records what it was
+  # asked for.
+  class ScriptedClient
+    attr_reader :creates, :queried_labels
+
+    def initialize(failures:, sandbox:, half_created:, status_code: nil, appears_at: 1, lists: true)
+      @failures = failures
+      @sandbox = sandbox
+      @half_created = half_created
+      @status_code = status_code
+      @appears_at = appears_at
+      @lists = lists
+      @creates = 0
+      @listings = 0
+      @queried_labels = []
+    end
+
+    def snapshot = FlakySnapshotService.new(failures: 0, snapshot: FailedSnapshot.new("ready", ::DaytonaApiClient::SnapshotState::ACTIVE, nil))
+
+    def create(_params, on_snapshot_create_logs: nil)
+      @creates += 1
+      raise ::Daytona::Sdk::Error.new("Failed to create sandbox", status_code: @status_code) if @status_code && @creates <= @failures
+      raise ::Daytona::Sdk::TimeoutError, "Sandbox sb-slow failed to start within the 0.001 seconds timeout period" if @creates <= @failures
+
+      @sandbox
+    end
+
+    def list(query)
+      @queried_labels << query.labels
+      raise ::Daytona::Sdk::Error, "Failed to list sandboxes" unless @lists
+
+      @listings += 1
+      return [].each if @listings < @appears_at
+
+      @half_created.reject(&:deleted).each
+    end
+  end
+
   class FakeDaytonaConfig
     attr_accessor :api_key, :jwt_token
 
@@ -298,9 +450,14 @@ class DaytonaEnvironmentTest < Minitest::Test
     store_for(image, resources: resources).name
   end
 
-  def environment_for(image, resources: resources_with, build_timeout: 4, ttl: 3600)
-    Lemans::Environments::Daytona.new(image: image, resources: resources, ttl: ttl,
-                                      network: Lemans::Config::NetworkPolicy.new("none"), build_timeout: build_timeout)
+  def environment_for(image, resources: resources_with, build_timeout: 4, ttl: 3600, labels: {}, logger: nil)
+    environment = Lemans::Environments::Daytona.new(image: image, resources: resources, ttl: ttl, labels: labels, logger: logger,
+                                                    network: Lemans::Config::NetworkPolicy.new("none"), build_timeout: build_timeout)
+    quiet(environment)
+  end
+
+  def start(environment, client)
+    Lemans::Environments::Daytona.stub(:client, client) { environment.start }
   end
 
   def resources_with(cpus: 2, memory: 2048, storage: 5120)

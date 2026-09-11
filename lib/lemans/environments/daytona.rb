@@ -9,11 +9,17 @@ module Lemans
     # Daytona sandboxes. Daytona builds images server-side into reusable content-named
     # snapshots and enforces the network policy itself.
     class Daytona < Environment
+      include Retries
+
       DEFAULT_BUILD_TIMEOUT = 600
 
       # Workspace tarballs ride uploads/downloads, so transfers get their own
       # budget through the SDK's streaming API instead of the global HTTP cap.
       TRANSFER_TIMEOUT = 900
+
+      CREATE_ATTEMPTS = 3
+      CREATE_RETRY_DELAY = 5
+      ADOPT_TIMEOUT = 180
 
       SDKTweaks.apply!
       # The SDK's typhoeus/libcurl transfers segfault the VM under concurrent
@@ -47,7 +53,7 @@ module Lemans
       end
 
       def start
-        @sandbox = client.create(create_params, on_snapshot_create_logs: @logger)
+        @sandbox = create_sandbox
         @started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
         @shell = Shell.new(sandbox)
         self
@@ -115,6 +121,64 @@ module Lemans
       private
 
       def client = self.class.client
+
+      # Under load Daytona accepts a sandbox, then stalls past the SDK's fixed
+      # minute. The one it half-made carries this trial's labels: adopt it if
+      # it comes up, delete it otherwise, and only then try again. Without
+      # labels there is nothing to find it by, so the failure stands.
+      def create_sandbox
+        attempt = 0
+        begin
+          attempt += 1
+          client.create(create_params, on_snapshot_create_logs: @logger)
+        rescue *Retries::SDK_ERRORS => e
+          raise if labels.empty? || !retryable?(e)
+
+          if (leftover = half_created(e))
+            return leftover if await_start(leftover)
+
+            reap!(leftover, e)
+          end
+          raise if attempt >= CREATE_ATTEMPTS
+
+          log "sandbox did not start (#{e.message}), attempt #{attempt + 1}/#{CREATE_ATTEMPTS}"
+          sleep CREATE_RETRY_DELAY
+          retry
+        end
+      end
+
+      # One create makes one sandbox; two under the same labels is not ours to sort out.
+      def half_created(error)
+        found = client.list(::Daytona::ListSandboxesQuery.new(labels: labels)).to_a
+        if found.size > 1
+          raise InfrastructureError, "#{could_not_start(error)}; #{found.map(&:id).join(", ")} all carry #{labels.inspect}"
+        end
+
+        found.first
+      rescue *Retries::SDK_ERRORS => e
+        raise InfrastructureError, "#{could_not_start(error)}; a sandbox may still be running under #{labels.inspect}, " \
+                                   "and listing them failed: #{e.message}"
+      end
+
+      # The SDK's wait fails at once on a dead sandbox.
+      def await_start(sandbox)
+        sandbox.wait_for_sandbox_start(ADOPT_TIMEOUT)
+        log "adopted sandbox #{sandbox.id}, which came up after the SDK gave up on it"
+        true
+      rescue *Retries::SDK_ERRORS => e
+        log "sandbox #{sandbox.id} did not come up on its own: #{e.message}"
+        false
+      end
+
+      def reap!(sandbox, error)
+        sandbox.delete
+      rescue *Retries::SDK_ERRORS => e
+        raise InfrastructureError, "#{could_not_start(error)}; #{sandbox.id} may still be running and could not be deleted: #{e.message}"
+      end
+
+      def could_not_start(error) = "daytona: could not start sandbox: #{error.message}"
+
+      def log(message) = @logger&.call("lemans: #{message}\n")
 
       # A sandbox inherits the snapshot's resources, so the profile's are
       # stamped into the snapshot at build time.

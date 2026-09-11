@@ -7,6 +7,8 @@ module Lemans
     class Daytona
       # Another try for calls whose repeat is free. Only reads qualify: a
       # mutation may have landed server-side before its failure surfaced.
+      # Sandbox creation is the exception (Daytona#create_sandbox): what it
+      # half-made is found by label and dealt with before the repeat.
       module Retries
         # The snapshot service leaks the generated client's own error classes
         # instead of wrapping them, so both dialects have to be caught.
