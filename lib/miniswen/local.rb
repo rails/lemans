@@ -9,8 +9,10 @@ module Miniswen
   class Local < Environment
     TIMEOUT_EXIT_CODE = 124
 
+    # Always through a shell: Ruby execs a metacharacter-free string directly,
+    # and a missing binary would then raise ENOENT here instead of exiting 127.
     def exec(command, timeout: nil, env: nil)
-      Open3.popen2e(env || {}, command, pgroup: true) do |stdin, io, wait_thr|
+      Open3.popen2e(env || {}, "sh", "-c", command, pgroup: true) do |stdin, io, wait_thr|
         stdin.close
         reader = Thread.new { io.read }
 
