@@ -513,7 +513,7 @@ module Miniswen
       body = e.response&.body.to_s
       detail = body.empty? ? e.message : "#{e.message}: #{body[0, 1000]}"
       raise InfrastructureError, "miniswen: the model call failed: #{detail}"
-    rescue Faraday::SSLError, Faraday::ConnectionFailed, Faraday::TimeoutError => e
+    rescue Faraday::SSLError, Faraday::ConnectionFailed, Faraday::TimeoutError, Faraday::ParsingError => e
       raise InfrastructureError, "miniswen: the model call failed: #{e.class}: #{e.message}"
     end
 
