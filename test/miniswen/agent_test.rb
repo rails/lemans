@@ -415,8 +415,31 @@ class MiniswenAgentTest < Minitest::Test
     end
   end
 
-  def test_ssl_errors_join_the_transport_retry_list
-    assert_includes RubyLLM::Connection.allocate.retry_exceptions, Faraday::SSLError
+  # A truncated 200 body surfaces as a parsing error after the retries, and
+  # must be classified like any other transport failure rather than crash.
+  def test_a_truncated_response_body_becomes_an_infrastructure_error
+    stub_llm("true")
+    agent.stub(:resolved, proc { raise Faraday::ParsingError.new("unexpected end of input", nil) }) do
+      error = assert_raises(Miniswen::InfrastructureError) { agent.run("task") }
+
+      assert_includes error.message, "Faraday::ParsingError"
+    end
+  end
+
+  def test_ssl_and_parsing_errors_join_the_transport_retry_list
+    exceptions = RubyLLM::Connection.allocate.retry_exceptions
+
+    assert_includes exceptions, Faraday::SSLError
+    assert_includes exceptions, Faraday::ParsingError
+  end
+
+  # The retry budget must outlast the outages seen in the field: several
+  # minutes of provider rate limiting.
+  def test_the_retry_budget_covers_about_five_minutes
+    config = RubyLLM.config
+    total = (0...config.max_retries).sum { config.retry_interval * config.retry_backoff_factor**it }
+
+    assert_operator total, :>=, 240
   end
 
   def test_partial_result_preserves_the_transcript_and_totals

@@ -8,9 +8,10 @@ RubyLLM.configure do |config|
   config.logger = Logger.new(IO::NULL) unless ENV["MINISWEN_DEBUG"] == "1"
 end
 
-# About a minute of retries for egress blips (1, 2, 4, 8, 16, 32s plus jitter)
+# About five minutes of retries (1, 2, 4, ... 128s plus jitter): provider
+# outages and rate-limit windows outlast the minute this used to allow.
 RubyLLM.configure do |config|
-  config.max_retries = 6
+  config.max_retries = 8
   config.retry_interval = 1
 end
 
@@ -36,13 +37,13 @@ module Miniswen
     end
   end
 
-  # A handshake reset never sent the request, so retrying is as safe as the
-  # ConnectionFailed retries ruby_llm already does; it only lists SSL errors
-  # as fatal.
-  module RetryTransientSSL
-    def retry_exceptions = super + [ Faraday::SSLError ]
+  # ruby_llm lists SSL errors as fatal, but a handshake reset never sent the
+  # request; a 200 with a truncated JSON body is the same dropped connection
+  # one step later.
+  module RetryTransientFailures
+    def retry_exceptions = super + [ Faraday::SSLError, Faraday::ParsingError ]
   end
 end
 
 RubyLLM::Providers::OpenRouter.prepend(Miniswen::VerbatimReasoningDetails)
-RubyLLM::Connection.prepend(Miniswen::RetryTransientSSL)
+RubyLLM::Connection.prepend(Miniswen::RetryTransientFailures)
