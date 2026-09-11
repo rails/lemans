@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [1.3.3] - 2026-09-11
+
 - Daytona: retry sandbox creation when the SDK gives up on a stalled start (the half-made sandbox is adopted or deleted first).
 - Miniswen: run local commands through `sh -c` (a missing command is exit 127, not a harness crash).
 - Miniswen: retry model calls for ~5 min instead of ~1, truncated responses included.
