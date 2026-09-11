@@ -1,5 +1,10 @@
 ## [Unreleased]
 
+- Daytona: retry sandbox creation when the SDK gives up on a stalled start (the half-made sandbox is adopted or deleted first).
+- Miniswen: run local commands through `sh -c` (a missing command is exit 127, not a harness crash).
+- Miniswen: retry model calls for ~5 min instead of ~1, truncated responses included.
+- `lemans-remote run --launch-interval N` (default 3s) spaces sandbox launches; `--concurrency` is now a no-op.
+
 ## [1.3.2] - 2026-09-08
 
 - Miniswen: increase provider error max retry window to ~1 min.
