@@ -102,6 +102,10 @@ module Lemans
       def run_args
         args = [ "--detach", "--init", "--name", @name,
                  "--cpus", resources.cpus.to_s, "--memory", "#{resources.memory}m",
+                 # The default profile refuses the namespaces the agent's bubblewrap
+                 # jail is made of, and loopback inside it needs NET_ADMIN.
+                 "--security-opt", "seccomp=unconfined", "--security-opt", "apparmor=unconfined",
+                 "--cap-add", "SYS_ADMIN", "--cap-add", "NET_ADMIN",
                  "--entrypoint", "sh" ]
         args += [ "--network", "none" ] if network.none?
         env.each { |key, value| args += [ "--env", "#{key}=#{value}" ] }
