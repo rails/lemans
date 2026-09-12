@@ -39,6 +39,8 @@ class MiniswenInstalledTest < Minitest::Test
 
     assert_equal [
       "command -v miniswen >/dev/null 2>&1 || gem install miniswen -v #{Miniswen::VERSION} --no-document",
+      "command -v bwrap >/dev/null 2>&1 || " \
+      "(apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends bubblewrap)",
       "miniswen --refresh-registry"
     ], shell.commands
   end
@@ -56,7 +58,7 @@ class MiniswenInstalledTest < Minitest::Test
 
     command = shell.commands.last
 
-    assert_includes command, "miniswen -q --no-refresh-registry"
+    assert_includes command, "miniswen -q --no-refresh-registry --jail"
     assert_includes command, "-m openrouter/z-ai/glm-5.2"
     assert_includes command, "--results-path /tmp/lemans-miniswen.result.json"
     assert_includes command, "--max-steps 100"

@@ -23,6 +23,8 @@ class DockerEnvironmentTest < Minitest::Test
     assert_includes run.each_cons(2).to_a, [ "--label", "lemans.task=t1" ]
     assert_equal [ "-c", "tail -f /dev/null" ], run.last(2)
     assert_includes run.each_cons(2).to_a, [ "--network", "none" ]
+    assert_includes run.each_cons(2).to_a, [ "--cap-add", "SYS_ADMIN" ]
+    assert_includes run.each_cons(2).to_a, [ "--security-opt", "seccomp=unconfined" ]
     assert_equal environment.container, run[run.index("--name") + 1]
     assert_equal environment.build_timeout, calls.first[:timeout]
   end

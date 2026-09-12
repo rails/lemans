@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+- Miniswen: `--jail` runs every command inside one bubblewrap sandbox for the whole run: no network, its own pid namespace, and no credentials in the environment. A sandbox that cannot start fails the run.
+- `miniswen-installed` installs bubblewrap next to miniswen and always runs it jailed, so the sandbox shell can no longer reach the model API with the harness's key.
+- Docker: containers start with the capabilities the jail needs (SYS_ADMIN, NET_ADMIN, unconfined seccomp and AppArmor).
+
 ## [1.3.3] - 2026-09-11
 
 - Daytona: retry sandbox creation when the SDK gives up on a stalled start (the half-made sandbox is adopted or deleted first).
