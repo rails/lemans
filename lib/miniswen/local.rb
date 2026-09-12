@@ -12,7 +12,7 @@ module Miniswen
     # Always through a shell: Ruby execs a metacharacter-free string directly,
     # and a missing binary would then raise ENOENT here instead of exiting 127.
     def exec(command, timeout: nil, env: nil)
-      Open3.popen2e(env || {}, "sh", "-c", command, pgroup: true) do |stdin, io, wait_thr|
+      Open3.popen2e(*spawn_arguments(command, env), **spawn_options) do |stdin, io, wait_thr|
         stdin.close
         reader = Thread.new { io.read }
 
@@ -28,6 +28,10 @@ module Miniswen
     end
 
     private
+
+    def spawn_arguments(command, env) = [ env || {}, "sh", "-c", command ]
+
+    def spawn_options = { pgroup: true }
 
     def kill_group(pid)
       Process.kill(:KILL, -pid)

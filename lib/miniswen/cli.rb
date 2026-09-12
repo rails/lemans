@@ -22,6 +22,7 @@ module Miniswen
       @atif_path = nil
       @refresh_registry = false
       @skip_registry_refresh = false
+      @jail = false
     end
 
     def run
@@ -42,6 +43,9 @@ module Miniswen
         if @docker_id
           require "miniswen/environment/docker"
           Environment::Docker.new(@docker_id)
+        elsif @jail
+          require "miniswen/jail"
+          Jail.new.start
         else
           Local.new
         end
@@ -53,6 +57,8 @@ module Miniswen
       rescue StandardError => e
         write_results(agent.partial_result(error_message(e)))
         raise
+      ensure
+        environment.stop if environment.respond_to?(:stop)
       end
 
       write_results(result)
@@ -149,6 +155,10 @@ module Miniswen
 
         opts.on("--docker=ID", String, "Docker container ID to exec commands on") do |v|
           @docker_id = v
+        end
+
+        opts.on("--jail", "Run commands inside a bubblewrap sandbox: no network, no credentials") do
+          @jail = true
         end
 
         opts.on("--refresh-registry", "Refresh the model registry, persist it, and exit") do
