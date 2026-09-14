@@ -39,8 +39,6 @@ class MiniswenInstalledTest < Minitest::Test
 
     assert_equal [
       "command -v miniswen >/dev/null 2>&1 || gem install miniswen -v #{Miniswen::VERSION} --no-document",
-      "command -v bwrap >/dev/null 2>&1 || " \
-      "(apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends bubblewrap)",
       "miniswen --refresh-registry"
     ], shell.commands
   end

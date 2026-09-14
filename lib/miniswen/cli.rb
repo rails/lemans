@@ -58,7 +58,7 @@ module Miniswen
         write_results(agent.partial_result(error_message(e)))
         raise
       ensure
-        environment.stop if environment.respond_to?(:stop)
+        environment.stop
       end
 
       write_results(result)
@@ -157,7 +157,7 @@ module Miniswen
           @docker_id = v
         end
 
-        opts.on("--jail", "Run commands inside a bubblewrap sandbox: no network, no credentials") do
+        opts.on("--jail", "Run every command in its own namespaces: none of the harness's environment, no network, read-only system, none of its files") do
           @jail = true
         end
 

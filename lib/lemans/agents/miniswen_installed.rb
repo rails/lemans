@@ -24,11 +24,6 @@ module Lemans
           "command -v miniswen >/dev/null 2>&1 || gem install miniswen -v #{::Miniswen::VERSION} --no-document",
           timeout: INSTALL_TIMEOUT_SEC
         )
-        environment.exec!(
-          "command -v bwrap >/dev/null 2>&1 || " \
-          "(apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends bubblewrap)",
-          timeout: INSTALL_TIMEOUT_SEC
-        )
         environment.exec("miniswen --refresh-registry", timeout: INSTALL_TIMEOUT_SEC)
       end
 

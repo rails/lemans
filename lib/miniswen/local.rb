@@ -27,6 +27,8 @@ module Miniswen
       end
     end
 
+    def stop = nil
+
     private
 
     def spawn_arguments(command, env) = [ env || {}, "sh", "-c", command ]

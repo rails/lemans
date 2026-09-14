@@ -1,8 +1,7 @@
 ## [Unreleased]
 
-- Miniswen: `--jail` runs every command inside one bubblewrap sandbox for the whole run: no network, its own pid namespace, and no credentials in the environment. A sandbox that cannot start fails the run.
-- `miniswen-installed` installs bubblewrap next to miniswen and always runs it jailed, so the sandbox shell can no longer reach the model API with the harness's key.
-- Docker: containers start with the capabilities the jail needs (SYS_ADMIN, NET_ADMIN, unconfined seccomp and AppArmor).
+- Miniswen: `--jail` runs every command in its own namespaces: none of the harness's environment, no network, read-only system, none of its files. `miniswen-installed` always runs jailed.
+- Docker: containers start with SYS_ADMIN, NET_ADMIN and AppArmor unconfined, which the jail needs.
 
 ## [1.3.3] - 2026-09-11
 
