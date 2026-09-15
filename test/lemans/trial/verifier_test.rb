@@ -114,19 +114,6 @@ class TrialVerifierTest < Minitest::Test
     assert_includes command, "( ruby -report-lemans bin/rails test ) && ( "
   end
 
-  def test_an_unrestorable_baseline_scores_zero_instead_of_invalidating_the_run
-    config = load_config
-    config.verifier.restore_paths = %w[test]
-    tampered = Class.new do
-      def restore! = false # rubocop:disable Naming/PredicateMethod
-    end.new
-
-    verification, = verify(sandbox, config:, snapshot: tampered)
-
-    assert_in_delta 0.0, verification.reward
-    assert_includes verification.logs, "scores 0"
-  end
-
   def test_a_reward_that_exists_but_cannot_be_read_fails_closed
     error = assert_raises(Lemans::VerifierError) { verify(sandbox(reward: "0.5", refuses: /\Acat /)) }
 

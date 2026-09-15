@@ -36,17 +36,17 @@ module Lemans
         @baseline = tree
       end
 
-      def restore! # rubocop:disable Naming/PredicateMethod
-        return true if paths.empty?
+      def restore!
+        return if paths.empty?
         raise VerifierError, "restore is declared but no baseline was sealed" unless baseline
 
         escaped_paths = Shellwords.join(paths)
 
-        environment.exec(
+        environment.exec!(
           "cd #{Shellwords.escape(workdir)} && #{git} cat-file -e #{baseline} && " \
           "rm -rf -- #{escaped_paths} && #{git} checkout #{baseline} -- #{escaped_paths}",
           timeout:
-        ).success?
+        )
       end
 
       private

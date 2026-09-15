@@ -2,6 +2,7 @@
 
 - Miniswen: `--jail` runs every command in its own namespaces: none of the harness's environment, no network, read-only system, none of its files. `miniswen-installed` always runs jailed.
 - Docker: containers start with SYS_ADMIN, NET_ADMIN and AppArmor unconfined, which the jail needs.
+- Verifier: a restore that fails is an infrastructure error, not a zero score.
 
 ## [1.3.3] - 2026-09-11
 
