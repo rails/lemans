@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [1.3.5] - 2026-09-15
+
 - Docker: `--docker` no longer fails at exit.
 - Miniswen: the jail makes the whole system read-only and does not leak env vars, which were already inaccessible.
 
