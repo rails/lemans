@@ -14,7 +14,9 @@ module Miniswen
 
     def start
       _, @stdout, @stderr, @holder = Open3.popen3(
-        "unshare", "--net", "--mount", "--pid", "--fork", "--kill-child", "--mount-proc", "sh", "-c", setup, pgroup: true
+        ENV.to_h.slice(*container_variables),
+        "unshare", "--net", "--mount", "--pid", "--fork", "--kill-child", "--mount-proc", "sh", "-c", setup,
+        pgroup: true, unsetenv_others: true
       )
       return self if @stdout.gets == "ready\n"
 
