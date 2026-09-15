@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [1.3.4] - 2026-09-15
+
 - Miniswen: `--jail` runs every command in its own namespaces: none of the harness's environment, no network, read-only system, none of its files. `miniswen-installed` always runs jailed.
 - Docker: containers start with SYS_ADMIN, NET_ADMIN and AppArmor unconfined, which the jail needs.
 - Miniswen: retry model calls for ~10 min instead of ~5.
