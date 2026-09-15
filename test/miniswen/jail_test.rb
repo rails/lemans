@@ -22,7 +22,7 @@ class MiniswenJailTest < Minitest::Test
   end
 
   def test_commands_cannot_touch_the_system_or_see_the_harness_files
-    assert_equal "read-only\n", @jail.exec("(touch /usr/x 2>/dev/null && echo writable) || echo read-only").output
+    assert_equal "read-only\n", @jail.exec("(touch /x 2>/dev/null && echo writable) || echo read-only").output
     assert_equal "0\n0\n", @jail.exec("ls -A /root | wc -l; ls -A /tmp | wc -l").output
   end
 end
