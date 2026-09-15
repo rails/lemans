@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Docker: `--docker` no longer fails at exit.
+
 ## [1.3.4] - 2026-09-15
 
 - Miniswen: `--jail` runs every command in its own namespaces: none of the harness's environment, no network, read-only system, none of its files. `miniswen-installed` always runs jailed.

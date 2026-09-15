@@ -188,6 +188,14 @@ class MiniswenCLITest < Minitest::Test
     ARGV.replace(original)
   end
 
+  def test_a_docker_run_exits_cleanly
+    Dir.mktmpdir do |dir|
+      assert_raises(RubyLLM::Test::Errors::NoResponseProvidedError) do
+        run_cli("-q", "--no-refresh-registry", "--docker", "c", "--results-path=#{dir}/result.json", "-m", "test", "-p", "task")
+      end
+    end
+  end
+
   def test_a_crashed_run_still_writes_the_results_and_trajectory_files
     Dir.mktmpdir do |dir|
       results = File.join(dir, "result.json")

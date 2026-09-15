@@ -10,5 +10,7 @@ module Miniswen
 
     # Execute a shell command
     def exec(cmd, timeout: nil, env: nil) = raise NotImplementedError
+
+    def stop = nil
   end
 end
