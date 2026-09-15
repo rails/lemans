@@ -435,11 +435,11 @@ class MiniswenAgentTest < Minitest::Test
 
   # The retry budget must outlast the outages seen in the field: several
   # minutes of provider rate limiting.
-  def test_the_retry_budget_covers_about_five_minutes
+  def test_the_retry_budget_covers_about_ten_minutes
     config = RubyLLM.config
     total = (0...config.max_retries).sum { config.retry_interval * config.retry_backoff_factor**it }
 
-    assert_operator total, :>=, 240
+    assert_operator total, :>=, 480
   end
 
   def test_partial_result_preserves_the_transcript_and_totals

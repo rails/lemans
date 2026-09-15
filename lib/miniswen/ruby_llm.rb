@@ -8,10 +8,10 @@ RubyLLM.configure do |config|
   config.logger = Logger.new(IO::NULL) unless ENV["MINISWEN_DEBUG"] == "1"
 end
 
-# About five minutes of retries (1, 2, 4, ... 128s plus jitter): provider
+# About ten minutes of retries (1, 2, 4, ... 256s plus jitter): provider
 # outages and rate-limit windows outlast the minute this used to allow.
 RubyLLM.configure do |config|
-  config.max_retries = 8
+  config.max_retries = 9
   config.retry_interval = 1
 end
 
