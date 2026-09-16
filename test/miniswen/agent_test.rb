@@ -183,6 +183,18 @@ class MiniswenAgentTest < Minitest::Test
     assert_nil result.cost_usd
   end
 
+  def test_a_free_openrouter_model_is_priced_at_zero_not_unknown
+    with_api_key(:openrouter) { build_agent(model: "test-free", max_cost: 5.0) }
+    stub_llm("true", SUBMIT)
+
+    result = agent.run("task")
+
+    assert_equal :submitted, result.status
+    assert_in_delta 0.0, result.cost_usd
+    assert_equal :free_model, result.cost_source.name
+    assert_equal "openrouter/test-free ($0.00, free)", result.cost_source.priced_as
+  end
+
   def test_the_result_round_trips_through_json
     stub_llm("ls /app", SUBMIT)
     fake_env.on("ls /app", "hello.txt")

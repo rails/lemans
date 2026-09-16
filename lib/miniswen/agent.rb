@@ -568,6 +568,11 @@ module Miniswen
                               registry: nil)
       end
       return nil unless info
+      if free?
+        return CostSource.new(name: :free_model, model: @model,
+                              priced_as: "#{info.provider}/#{info.id} ($0.00, free)",
+                              registry: Miniswen.registry_revision)
+      end
 
       CostSource.new(name: :model_registry, model: @model,
                      priced_as: "#{info.provider}/#{info.id}",
@@ -668,6 +673,8 @@ module Miniswen
 
     def local? = LOCAL_PROVIDERS.include?((@provider || info&.provider)&.to_sym)
 
+    def free? = info&.provider == "openrouter" && info.input_price_per_million.nil? && info.output_price_per_million.nil?
+
     def info
       return @info if defined?(@info)
 
@@ -681,7 +688,7 @@ module Miniswen
     end
 
     def price(response)
-      return 0.0 if local?
+      return 0.0 if local? || free?
 
       input = info&.input_price_per_million
       output = info&.output_price_per_million
