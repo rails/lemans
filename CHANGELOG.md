@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Miniswen: allow free OpenRouter models.
+
 ## [1.3.5] - 2026-09-15
 
 - Docker: `--docker` no longer fails at exit.

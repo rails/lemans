@@ -36,7 +36,13 @@ module Miniswen
       modalities: { input: %w[text], output: %w[text] }
     )
 
-    MODELS = { PRICED_MODEL.id => PRICED_MODEL, UNPRICED_MODEL.id => UNPRICED_MODEL }.freeze
+    FREE_MODEL = RubyLLM::Model::Info.new(
+      id: "test-free", name: "Test free", provider: "openrouter",
+      capabilities: %w[function_calling],
+      modalities: { input: %w[text], output: %w[text] }
+    )
+
+    MODELS = { PRICED_MODEL.id => PRICED_MODEL, UNPRICED_MODEL.id => UNPRICED_MODEL, FREE_MODEL.id => FREE_MODEL }.freeze
 
     # Serves the test models from ruby_llm's registry lookups.
     module FindTestModels
