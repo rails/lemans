@@ -44,6 +44,24 @@ class StoresFSTest < Minitest::Test
     end
   end
 
+  def test_artifacts_are_listed_and_found_under_a_batch_directory
+    with_store do |store|
+      saved = build_result
+      store.save(saved)
+      store.save_artifact(saved, "diff", path: "agent.patch")
+      store.save_artifact(saved, "log", path: "logs/verifier.log")
+      root = store.send(:root)
+      root.join("model-a").rename(root.join("batch-1"))
+
+      assert_equal %w[agent.patch logs/verifier.log result.json], store.artifacts(saved)
+      assert_equal "diff", store.read_artifact(saved, "agent.patch")
+      assert_equal [ saved.id ], store.fetch.map(&:id)
+      assert_empty store.artifacts(build_result)
+      assert store.delete(saved)
+      assert_empty store.fetch
+    end
+  end
+
   def test_an_effort_suffix_becomes_a_folder_dash
     with_store do |store|
       saved = build_result(model: "openrouter/openai/gpt-5.6-luna#xhigh")

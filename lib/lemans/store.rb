@@ -46,5 +46,11 @@ module Lemans
     def read_artifact(result, path)
       raise NotImplementedError
     end
+
+    # Returns the relative paths of everything stored for the result,
+    # the result record itself included
+    def artifacts(result)
+      raise NotImplementedError
+    end
   end
 end

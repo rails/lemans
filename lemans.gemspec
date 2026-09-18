@@ -23,11 +23,11 @@ Gem::Specification.new do |spec|
     "rubygems_mfa_required" => "true"
   }
 
-  spec.files = Dir["lib/**/*", "exe/lemans", "exe/lemans-remote", "CHANGELOG.md", "LICENSE.txt", "README.md"]
+  spec.files = Dir["lib/**/*", "exe/lemans", "exe/lemans-remote", "exe/lemans-viewer", "CHANGELOG.md", "LICENSE.txt", "README.md"]
   spec.require_paths = [ "lib" ]
 
   spec.bindir = "exe"
-  spec.executables = %w[lemans lemans-remote]
+  spec.executables = %w[lemans lemans-remote lemans-viewer]
 
   spec.add_dependency "concurrent-ruby", "~> 1.3"
   spec.add_dependency "csv", "~> 3.3"
@@ -35,8 +35,11 @@ Gem::Specification.new do |spec|
   spec.add_dependency "json", "< 3" # positional args change is not yet supported by faraday
   spec.add_dependency "faraday", "~> 2.10"
   spec.add_dependency "faraday-multipart", "~> 1.1"
+  spec.add_dependency "rack", "~> 3.1"
+  spec.add_dependency "rackup", "~> 2.2"
   spec.add_dependency "rexml", "~> 3.4"
   spec.add_dependency "ruby_llm", "~> 1.16"
   spec.add_dependency "thor", "~> 1.5"
+  spec.add_dependency "webrick", "~> 1.9"
   spec.add_dependency "zeitwerk", "~> 2.8"
 end
