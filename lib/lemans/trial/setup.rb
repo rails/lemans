@@ -52,6 +52,7 @@ module Lemans
         workdir = Shellwords.escape(task.environment.workdir)
         environment.exec!(
           "cd #{workdir} && git apply --binary --whitespace=nowarn #{Shellwords.escape(seed)} && " \
+          "find . -path ./.git -prune -o -exec touch -h {} + && " \
           "rm -rf .git && git init -q && git add -A && " \
           "git -c user.name=lemans -c user.email=lemans@localhost commit -qm 'Initial commit'",
           timeout:
