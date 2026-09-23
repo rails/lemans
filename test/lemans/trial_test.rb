@@ -80,6 +80,15 @@ class TrialTest < Minitest::Test
     end
   end
 
+  def test_a_task_may_open_named_hosts_to_its_verifier
+    task = load_task
+    task.verifier.environment.network = Lemans::Config::NetworkPolicy.new("allowlist", [ "rubygems.org" ])
+    env = sandbox
+    Lemans::Trial.new(task, agent: "oracle", environment: env).run
+
+    assert_equal [ "rubygems.org" ], env.policies.last.hosts
+  end
+
   def test_the_credit_lands_on_the_result_next_to_the_reward
     env = TestEnvironment.new(on_command: lambda { |files|
       files["/logs/verifier/reward.txt"] = "1"
