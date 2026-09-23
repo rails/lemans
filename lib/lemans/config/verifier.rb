@@ -26,6 +26,10 @@ module Lemans
           conf.logs_dir = absolute_path!(data["logs_dir"]) if data["logs_dir"]
           conf.verification = root.join(data["verification"]) if data["verification"]
 
+          if (network_data = data.dig("environment", "network"))
+            conf.environment = Environment.new(network: NetworkPolicy.from_config(network_data))
+          end
+
           conf
         end
 
@@ -42,7 +46,9 @@ module Lemans
         end
       end
 
-      attr_accessor :timeout, :setup, :command, :preverify, :restore_paths, :logs_dir, :verification
+      attr_accessor :timeout, :setup, :command, :preverify, :restore_paths, :logs_dir, :verification, :environment
+
+      Environment = Struct.new(:network, keyword_init: true)
 
       def initialize
         @timeout = 10 * 60
@@ -52,6 +58,7 @@ module Lemans
         @restore_paths = []
         @logs_dir = "/logs/verifier"
         @verification = nil
+        @environment = Environment.new(network: NetworkPolicy.new("none"))
       end
 
       def reward_path = "#{logs_dir.chomp("/")}/reward.txt"
@@ -64,7 +71,8 @@ module Lemans
           "preverify" => preverify,
           "restore" => restore_paths,
           "logs_dir" => logs_dir,
-          "verification" => verification&.to_s
+          "verification" => verification&.to_s,
+          "environment" => { "network" => environment.network.to_h }
         }.compact
       end
 

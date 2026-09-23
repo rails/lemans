@@ -11,7 +11,8 @@ class ConfigVerifierTest < Minitest::Test
         "command" => "bash /grade.sh",
         "preverify" => "git stash",
         "restore" => [ "tests" ],
-        "logs_dir" => "/logs/grade"
+        "logs_dir" => "/logs/grade",
+        "environment" => { "network" => { "mode" => "allowlist", "hosts" => [ "rubygems.org" ] } }
       }
     )
 
@@ -22,6 +23,7 @@ class ConfigVerifierTest < Minitest::Test
     assert_equal [ "tests" ], verifier.restore_paths
     assert_equal "/logs/grade", verifier.logs_dir
     assert_equal "/logs/grade/reward.txt", verifier.reward_path
+    assert_equal [ "rubygems.org" ], verifier.environment.network.hosts
   end
 
   def test_defaults
@@ -33,6 +35,7 @@ class ConfigVerifierTest < Minitest::Test
     assert_nil verifier.preverify
     assert_empty verifier.restore_paths
     assert_equal "/logs/verifier/reward.txt", verifier.reward_path
+    assert_predicate verifier.environment.network, :none?
   end
 
   def test_relative_logs_dir

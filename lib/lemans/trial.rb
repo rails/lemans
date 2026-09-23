@@ -114,8 +114,8 @@ module Lemans
 
         if result.scored? && step_task.verifiable?
           phase(:verifier) do
-            # The sandbox is sealed before the tests arrive
-            environment.switch_network_policy!(Config::NetworkPolicy.new("none"))
+            # The sandbox is sealed before the tests arrive, unless the task names hosts
+            environment.switch_network_policy!(step_task.verifier.environment.network)
 
             verification = Verifier.new(step_task, environment, snapshot).verify! do |evidence, path|
               store&.save_artifact(result, evidence, path: with_step_index(path))
