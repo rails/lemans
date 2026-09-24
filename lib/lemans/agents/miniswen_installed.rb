@@ -59,6 +59,11 @@ module Lemans
         raise ConfigError, "miniswen-installed: #{e.message}"
       end
 
+      def allowed_hosts
+        policy = profile.environment.network
+        policy.mode == "allowlist" ? policy.domains : []
+      end
+
       def command_for(task)
         argv = [ "miniswen", "-q", "--no-refresh-registry", "--jail",
                 "-m", model.to_s, "-p", task.instruction,
@@ -68,6 +73,7 @@ module Lemans
                 "--max-output-tokens", profile.max_output_tokens ]
         argv += [ "--max-cost", profile.cost_limit.to_i ] if profile.cost_limit
         argv += [ "--workdir", task.environment.workdir ]
+        argv += [ "--allow-hosts", allowed_hosts.join(",") ] if allowed_hosts.any?
         argv.map { Shellwords.escape(it.to_s) }.join(" ")
       end
     end

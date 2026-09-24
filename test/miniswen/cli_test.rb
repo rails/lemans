@@ -147,7 +147,7 @@ class MiniswenCLITest < Minitest::Test
 
   def test_parses_the_remote_run_switches
     cli = parse("-q", "--no-refresh-registry", "--results-path=/tmp/result.json",
-                "--atif-path=/tmp/trajectory.json", "--max-output-tokens=32768", "--workdir=/app", "-m", "ollama/x", "-p", "task")
+                "--atif-path=/tmp/trajectory.json", "--max-output-tokens=32768", "--workdir=/app", "--allow-hosts=index.rubygems.org,rubygems.org", "-m", "ollama/x", "-p", "task")
 
     assert cli.instance_variable_get(:@quiet)
     assert cli.instance_variable_get(:@skip_registry_refresh)
@@ -155,6 +155,7 @@ class MiniswenCLITest < Minitest::Test
     assert_equal "/tmp/trajectory.json", cli.instance_variable_get(:@atif_path)
     assert_equal 32_768, cli.options[:max_output_tokens]
     assert_equal "/app", cli.instance_variable_get(:@workdir)
+    assert_equal %w[index.rubygems.org rubygems.org], cli.instance_variable_get(:@allowed_hosts)
   end
 
   def test_write_atif_produces_a_trajectory_document

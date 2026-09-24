@@ -23,6 +23,7 @@ module Miniswen
       @refresh_registry = false
       @skip_registry_refresh = false
       @jail = false
+      @allowed_hosts = nil
       @workdir = nil
     end
 
@@ -47,7 +48,7 @@ module Miniswen
           Environment::Docker.new(@docker_id)
         elsif @jail
           require "miniswen/jail"
-          Jail.new.start
+          Jail.new(allowed_hosts: @allowed_hosts).start
         else
           Local.new
         end
@@ -161,6 +162,10 @@ module Miniswen
 
         opts.on("--jail", "Run every command in its own namespaces: none of the harness's environment, no network, read-only system, none of its files") do
           @jail = true
+        end
+
+        opts.on("--allow-hosts=HOSTS", String, "Let jailed commands reach these hosts through a proxy (comma-separated)") do |v|
+          @allowed_hosts = v.split(",").map(&:strip).reject(&:empty?)
         end
 
         opts.on("--workdir=DIR", String, "Run commands in DIR instead of the current directory") do |v|
