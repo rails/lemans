@@ -63,6 +63,7 @@ class MiniswenInstalledTest < Minitest::Test
     assert_includes command, "--max-output-tokens 0"
     assert_includes command, "--max-cost 5"
     assert_includes command, "--workdir "
+    assert_includes command, "--allow-hosts openrouter.ai"
 
     response.trajectory.session_id = "test-session"
     trajectory = JSON.parse(JSON.generate(response.trajectory.to_atif))
@@ -72,6 +73,17 @@ class MiniswenInstalledTest < Minitest::Test
     assert_equal "miniswen-installed", trajectory.dig("agent", "name")
     # The raw remote result rides the response, for the trial to keep.
     assert_equal "submitted", JSON.parse(response.raw_result)["status"]
+  end
+
+  def test_jailed_commands_get_no_network_outside_an_allowlist
+    config = load_config
+    config.agent.environment.network = Lemans::Config::NetworkPolicy.new("none")
+    agent = Lemans::Agents.build("miniswen-installed", profile: config.agent)
+    shell = TestEnvironment.new(files: { Lemans::Agents::MiniswenInstalled::RESULTS_PATH => remote_result_json })
+
+    with_openrouter_key { agent.run(load_task(config), shell) }
+
+    refute_includes shell.commands.last, "--allow-hosts"
   end
 
   def test_the_outer_exec_outlasts_a_command_started_at_the_deadline

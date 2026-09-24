@@ -74,6 +74,7 @@ agent:
 
   # The sandbox network while the agent works: just enough to reach the model
   # Use mode: none when using a local agent (miniswen)
+  # With mode allowlist, agent commands reach these hosts through the jail's proxy
   environment:
     network:
       mode: allowlist
