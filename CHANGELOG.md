@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-24
+
 - miniswen: add built-in proxy and the `--allow-hosts` switch.
 - miniswen: `--workdir`.
 - Fix(miniswen): a background process holding a command's output no longer hangs the agent.
