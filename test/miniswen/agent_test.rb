@@ -144,6 +144,18 @@ class MiniswenAgentTest < Minitest::Test
     assert_equal 1, result.steps
   end
 
+  def test_a_turn_that_ends_past_the_deadline_runs_no_command
+    ticks = [ 0, 1, 100 ].each
+    build_agent(max_time: 60, clock: -> { ticks.next })
+    stub_llm("bin/rails test")
+
+    result = agent.run("task")
+
+    assert_equal :time_limit, result.status
+    assert_equal 1, result.steps
+    refute_includes fake_env.commands, "bin/rails test"
+  end
+
   def test_a_flood_of_output_reaches_the_model_elided_head_and_tail
     stub_llm("make noise", SUBMIT)
     fake_env.on("make noise", "x" * 50_000)

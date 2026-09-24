@@ -294,6 +294,8 @@ module Miniswen
         end
 
         actions.each do |action|
+          return finish(:time_limit) if out_of_time?
+
           reporter&.on_tool_call(action)
           result = execute(action.fetch(:arguments).fetch("command"))
           # The submit command's output is observed too, so the final tool
@@ -334,11 +336,13 @@ module Miniswen
     # Checked before the model is asked, so the tripping step is never paid for.
     def limit_reached
       return :step_limit if max_steps.positive? && @steps >= max_steps
-      return :time_limit if max_time.positive? && (@clock.call - @started_at) >= max_time
+      return :time_limit if out_of_time?
       return :cost_limit if max_cost && @cost_known && @cost >= max_cost
 
       nil
     end
+
+    def out_of_time? = max_time.positive? && (@clock.call - @started_at) >= max_time
 
     # One model turn. Returns the actions to run, or nil after appending a
     # format-error message the model gets to react to on its next turn.
