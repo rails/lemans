@@ -62,6 +62,7 @@ class MiniswenInstalledTest < Minitest::Test
     assert_includes command, "--max-steps 100"
     assert_includes command, "--max-output-tokens 0"
     assert_includes command, "--max-cost 5"
+    assert_includes command, "--workdir "
 
     response.trajectory.session_id = "test-session"
     trajectory = JSON.parse(JSON.generate(response.trajectory.to_atif))

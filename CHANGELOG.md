@@ -1,5 +1,6 @@
 ## [Unreleased]
 
+- Miniswen: `--workdir` runs commands in the given directory. `miniswen-installed` passes the task's workdir.
 - Miniswen: a background process holding a command's output no longer hangs the agent.
 - Miniswen: a turn that ends past the time limit runs no command.
 - Miniswen: allow free OpenRouter models.

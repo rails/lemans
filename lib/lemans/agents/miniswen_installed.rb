@@ -67,6 +67,7 @@ module Lemans
                 "--exec-timeout", profile.exec_timeout.to_i,
                 "--max-output-tokens", profile.max_output_tokens ]
         argv += [ "--max-cost", profile.cost_limit.to_i ] if profile.cost_limit
+        argv += [ "--workdir", task.environment.workdir ]
         argv.map { Shellwords.escape(it.to_s) }.join(" ")
       end
     end
