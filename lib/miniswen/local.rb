@@ -1,6 +1,6 @@
 # frozen_string_literal: true
 
-require "open3"
+require "tempfile"
 
 require "miniswen/environment"
 
@@ -12,18 +12,17 @@ module Miniswen
     # Always through a shell: Ruby execs a metacharacter-free string directly,
     # and a missing binary would then raise ENOENT here instead of exiting 127.
     def exec(command, timeout: nil, env: nil)
-      Open3.popen2e(*spawn_arguments(command, env), **spawn_options) do |stdin, io, wait_thr|
-        stdin.close
-        reader = Thread.new { io.read }
+      Tempfile.create("miniswen") do |log|
+        wait_thr = Process.detach(Process.spawn(*spawn_arguments(command, env), in: File::NULL, %i[out err] => log, **spawn_options))
 
         if timeout&.positive? && wait_thr.join(timeout).nil?
           kill_group(wait_thr.pid)
           wait_thr.join
-          output = "#{scrub(reader.value)}\n<command timed out after #{timeout} seconds>"
+          output = "#{scrub(File.read(log))}\n<command timed out after #{timeout} seconds>"
           return ExecResult.new(exit_code: TIMEOUT_EXIT_CODE, output:)
         end
 
-        ExecResult.new(exit_code: exit_code(wait_thr.value), output: scrub(reader.value))
+        ExecResult.new(exit_code: exit_code(wait_thr.value), output: scrub(File.read(log)))
       end
     end
 

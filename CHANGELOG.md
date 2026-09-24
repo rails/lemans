@@ -1,5 +1,6 @@
 ## [Unreleased]
 
+- Miniswen: a background process holding a command's output no longer hangs the agent.
 - Miniswen: allow free OpenRouter models.
 
 ## [1.3.5] - 2026-09-15

@@ -32,4 +32,14 @@ class MiniswenLocalTest < Minitest::Test
     assert_equal Miniswen::Local::TIMEOUT_EXIT_CODE, result.exit_code
     assert_includes result.output, "timed out"
   end
+
+  def test_a_background_process_does_not_hold_the_command
+    started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+    detached = Miniswen::Local.new.exec("sleep 5 & echo started")
+    escaped = Miniswen::Local.new.exec("setsid sleep 5 & sleep 5", timeout: 0.2)
+
+    assert_operator Process.clock_gettime(Process::CLOCK_MONOTONIC) - started, :<, 4
+    assert_equal "started\n", detached.output
+    assert_equal Miniswen::Local::TIMEOUT_EXIT_CODE, escaped.exit_code
+  end
 end
