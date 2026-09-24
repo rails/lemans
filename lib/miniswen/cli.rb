@@ -23,10 +23,12 @@ module Miniswen
       @refresh_registry = false
       @skip_registry_refresh = false
       @jail = false
+      @workdir = nil
     end
 
     def run
       parse_args!
+      Dir.chdir(@workdir) if @workdir
 
       # Require the core library after parsing options,
       # so env flags kick in
@@ -159,6 +161,10 @@ module Miniswen
 
         opts.on("--jail", "Run every command in its own namespaces: none of the harness's environment, no network, read-only system, none of its files") do
           @jail = true
+        end
+
+        opts.on("--workdir=DIR", String, "Run commands in DIR instead of the current directory") do |v|
+          @workdir = v
         end
 
         opts.on("--refresh-registry", "Refresh the model registry, persist it, and exit") do
