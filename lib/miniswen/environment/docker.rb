@@ -20,7 +20,7 @@ module Miniswen
         env&.each { |key, value| argv += [ "--env", "#{key}=#{value}" ] }
         argv << id
         argv += [ "timeout", timeout.ceil.to_s ] if timeout&.positive?
-        argv += [ "sh", "-c", command ]
+        argv += [ "bash", "-c", command ]
 
         Open3.popen2e(*argv) do |stdin, pipe, wait|
           stdin.close

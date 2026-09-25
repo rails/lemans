@@ -39,7 +39,7 @@ module Lemans
         argv = [ "exec" ]
         env.each { |key, value| argv += [ "--env", "#{key}=#{value}" ] }
         # The in-container timeout is what actually kills the process
-        argv += [ container, "timeout", timeout.to_i.to_s, "sh", "-c", command ]
+        argv += [ container, "timeout", timeout.to_i.to_s, "bash", "-c", command ]
 
         exit_code, output = capture("docker", *argv, timeout: timeout + EXEC_SLACK)
         ExecResult.new(command:, exit_code:, output:, duration: (now - started).round(3))

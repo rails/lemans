@@ -28,7 +28,7 @@ module Miniswen
 
     private
 
-    def spawn_arguments(command, env) = [ env || {}, "sh", "-c", command ]
+    def spawn_arguments(command, env) = [ env || {}, "bash", "-c", command ]
 
     def spawn_options = { pgroup: true }
 

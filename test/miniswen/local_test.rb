@@ -26,6 +26,18 @@ class MiniswenLocalTest < Minitest::Test
     assert_equal "hi\n", result.output
   end
 
+  def test_bash_syntax
+    result = Miniswen::Local.new.exec(<<~'BASH')
+      printf '%s\n' {one,two}
+      false | true
+      printf '%s\n' "${PIPESTATUS[@]}"
+      cat <(printf '%s\n' substitution)
+    BASH
+
+    assert_equal 0, result.exit_code
+    assert_equal "one\ntwo\n1\n0\nsubstitution\n", result.output
+  end
+
   def test_a_command_that_outruns_its_budget_is_killed_and_marked
     result = Miniswen::Local.new.exec("sleep 5", timeout: 0.2)
 

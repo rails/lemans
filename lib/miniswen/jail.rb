@@ -61,7 +61,7 @@ module Miniswen
     def spawn_arguments(command, env)
       [ command_env(env),
         "nsenter", "--target", @holder.pid.to_s, "--net", "--mount", "--pid=/proc/#{@holder.pid}/ns/pid_for_children", "--wd=#{@workdir}",
-        "--", "setpriv", "--bounding-set=-all", "--inh-caps=-all", "--no-new-privs", "--", "sh", "-c", command ]
+        "--", "setpriv", "--bounding-set=-all", "--inh-caps=-all", "--no-new-privs", "--", "bash", "-c", command ]
     end
 
     def spawn_options = super.merge(unsetenv_others: true)

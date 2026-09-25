@@ -56,7 +56,7 @@ class DockerEnvironmentTest < Minitest::Test
     result = environment.exec("bundle exec rake", timeout: 90, env: { "RAILS_ENV" => "test" })
 
     argv = calls.last[:argv]
-    assert_equal [ "timeout", "90", "sh", "-c", "bundle exec rake" ], argv.last(5)
+    assert_equal [ "timeout", "90", "bash", "-c", "bundle exec rake" ], argv.last(5)
     assert_includes argv.each_cons(2).to_a, [ "--env", "RAILS_ENV=test" ]
     assert_equal 90 + Lemans::Environments::Docker::EXEC_SLACK, calls.last[:timeout]
     assert_equal 3, result.exit_code
