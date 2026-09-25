@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Fix(miniswen): run Bash tool commands through `bash -c` in Local, Jail, and Docker; sandbox images must include Bash.
+
 ## [1.4.0] - 2026-09-24
 
 - miniswen: add built-in proxy and the `--allow-hosts` switch.
