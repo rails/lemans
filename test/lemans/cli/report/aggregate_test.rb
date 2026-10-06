@@ -4,8 +4,8 @@ require "test_helper"
 require "csv"
 
 class ReportAggregateTest < Minitest::Test
-  def build_report(rows)
-    Lemans::CLI::Report.new(rows.map { row(**it) })
+  def build_report(rows, **)
+    Lemans::CLI::Report.new(rows.map { row(**it) }, **)
   end
 
   def row(task: "hello-world", agent: "miniswen", model: "openrouter/openai/gpt-5.6-luna",
@@ -27,6 +27,14 @@ class ReportAggregateTest < Minitest::Test
     end
   end
 
+  def test_hide_columns_drops_keys_and_metrics
+    report = build_report([ { reward: 1.0 } ], hide_columns: "time-cost-model-reward")
+    rows = Lemans::CLI::Report::Aggregate.new(report, keys: %i[task model]).to_rows
+
+    assert_equal %w[task score steps tokens], rows.first
+    assert_equal %w[hello-world 1/1 4 1.0K], rows.last
+  end
+
   def test_feature_columns_quote_passed_over_graded
     report = build_report([
                             { features: { "migrations" => true } },
@@ -34,11 +42,12 @@ class ReportAggregateTest < Minitest::Test
                             { features: { "migrations" => true } },
                             { features: nil, reward: 0.0 },
                             { model: "x/other", features: nil }
-                          ])
+                          ], show_features: true)
     aggregate = Lemans::CLI::Report::Aggregate.new(report, keys: %i[model]).order_by!("feat:migrations")
     rows = aggregate.to_rows
 
     assert_equal "feat:migrations", rows.first.last
+    assert_equal [ "2/3", "-" ], rows.drop(1).map { it[rows.first.index("features")] }
     assert_equal [ [ "gpt-5.6-luna", "2/3" ], [ "other", "-" ] ], rows.drop(1).map { [ it.first, it.last ] }
     assert_equal "2/3", CSV.parse(aggregate.to_csv, headers: true).first["feat:migrations"]
   end
@@ -53,7 +62,7 @@ class ReportAggregateTest < Minitest::Test
     rows = aggregate.to_rows
 
     assert_equal %w[task model score credit time cost steps tokens], rows.first
-    assert_equal [ "hello-world", "gpt-5.6-luna", "2/3", "0.75", "1m 40s", "$0.02", "3", "2000" ], rows.last
+    assert_equal [ "hello-world", "gpt-5.6-luna", "2/3", "0.75", "1m 40s", "$0.02", "3", "2.0K" ], rows.last
   end
 
   def test_the_aggregate_csv_keeps_raw_values_and_full_model_names
@@ -63,7 +72,8 @@ class ReportAggregateTest < Minitest::Test
                           ])
     parsed = CSV.parse(Lemans::CLI::Report::Aggregate.new(report, keys: %i[model]).to_csv, headers: true)
 
-    assert_equal %w[model solved attempts credit duration cost_usd steps tokens], parsed.headers
+    assert_equal %w[model solved attempts credit features_passed features_total duration cost_usd steps tokens],
+                 parsed.headers
     assert_equal "openrouter/openai/gpt-5.6-luna", parsed.first["model"]
     assert_equal "1", parsed.first["solved"]
     assert_equal "2", parsed.first["attempts"]

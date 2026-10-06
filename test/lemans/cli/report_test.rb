@@ -46,8 +46,10 @@ class CLIReportTest < Minitest::Test
       solved = rows.find { it.include?("hello-world__aaa") }
 
       # Tokens sum input and output, leaving cache reads out.
-      assert_equal "1000", solved[rows.first.index("tokens")]
+      assert_equal "1.0K", solved[rows.first.index("tokens")]
       assert_equal "1", solved[rows.first.index("credit")]
+      assert_equal "10s", solved[rows.first.index("duration")]
+      assert_equal "$0.0001", solved[rows.first.index("cost_usd")]
 
       partial = rows.find { it.include?("other-task__ccc") }
 
@@ -211,7 +213,17 @@ class CLIReportTest < Minitest::Test
       { task: "b-task", trial: "b-task__a", features: { "migrations" => true, "ssrf" => true } },
       { task: "c-task", trial: "c-task__a", features: nil }
     ]
-    report = Lemans::CLI::Report.new(rows).order_by!("feat:migrations")
+    default = Lemans::CLI::Report.new(rows).order_by!("features")
+    table = default.to_rows
+    column = table.first.index("features")
+
+    refute_includes table.first, "feat:migrations"
+    assert_equal %w[2/2 1/2 1/2 - -], table.drop(1).map { it[column] }
+    refute_includes default.to_csv.lines.first, "feat:migrations"
+    assert_equal %w[2 1 1] + [ nil, nil ], CSV.parse(default.to_csv, headers: true).map { it["features_passed"] }
+    refute_includes Lemans::CLI::Report.new(rows.last(1)).to_rows.first, "features"
+
+    report = Lemans::CLI::Report.new(rows, show_features: true).order_by!("feat:migrations")
     table = report.to_rows
     column = table.first.index("feat:migrations")
 
@@ -224,6 +236,32 @@ class CLIReportTest < Minitest::Test
 
     assert_equal %w[true true false] + [ nil, nil ], csv.map { it["feat:migrations"] }
     assert_raises(Lemans::ConfigError) { report.order_by!("feat:ssrf") }
+  end
+
+  def test_display_formats
+    report = Lemans::CLI::Report
+
+    assert_equal [ "-", "999", "1.5K", "6.1M", "1.2B" ], [ nil, 999, 1500, 6_058_463, 1.2e9 ].map { report.tokens_display(it) }
+    assert_equal [ "-", "45s", "77m 26s" ], [ nil, 45.2, 4646.4 ].map { report.duration_display(it) }
+    assert_equal [ "-", "$2.7598", "$13" ], [ nil, 2.759812, 13.0 ].map { report.cost_display(it) }
+  end
+
+  def test_hide_columns_leaves_known_columns_out_and_lets_the_rest_go
+    rows = [ { task: "a-task", trial: "a-task__a", reward: 1.0, features: { "auto-join" => true } } ]
+    report = Lemans::CLI::Report.new(rows, show_features: true, hide_columns: "steps-tokens-nope-feat:auto-join--trial-^")
+
+    assert_equal %w[task agent model reward features outcome cost_usd duration], report.to_rows.first
+    assert_includes report.to_csv.lines.first, "tokens"
+    assert_includes Lemans::CLI::Report.new(rows, hide_columns: "").to_rows.first, "trial"
+  end
+
+  def test_skip_invalid_leaves_invalid_trials_out
+    with_store do |store|
+      report = Lemans::CLI::Report.load(store, skip_invalid: true)
+
+      assert_equal %w[hello-world__aaa other-task__ccc], report.rows.map { it[:trial] }
+      assert_equal 0, report.summary[:invalid]
+    end
   end
 
   def test_an_empty_store_is_empty

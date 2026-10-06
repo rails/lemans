@@ -10,7 +10,7 @@ module Lemans
       # task, agent, model — "task-model" reads as two columns.
       class Aggregate
         KEYS = %i[task agent model].freeze
-        METRICS = %i[score credit time cost steps tokens].freeze
+        METRICS = %i[score credit features time cost steps tokens].freeze
         METRIC_SOURCES = { credit: :credit, time: :duration, cost: :cost_usd, steps: :steps, tokens: :tokens }.freeze
 
         attr_reader :report, :keys
@@ -41,20 +41,26 @@ module Lemans
         end
 
         def to_rows
-          metrics = report.fractional? ? METRICS : METRICS - [ :credit ]
-          [ keys.map(&:to_s) + metrics.map(&:to_s) + report.feature_columns.map(&:to_s) ] +
+          metrics = METRICS - [ (:credit unless report.fractional?), (:features unless report.features?) ].compact
+          columns = keys + metrics + report.shown_feature_columns
+          columns -= Report.hidden_columns(report.hide_columns, allowed: columns)
+          [ columns.map(&:to_s) ] +
             @groups.map do |group|
-              keys.map { |key| display_key(key, group[key]) } + metrics.map { cell(it, group) } +
-                report.feature_columns.map { pass_rate(group[it]) }
+              columns.map do |column|
+                if keys.include?(column) then display_key(column, group[column])
+                elsif metrics.include?(column) then cell(column, group)
+                else pass_rate(group[column])
+                end
+              end
             end
         end
 
         def to_csv
-          columns = keys + %i[solved attempts credit duration cost_usd steps tokens]
+          columns = keys + %i[solved attempts credit features_passed features_total duration cost_usd steps tokens]
           CSV.generate do |csv|
-            csv << columns + report.feature_columns
+            csv << columns + report.shown_feature_columns
             @groups.each do |group|
-              csv << columns.map { group[it] } + report.feature_columns.map { group[it] && pass_rate(group[it]) }
+              csv << columns.map { group[it] } + report.shown_feature_columns.map { group[it] && pass_rate(group[it]) }
             end
           end
         end
@@ -69,6 +75,7 @@ module Lemans
           if column == :model then Report.short_model(group[:model])
           elsif keys.include?(column) then group[column].to_s
           elsif report.feature_columns.include?(column) then group[column] && Rational(*group[column])
+          elsif column == :features then group[:features_total] && Rational(group[:features_passed], group[:features_total])
           elsif column == :score then [ Rational(group[:solved], group[:attempts]), group[:attempts] ]
           else group[METRIC_SOURCES.fetch(column)]
           end
@@ -85,6 +92,7 @@ module Lemans
             cost_usd: mean(group.filter_map { it[:cost_usd] }),
             steps: mean(group.filter_map { it[:steps] }),
             tokens: mean(group.filter_map { it[:tokens] }),
+            **features_sum(group),
             **report.feature_columns.to_h { [ it, feature_tally(group, it) ] }
           )
         end
@@ -97,14 +105,23 @@ module Lemans
 
         def pass_rate(tally) = tally ? tally.join("/") : "-"
 
+        # Features passed out of graded, summed over the group's runs
+        def features_sum(group)
+          tallies = group.filter_map { Report.features_tally(it) }
+          return { features_passed: nil, features_total: nil } if tallies.empty?
+
+          { features_passed: tallies.sum(&:first), features_total: tallies.sum(&:last) }
+        end
+
         def cell(metric, group)
           case metric
           when :score then "#{group[:solved]}/#{group[:attempts]}"
           when :credit then mean_display(group[:credit], 2)
-          when :time then time(group[:duration])
-          when :cost then cost(group[:cost_usd])
+          when :features then group[:features_total] ? "#{group[:features_passed]}/#{group[:features_total]}" : "-"
+          when :time then Report.duration_display(group[:duration])
+          when :cost then Report.cost_display(group[:cost_usd])
           when :steps then mean_display(group[:steps], 1)
-          when :tokens then mean_display(group[:tokens], 0)
+          when :tokens then Report.tokens_display(group[:tokens])
           end
         end
 
@@ -123,15 +140,6 @@ module Lemans
 
           key == :model ? Report.short_model(value) : value.to_s
         end
-
-        def time(sec)
-          return "-" if sec.nil?
-
-          minutes, seconds = sec.round.divmod(60)
-          minutes.positive? ? "#{minutes}m #{seconds}s" : "#{seconds}s"
-        end
-
-        def cost(value) = value.nil? ? "-" : "$#{format("%g", value.round(4))}"
 
         def mean_display(value, digits) = value.nil? ? "-" : format("%g", value.round(digits))
       end

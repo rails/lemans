@@ -1,5 +1,6 @@
 ## [Unreleased]
 
+- `lemans report --skip-invalid --hide-columns steps-tokens-trial`.
 - `lemans report -S` sorts by several dash-joined columns (`-S score-credit`); `^column` reverses that column's order (`-S ^score`: low to high, `-S ^model`: Z-A).
 - Multistep results record `total_steps`; `lemans report` now shows a `progress` column (steps completed, `2/5`).
 

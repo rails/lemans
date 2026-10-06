@@ -207,10 +207,15 @@ module Lemans
                        desc: "Group results by 1-3 dash-joined columns (task, agent, model)"
     option :sort, aliases: "-S", banner: "COLUMNS",
                   desc: "Sort by dash-joined columns, e.g. score-credit (numbers high to low, names A-Z; ^column reverses)"
+    option :skip_invalid, type: :boolean, default: false, desc: "Leave out trials with an invalid outcome"
+    option :show_features, type: :boolean, default: false, desc: "Add a feat:<name> column per tracked feature"
+    option :hide_columns, banner: "COLUMNS", desc: "Leave dash-joined columns out of the table, e.g. steps-tokens-trial"
     def report(runs_dir = options[:runs_dir])
       store = Stores::FS.new(runs_dir)
       results = Report.load(store, tags: options[:tag], names: options[:task],
-                                   metadata: Report.metadata_filter(options[:metadata]))
+                                   metadata: Report.metadata_filter(options[:metadata]),
+                                   skip_invalid: options[:skip_invalid], show_features: options[:show_features],
+                                   hide_columns: options[:hide_columns])
       raise Thor::Error, "lemans: no matching results found" if results.empty?
 
       results = Report::Aggregate.new(results, keys: Report::Aggregate.keys(options[:aggregate])) if options[:aggregate]
