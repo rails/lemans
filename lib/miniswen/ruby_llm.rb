@@ -43,7 +43,20 @@ module Miniswen
   module RetryTransientFailures
     def retry_exceptions = super + [ Faraday::SSLError, Faraday::ParsingError ]
   end
+
+  # ruby_llm parses tool-call arguments while it builds the message, so one
+  # malformed call would raise and take the whole completion with it. The raw
+  # string goes through instead and bounces as a format error.
+  module LenientToolArguments
+    def parse_tool_call_arguments(tool_call)
+      super
+    rescue JSON::ParserError
+      tool_call.dig("function", "arguments")
+    end
+  end
 end
 
 RubyLLM::Providers::OpenRouter.prepend(Miniswen::VerbatimReasoningDetails)
 RubyLLM::Connection.prepend(Miniswen::RetryTransientFailures)
+RubyLLM::Providers::OpenAI::Tools.prepend(Miniswen::LenientToolArguments)
+RubyLLM::Providers::OpenAI::Tools.singleton_class.prepend(Miniswen::LenientToolArguments)

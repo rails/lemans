@@ -112,6 +112,23 @@ class MiniswenAgentTest < Minitest::Test
     refute(fake_env.commands.any? { it.include?("\0") })
   end
 
+  def test_malformed_tool_arguments_are_bounced_back_and_the_model_may_recover
+    broken = "{\"command\":\"cd /app && ruby -e '"
+    raw = [ { "id" => "c1", "type" => "function", "function" => { "name" => "bash", "arguments" => broken } } ]
+    stub_llm({ content: "", tool_calls: [ { name: "bash", arguments: broken } ] }, "true", SUBMIT)
+
+    result = agent.run("task")
+
+    assert_equal broken, RubyLLM::Providers::OpenAI::Tools.parse_tool_calls(raw)["c1"].arguments
+    assert_equal broken, openrouter_provider.send(:parse_tool_calls, raw)["c1"].arguments
+    assert_equal({ "command" => "ls" }, RubyLLM::Providers::OpenAI::Tools.parse_tool_calls(
+      [ { "id" => "c2", "function" => { "name" => "bash", "arguments" => "{\"command\":\"ls\"}" } } ]
+    )["c2"].arguments)
+    assert_equal :submitted, result.status
+    assert(result.messages.any? { it[:content].to_s.include?("not valid JSON") })
+    assert_equal [ broken ], result.messages.filter_map { it[:invalid_tool_calls]&.first&.dig(:arguments) }
+  end
+
   def test_the_step_limit_stops_the_loop_before_the_next_paid_call
     build_agent(max_steps: 2)
     stub_llm("true", "true", "true")

@@ -445,7 +445,9 @@ module Miniswen
         error = +""
         error << "Unknown tool '#{call[:name]}'." if call[:name] != "bash"
         arguments = call[:arguments]
-        if !arguments.is_a?(Hash) || !arguments["command"]
+        if arguments.is_a?(String)
+          error << "The bash tool call arguments are not valid JSON. Resend the call with a JSON object of the form {\"command\": \"...\"}."
+        elsif !arguments.is_a?(Hash) || !arguments["command"]
           error << "Missing 'command' argument in bash tool call."
         elsif arguments["command"].to_s.include?("\0")
           # Process.spawn rejects strings with NUL bytes, so the command could
