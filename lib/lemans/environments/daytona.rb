@@ -90,8 +90,14 @@ module Lemans
         raise InfrastructureError, "daytona: could not download #{remote_path}: #{e.message}"
       end
 
+      # Daytona answers 409 while an earlier operation on the sandbox is still
+      # settling; a policy update sets the whole policy, so it repeats freely.
       def switch_network_policy!(policy)
-        sandbox.update_network_settings(**network_kwargs(policy, for_update: true))
+        return if policy.to_h == network.to_h
+
+        with_read_retries(conflicts: true) do
+          sandbox.update_network_settings(**network_kwargs(policy, for_update: true))
+        end
         @network = policy
       rescue *Retries::SDK_ERRORS => e
         raise InfrastructureError, "daytona: could not apply #{policy.mode} policy: #{e.message}"

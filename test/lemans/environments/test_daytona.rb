@@ -81,6 +81,29 @@ class DaytonaEnvironmentTest < Minitest::Test
 
   # A libcurl GC race segfaults the VM under concurrent transfers; the pure-Ruby
   # reroute is what lets uploads and downloads run unthrottled.
+  def test_a_network_switch_waits_out_a_busy_sandbox
+    allowlist = Lemans::Config::NetworkPolicy.new("allowlist", [ "rubygems.org" ])
+    environment = environment_for(reference_image)
+    environment.instance_variable_set(:@sandbox, sandbox = BusySandbox.new(conflicts: 2))
+
+    environment.switch_network_policy!(allowlist)
+    environment.switch_network_policy!(Lemans::Config::NetworkPolicy.new("allowlist", [ "rubygems.org" ]))
+
+    assert_equal 3, sandbox.updates.size
+    assert_equal allowlist, environment.network
+
+    environment.instance_variable_set(:@sandbox, sandbox = BusySandbox.new(conflicts: 9))
+    error = assert_raises(Lemans::InfrastructureError) { environment.switch_network_policy!(Lemans::Config::NetworkPolicy.new("none")) }
+
+    assert_includes error.message, "could not apply none policy"
+    assert_equal 5, sandbox.updates.size
+
+    environment.instance_variable_set(:@sandbox, sandbox = BusySandbox.new(conflicts: 1, status_code: 400))
+    assert_raises(Lemans::InfrastructureError) { environment.switch_network_policy!(Lemans::Config::NetworkPolicy.new("none")) }
+
+    assert_equal 1, sandbox.updates.size
+  end
+
   def test_file_transfers_ride_faraday_not_libcurl
     assert_includes ::Daytona::FileTransfer.singleton_class.ancestors,
                     Lemans::Environments::Daytona::FaradayTransfer::Transfers
@@ -328,6 +351,21 @@ class DaytonaEnvironmentTest < Minitest::Test
     end
 
     def delete(wait: false) = @deleted = true
+  end
+
+  class BusySandbox
+    attr_reader :updates
+
+    def initialize(conflicts:, status_code: 409)
+      @conflicts = conflicts
+      @status_code = status_code
+      @updates = []
+    end
+
+    def update_network_settings(**settings)
+      @updates << settings
+      raise ::Daytona::Sdk::Error.new("An operation is already in progress for this resource", status_code: @status_code) if @updates.size <= @conflicts
+    end
   end
 
   class BrokenShell

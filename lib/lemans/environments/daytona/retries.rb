@@ -19,13 +19,13 @@ module Lemans
 
         private
 
-        def with_read_retries
+        def with_read_retries(conflicts: false)
           attempts = 0
           begin
             yield
           rescue *SDK_ERRORS => e
             attempts += 1
-            raise if attempts >= READ_ATTEMPTS || !retryable?(e)
+            raise if attempts >= READ_ATTEMPTS || !(retryable?(e) || (conflicts && status_code(e) == 409))
 
             sleep RETRY_DELAY_SEC * 2**(attempts - 1)
             retry
