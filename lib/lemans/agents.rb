@@ -11,13 +11,25 @@ module Lemans
       "miniswen-installed" => "MiniswenInstalled"
     }.freeze
 
-    def self.build(name, profile:, model: nil) = lookup(name).new(profile: profile, model: model)
+    @registered = {}
 
-    def self.lookup(name)
-      constant = REGISTRY[name] or
-        raise ConfigError, "unknown agent #{name.inspect} (known: #{REGISTRY.keys.join(", ")})"
+    class << self
+      def register(name, agent_class)
+        raise ConfigError, "agent #{name.inspect} is built in" if REGISTRY.key?(name)
 
-      const_get(constant)
+        @registered[name] = agent_class
+      end
+
+      def unregister(name) = @registered.delete(name)
+
+      def names = REGISTRY.keys + @registered.keys
+
+      def build(name, profile:, model: nil) = lookup(name).new(profile: profile, model: model)
+
+      def lookup(name)
+        @registered[name] || (REGISTRY[name] && const_get(REGISTRY[name])) or
+          raise ConfigError, "unknown agent #{name.inspect} (known: #{names.join(", ")})"
+      end
     end
   end
 end
