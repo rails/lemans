@@ -340,6 +340,7 @@ See [examples](./examples) for real-world extensions:
 
 - [Apple Container backend](./examples/apple-container.rb)
 - [Claude Code agent](./examples/claude-code.rb)
+- [Codex agent](./examples/codex/README.md)
 
 ## CLI
 
