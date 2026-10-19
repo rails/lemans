@@ -197,6 +197,17 @@ class MiniswenAgentTest < Minitest::Test
     assert_match(/empty completion/, error.message)
   end
 
+  def test_turn_without_usage
+    build_agent(max_cost: 5.0)
+    no_usage = { cmd: "true", input_tokens: nil, output_tokens: nil, cached_tokens: nil }
+    stub_llm(no_usage, { **no_usage, reported_cost: 0.004 }, SUBMIT)
+
+    result = agent.run("task")
+
+    assert_equal :submitted, result.status
+    assert_in_delta 0.014, result.cost_usd
+  end
+
   def test_an_unpriced_completion_under_a_cost_ceiling_stops_the_spend_immediately
     build_agent(model: "test-unpriced", max_cost: 5.0)
     stub_llm("true")
@@ -218,14 +229,29 @@ class MiniswenAgentTest < Minitest::Test
 
   def test_a_free_openrouter_model_is_priced_at_zero_not_unknown
     with_api_key(:openrouter) { build_agent(model: "test-free", max_cost: 5.0) }
-    stub_llm("true", SUBMIT)
+    stub_llm({ cmd: "true", reported_cost: 0 }, { **SUBMIT, reported_cost: 0 })
 
     result = agent.run("task")
 
     assert_equal :submitted, result.status
     assert_in_delta 0.0, result.cost_usd
-    assert_equal :free_model, result.cost_source.name
-    assert_equal "openrouter/test-free ($0.00, free)", result.cost_source.priced_as
+    assert_equal :provider_reported, result.cost_source.name
+  end
+
+  def test_openrouter_billed_cost
+    with_api_key(:openrouter) { build_agent(model: "openrouter/anthropic/test") }
+    stub_llm({ cmd: "true", reported_cost: 0.0123 }, { **SUBMIT, reported_cost: 0.001 })
+    result = agent.run("task")
+
+    assert_in_delta 0.0133, result.cost_usd
+    assert_equal :provider_reported, result.cost_source.name
+
+    build_agent
+    stub_llm({ cmd: "true", reported_cost: 0.0042 }, SUBMIT)
+    result = agent.run("task")
+
+    assert_in_delta 0.0142, result.cost_usd
+    assert_equal :provider_reported, result.cost_source.name
   end
 
   def test_the_result_round_trips_through_json

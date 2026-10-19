@@ -311,6 +311,7 @@ module Miniswen
       @steps = 0
       @cost = 0.0
       @cost_known = true
+      @cost_reported = false
       @totals = { input_tokens: 0, output_tokens: 0, cached_tokens: 0, thinking_tokens: 0 }
       @started_at = @clock.call
     end
@@ -322,6 +323,7 @@ module Miniswen
       @steps = history.steps.to_i
       @cost = history.cost_usd.to_f
       @cost_known = !history.cost_usd.nil?
+      @cost_reported = history.cost_source&.name == :provider_reported
       @totals = { input_tokens: history.input_tokens.to_i, output_tokens: history.output_tokens.to_i,
                   cached_tokens: history.cached_tokens.to_i, thinking_tokens: history.thinking_tokens.to_i }
       @started_at = @clock.call - elapsed(history.messages)
@@ -411,6 +413,7 @@ module Miniswen
       else
         @cost += cost
       end
+      @cost_reported = true if response[:reported]
     end
 
     def actions_error(tool_calls)
@@ -560,12 +563,12 @@ module Miniswen
                               priced_as: "#{@provider || info&.provider}/#{@id} ($0.00, local)",
                               registry: nil)
       end
-      return nil unless info
-      if free?
-        return CostSource.new(name: :free_model, model: @model,
-                              priced_as: "#{info.provider}/#{info.id} ($0.00, free)",
+      if @cost_reported
+        return CostSource.new(name: :provider_reported, model: @model,
+                              priced_as: "#{@provider || info&.provider}/#{@id} (as billed, else the registry price)",
                               registry: Miniswen.registry_revision)
       end
+      return nil unless info
 
       CostSource.new(name: :model_registry, model: @model,
                      priced_as: "#{info.provider}/#{info.id}",
@@ -627,7 +630,8 @@ module Miniswen
         output_tokens: tokens.output.to_i,
         cached_tokens: tokens.cache_read.to_i,
         thinking_tokens: tokens.thinking.to_i,
-        cost_usd: price(response)
+        cost_usd: price(response),
+        reported: !tokens.reported_cost.nil?
       }
     end
 
@@ -650,8 +654,6 @@ module Miniswen
 
     def local? = RubyLLM::Provider.providers[(@provider || info&.provider)&.to_sym]&.local? || false
 
-    def free? = info&.provider == "openrouter" && info.price(:input).nil? && info.price(:output).nil?
-
     def info
       return @info if defined?(@info)
 
@@ -665,22 +667,9 @@ module Miniswen
     end
 
     def price(response)
-      return 0.0 if local? || free?
+      return 0.0 if local? || (response.tokens.to_h.empty? && response.tokens.reported_cost.nil?)
 
-      input = info&.price(:input)
-      output = info&.price(:output)
-      return nil unless input.is_a?(Numeric) && output.is_a?(Numeric)
-
-      tokens = response.tokens
-      cache_read = info.price(:cache_read) || input
-      cache_write = info.price(:cache_write) || input
-      # Providers usually fold thinking into output_tokens; max() bills the
-      # larger count once and can never double-bill.
-      generated = [ tokens.output.to_i, tokens.thinking.to_i ].max
-      ((tokens.input.to_i * input) +
-        (tokens.cache_read.to_i * cache_read) +
-        (tokens.cache_write.to_i * cache_write) +
-        (generated * output)) / 1_000_000.0
+      info ? info.cost_for(response.tokens).total : response.tokens.reported_cost
     end
   end
 end

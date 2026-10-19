@@ -111,6 +111,7 @@ module Miniswen
         cache_read_tokens: answer.fetch(:cached_tokens, 5),
         thinking_tokens: answer[:thinking] && 40,
         raw_reasoning: answer[:reasoning_details],
+        reported_cost: answer[:reported_cost],
         finish_reason: answer.fetch(:finish_reason) { calls.empty? ? "stop" : "tool_calls" }
       )
     end
