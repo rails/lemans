@@ -25,7 +25,7 @@ class MiniswenAdapterTest < Minitest::Test
   class TransportFailingMiniswen < Lemans::Agents::Miniswen
     private
 
-    def agent_for(environment)
+    def agent_for(environment, **)
       super.tap do |agent|
         agent.define_singleton_method(:complete) do |_messages|
           raise ::Miniswen::InfrastructureError,
@@ -137,6 +137,14 @@ class MiniswenAdapterTest < Minitest::Test
     assert_predicate response.outcome, :completed?
     assert_equal "the provider stopped the model with content_filter: " \
                  "3 consecutive turns ended with no valid tool call", response.outcome.detail
+  end
+
+  def test_workdir
+    agent, task = build_agent({ cmd: "ls" }, SUBMIT)
+    environment = FakeEnv.new
+    agent.run(task, environment)
+
+    assert_equal [ "cd /app; uname -srvm", "cd /app; ls", "cd /app; #{SUBMIT[:cmd]}" ], environment.commands
   end
 
   def test_tokens_billed_at_an_unknown_rate_are_refused_not_free
