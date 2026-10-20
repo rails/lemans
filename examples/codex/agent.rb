@@ -154,8 +154,8 @@ class CodexAgent < Lemans::Agent
   end
 
   def priced_model
-    info = RubyLLM.models.find(model.to_s.split("#", 2).first, "openai")
-    info if info.input_price_per_million.is_a?(Numeric) && info.output_price_per_million.is_a?(Numeric)
+    info = RubyLLM.models.find(model.to_s.split("#", 2).first, provider: "openai")
+    info if info.price(:input).is_a?(Numeric) && info.price(:output).is_a?(Numeric)
   rescue RubyLLM::ModelNotFoundError
     nil
   end
@@ -164,10 +164,10 @@ class CodexAgent < Lemans::Agent
   def estimated_cost(totals, info)
     return unless info
 
-    input = info.input_price_per_million
-    output = info.output_price_per_million
-    cache_read = info.cache_read_input_price_per_million || input
-    cache_write = info.cache_write_input_price_per_million || input
+    input = info.price(:input)
+    output = info.price(:output)
+    cache_read = info.price(:cache_read) || input
+    cache_write = info.price(:cache_write) || input
     totals.sum do |tokens|
       cached = tokens["cached_input_tokens"].to_i
       written = tokens["cache_write_input_tokens"].to_i
