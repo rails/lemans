@@ -75,13 +75,15 @@ module Lemans
           status_file = "/tmp/lemans-#{run_id}.status"
           log_file = "/tmp/lemans-#{run_id}.log"
           exports = env.map { |key, value| "export #{key}=#{Shellwords.escape(value.to_s)}" }.join("\n")
+          # Encoded, so an unclosed heredoc or quote can't swallow the status line.
+          run = "bash -c \"$(printf %s #{[ command ].pack("m0")} | base64 -d)\" < /dev/null"
 
           sandbox.process.execute_session_command(
             session_id: @session_id,
             req: ::Daytona::SessionExecuteRequest.new(
               # A subshell, not a brace group: `set -e`/`exit` would take the
               # session's own shell down and leave the status line unwritten.
-              command: "(\n#{exports}\n#{command}\n) > #{Shellwords.escape(log_file)} 2>&1\n" \
+              command: "(\n#{exports}\n#{run}\n) > #{Shellwords.escape(log_file)} 2>&1\n" \
                        "echo $? > #{Shellwords.escape(status_file)}",
               run_async: true
             )
