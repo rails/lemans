@@ -6,6 +6,7 @@
 - Miniswen: OpenRouter runs cost what OpenRouter actually billed (including discounts or a pricier provider), with registry prices as the rare fallback.
 - Miniswen: trajectories record which upstream provider served each OpenRouter turn.
 - `lemans-remote`: forward all provider keys RubyLLM reads, not only `OPENROUTER_API_KEY`.
+- Daytona: don't hang until the timeout on unclosed heredocs or quotes.
 
 ## [1.5.2] - 2026-10-14
 

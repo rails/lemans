@@ -31,7 +31,8 @@ class ShellTest < Minitest::Test
     session_command = process.session_commands.fetch(0)
 
     assert_includes session_command, "export K=v"
-    assert_includes session_command, "bin/rails test"
+    assert_includes session_command, %(bash -c "$(printf %s #{[ "bin/rails test" ].pack("m0")} | base64 -d)" < /dev/null)
+    refute_includes session_command, "bin/rails test"
     # The scratch files were removed before the model's next look at /tmp.
     assert(process.direct_commands.any? { it.start_with?("rm -f /tmp/lemans-") })
   end
