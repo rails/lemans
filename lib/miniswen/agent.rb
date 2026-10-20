@@ -2,6 +2,7 @@
 
 require "json"
 require "securerandom"
+require "shellwords"
 require "time"
 require "miniswen/version"
 require "miniswen/ruby_llm"
@@ -233,13 +234,13 @@ module Miniswen
 
     attr_reader :messages, :environment
 
-    private attr_reader :max_steps, :max_time, :max_cost, :exec_timeout, :max_output_tokens,
+    private attr_reader :workdir, :max_steps, :max_time, :max_cost, :exec_timeout, :max_output_tokens,
                         :cache_id, :clock, :reporter
 
     # `model` is a litellm-style name ("openrouter/z-ai/glm-5.2"), optionally
     # suffixed with a reasoning effort ("openrouter/openai/gpt-5.6-luna#xhigh").
     # Limits of 0 or nil are disabled.
-    def initialize(model:, environment:, max_steps: 0, max_time: 0, max_cost: nil,
+    def initialize(model:, environment:, workdir: nil, max_steps: 0, max_time: 0, max_cost: nil,
                    exec_timeout: 30, max_output_tokens: 0,
                    clock: -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) },
                    reporter: nil)
@@ -252,6 +253,7 @@ module Miniswen
 
       @model = model
       @environment = environment
+      @workdir = workdir
 
       @bash_tool = BashTool.new
 
@@ -371,6 +373,7 @@ module Miniswen
     end
 
     def execute(command)
+      command = "cd #{Shellwords.escape(workdir)}; #{command}" if workdir
       environment.exec(command, timeout: exec_timeout, env: EXEC_ENV)
     end
 

@@ -71,6 +71,7 @@ module Miniswen
 
       def exec(command, timeout: nil, env: nil) # rubocop:disable Lint/UnusedMethodArgument
         @commands << command
+        command = command.sub(/\Acd .+?; /, "")
         return result(0, command.delete_prefix("echo ")) if command.start_with?("echo ")
 
         exit_code, output = @canned.fetch(command, [ 0, "" ])

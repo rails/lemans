@@ -44,7 +44,7 @@ module Lemans
       private
 
       def obtain_result(task, environment, history)
-        agent = agent_for(environment)
+        agent = agent_for(environment, workdir: task.environment.workdir)
         begin
           agent.run(task.instruction, history:)
         rescue InfrastructureError, ::Miniswen::InfrastructureError => e
@@ -55,12 +55,13 @@ module Lemans
       # The run as miniswen records it, signatures included: what a recovery continues from
       def raw_result_for(run_result) = JSON.generate(run_result.to_h)
 
-      def agent_for(environment)
+      def agent_for(environment, workdir: nil)
         raise ConfigError, "miniswen needs a model to drive" if model.to_s.empty?
 
         ::Miniswen::Agent.new(
           model: model.to_s,
           environment: environment,
+          workdir: workdir,
           max_steps: profile.step_limit,
           max_time: profile.timeout,
           max_cost: profile.cost_limit,

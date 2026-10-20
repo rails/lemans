@@ -25,7 +25,7 @@ class MiniswenAdapterTest < Minitest::Test
   class TransportFailingMiniswen < Lemans::Agents::Miniswen
     private
 
-    def agent_for(environment)
+    def agent_for(environment, **)
       super.tap do |agent|
         agent.define_singleton_method(:complete) do |_messages|
           raise ::Miniswen::InfrastructureError,
@@ -128,6 +128,14 @@ class MiniswenAdapterTest < Minitest::Test
     assert_equal "3 consecutive responses without a valid bash tool call", response.outcome.detail
     assert_equal "format_error", trajectory.dig("extra", "status")
     assert ATIFSchema.valid?(trajectory), ATIFSchema.errors(trajectory).join("\n")
+  end
+
+  def test_workdir
+    agent, task = build_agent({ cmd: "ls" }, SUBMIT)
+    environment = FakeEnv.new
+    agent.run(task, environment)
+
+    assert_equal [ "cd /app; uname -srvm", "cd /app; ls", "cd /app; #{SUBMIT[:cmd]}" ], environment.commands
   end
 
   def test_tokens_billed_at_an_unknown_rate_are_refused_not_free
