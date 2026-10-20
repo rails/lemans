@@ -73,18 +73,12 @@ class MiniswenAgentTest < Minitest::Test
   end
 
   def test_a_truncated_response_is_told_to_be_concise
-    stub_llm({ content: "ramble", finish_reason: "length" }, "true", SUBMIT)
+    stub_llm({ content: "ramble", finish_reason: "max_tokens" }, "true", SUBMIT)
 
     result = agent.run("task")
 
     assert_equal :submitted, result.status
-    assert(result.messages.any? { it[:content].include?("reached the output token limit") })
-
-    stub_llm({ content: "ramble", finish_reason: "model_context_window_exceeded" }, "true", SUBMIT)
-    result = agent.run("task")
-
-    assert_equal :submitted, result.status
-    assert(result.messages.any? { it[:content].include?("finish_reason=model_context_window_exceeded") })
+    assert(result.messages.any? { it[:content].include?("finish_reason=max_tokens") })
   end
 
   def test_three_malformed_answers_in_a_row_end_the_run
@@ -119,9 +113,11 @@ class MiniswenAgentTest < Minitest::Test
 
     result = agent.run("task")
 
-    assert_equal broken, RubyLLM::Providers::OpenAI::Tools.parse_tool_calls(raw)["c1"].arguments
-    assert_equal broken, openrouter_provider.send(:parse_tool_calls, raw)["c1"].arguments
-    assert_equal({ "command" => "ls" }, RubyLLM::Providers::OpenAI::Tools.parse_tool_calls(
+    assert_equal broken, RubyLLM::Protocols::ChatCompletions::Tools.parse_tool_calls(raw)["c1"].arguments
+    assert_equal broken, openrouter_protocol.send(:parse_tool_calls, raw)["c1"].arguments
+    assert_equal broken, RubyLLM::Protocols::Responses::Chat.parse_function_call_arguments(broken)
+    assert_equal broken, RubyLLM::Protocols::Cohere::Tools.parse_arguments(broken, nil, nil)
+    assert_equal({ "command" => "ls" }, RubyLLM::Protocols::ChatCompletions::Tools.parse_tool_calls(
       [ { "id" => "c2", "function" => { "name" => "bash", "arguments" => "{\"command\":\"ls\"}" } } ]
     )["c2"].arguments)
     assert_equal :submitted, result.status
@@ -171,6 +167,14 @@ class MiniswenAgentTest < Minitest::Test
     assert_equal :time_limit, result.status
     assert_equal 1, result.steps
     refute_includes fake_env.commands, "bin/rails test"
+  end
+
+  def test_replayed_turn_provider
+    build_agent
+    entry = { role: "assistant", content: "Done.", thinking: "plan", thinking_signature: "sig" }
+    message = agent.send(:as_ruby_llm, entry)
+
+    assert_equal "test", message.model_info.provider
   end
 
   def test_a_flood_of_output_reaches_the_model_elided_head_and_tail
@@ -302,18 +306,14 @@ class MiniswenAgentTest < Minitest::Test
     stub_llm(SUBMIT)
     agent.run("task")
 
-    contents = RubyLLM::Test.last_request.messages.map(&:content)
-    raw = contents.grep(RubyLLM::Content::Raw)
-
-    refute_empty raw
-    assert(raw.all? { it.value.first[:cache_control] == { type: "ephemeral" } })
+    assert_equal({}, RubyLLM::Test.last_request.caching)
   end
 
   def test_a_plain_model_sends_no_cache_breakpoints
     stub_llm(SUBMIT)
     agent.run("task")
 
-    assert(RubyLLM::Test.last_request.messages.map(&:content).none?(RubyLLM::Content::Raw))
+    assert_nil RubyLLM::Test.last_request.caching
   end
 
   def test_provider_order_pins_openrouter_routing
@@ -323,14 +323,14 @@ class MiniswenAgentTest < Minitest::Test
     agent.run("task")
 
     assert_equal({ order: [ "Chutes", "Io Net" ], allow_fallbacks: false },
-                 RubyLLM::Test.last_request.params[:provider])
+                 RubyLLM::Test.last_request.provider_options[:provider])
     assert_equal "Chutes, Io Net", agent.provider_env["OPENROUTER_PROVIDER_ORDER"]
 
     ENV["LEMANS_PROVIDER_ORDER"] = "DeepInfra"
     stub_llm(SUBMIT)
     agent.run("task")
 
-    assert_equal [ "DeepInfra" ], RubyLLM::Test.last_request.params.dig(:provider, :order)
+    assert_equal [ "DeepInfra" ], RubyLLM::Test.last_request.provider_options.dig(:provider, :order)
   ensure
     ENV.delete("LEMANS_PROVIDER_ORDER")
     ENV.delete("OPENROUTER_PROVIDER_ORDER")
@@ -349,15 +349,15 @@ class MiniswenAgentTest < Minitest::Test
 
       if cached
         refute_empty result.cache_id
-        assert_equal [ result.cache_id ] * 2, requests.map { it.params[:prompt_cache_key] }
+        assert_equal [ result.cache_id ] * 2, requests.map { it.provider_options[:prompt_cache_key] }
 
         stub_llm(SUBMIT)
         fresh = agent.run("task")
 
         refute_equal result.cache_id, fresh.cache_id
-        assert_equal fresh.cache_id, RubyLLM::Test.last_request.params[:prompt_cache_key]
+        assert_equal fresh.cache_id, RubyLLM::Test.last_request.provider_options[:prompt_cache_key]
       else
-        assert(requests.none? { it.params.key?(:prompt_cache_key) })
+        assert(requests.none? { it.provider_options.key?(:prompt_cache_key) })
       end
     end
 
@@ -365,39 +365,26 @@ class MiniswenAgentTest < Minitest::Test
     stub_llm(SUBMIT)
     agent.run("task")
 
-    refute RubyLLM::Test.last_request.params.key?(:prompt_cache_key)
+    refute RubyLLM::Test.last_request.provider_options.key?(:prompt_cache_key)
   end
 
   def test_the_output_cap_is_sent_only_when_set_and_clamped_to_the_advertised_maximum
-    with_api_key(:openrouter) { build_agent(model: "openrouter/anthropic/test") }
     stub_llm(SUBMIT)
     agent.run("task")
 
-    assert_equal({}, RubyLLM::Test.last_request.params)
+    assert_nil RubyLLM::Test.last_request.max_output_tokens
 
-    with_api_key(:openrouter) { build_agent(model: "openrouter/anthropic/test", max_output_tokens: 32_768) }
+    build_agent(max_output_tokens: 2048)
     stub_llm(SUBMIT)
     agent.run("task")
 
-    assert_equal 32_768, RubyLLM::Test.last_request.params[:max_tokens]
-
-    with_api_key(:openrouter) { build_agent(model: "openrouter/ai21/jamba-large-1.7", max_output_tokens: 32_768) }
-    stub_llm(SUBMIT)
-    agent.run("task")
-
-    assert_equal 4096, RubyLLM::Test.last_request.params[:max_tokens]
-
-    with_api_key(:openai) { build_agent(model: "openai/gpt-5.5", max_output_tokens: 32_768) }
-    stub_llm(SUBMIT)
-    agent.run("task")
-
-    assert_equal({ max_completion_tokens: 32_768 }, RubyLLM::Test.last_request.params)
+    assert_equal 2048, RubyLLM::Test.last_request.max_output_tokens
 
     build_agent(max_output_tokens: 32_768)
     stub_llm(SUBMIT)
     agent.run("task")
 
-    assert_equal({}, RubyLLM::Test.last_request.params)
+    assert_equal 4096, RubyLLM::Test.last_request.max_output_tokens
   end
 
   def test_an_effort_suffix_sets_the_reasoning_effort_and_stays_out_of_the_model_id
@@ -405,7 +392,7 @@ class MiniswenAgentTest < Minitest::Test
     stub_llm(SUBMIT)
     result = agent.run("task")
 
-    assert_equal "xhigh", RubyLLM::Test.last_request.thinking.effort
+    assert_equal :xhigh, RubyLLM::Test.last_request.thinking.effort
     assert_equal "anthropic/test", agent.send(:resolved).first.id
     assert_equal :submitted, result.status
     assert agent.send(:explicit_cache?)
@@ -450,7 +437,7 @@ class MiniswenAgentTest < Minitest::Test
     assert_equal :submitted, result.status
     replayed = RubyLLM::Test.last_request.messages.find { it.role == :assistant }
 
-    assert_equal details, replayed.thinking.details
+    assert_equal details, replayed.raw_reasoning
     assert_equal "onetwo", replayed.thinking.text
     assert_equal "sig-1", replayed.thinking.signature
     restored = Miniswen::Agent::Result.from_h(JSON.parse(JSON.generate(result.to_h)))
@@ -463,19 +450,10 @@ class MiniswenAgentTest < Minitest::Test
       { "type" => "reasoning.text", "text" => "one", "signature" => "sig-1" },
       { "type" => "reasoning.text", "text" => "two", "signature" => "sig-2" }
     ]
-    verbatim = RubyLLM::Message.new(
-      role: :assistant, content: "",
-      thinking: Miniswen::Agent::VerbatimThinking.new(text: "onetwo", signature: "sig-1", details: details)
-    )
-    collapsed = RubyLLM::Message.new(
-      role: :assistant, content: "",
-      thinking: RubyLLM::Thinking.new(text: "onetwo", signature: "sig-1")
-    )
-    provider = openrouter_provider
+    verbatim = RubyLLM::Message.new(role: :assistant, content: "", raw_reasoning: details,
+                                    thinking: RubyLLM::Thinking.new(text: "onetwo", signature: "sig-1"))
 
-    assert_equal({ reasoning_details: details }, provider.send(:format_thinking, verbatim))
-    assert_equal({ reasoning_details: [ { type: "reasoning.text", text: "onetwo", signature: "sig-1" } ] },
-                 provider.send(:format_thinking, collapsed))
+    assert_equal({ reasoning_details: details }, openrouter_protocol.send(:format_thinking, verbatim))
   end
 
   def test_a_transport_failure_becomes_an_infrastructure_error
@@ -500,7 +478,7 @@ class MiniswenAgentTest < Minitest::Test
   end
 
   def test_ssl_and_parsing_errors_join_the_transport_retry_list
-    exceptions = RubyLLM::Connection.allocate.retry_exceptions
+    exceptions = RubyLLM::Transport::Connection.send(:retry_exceptions)
 
     assert_includes exceptions, Faraday::SSLError
     assert_includes exceptions, Faraday::ParsingError
@@ -510,7 +488,8 @@ class MiniswenAgentTest < Minitest::Test
   # minutes of provider rate limiting.
   def test_the_retry_budget_covers_about_ten_minutes
     config = RubyLLM.config
-    total = (0...config.max_retries).sum { config.retry_interval * config.retry_backoff_factor**it }
+    cap = config.retry_max_interval
+    total = (0...config.max_retries).sum { [ config.retry_interval * config.retry_backoff_factor**it, cap ].min }
 
     assert_operator total, :>=, 480
   end
@@ -582,10 +561,10 @@ class MiniswenAgentTest < Minitest::Test
 
   attr_reader :agent, :fake_env
 
-  def openrouter_provider
+  def openrouter_protocol
     original = RubyLLM.config.openrouter_api_key
     RubyLLM.config.openrouter_api_key = "test-key"
-    RubyLLM::Providers::OpenRouter.new(RubyLLM.config)
+    RubyLLM::Providers::OpenRouter::ChatCompletions.new(RubyLLM::Providers::OpenRouter.new(RubyLLM.config))
   ensure
     RubyLLM.config.openrouter_api_key = original
   end

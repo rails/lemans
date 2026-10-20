@@ -16,14 +16,10 @@ module Miniswen # :nodoc:
   class AccountingError < Error; end
 
   class << self
-    def refresh_registry!(persist: false)
+    def refresh_registry!
       return true if @ruby_llm_refreshed
 
-      RubyLLM.models.refresh!
-      # save_to_json writes to the registry file every boot loads from (the
-      # gem's own models.json by default), so a persisted refresh outlives
-      # this process — later runs in the same environment boot from it.
-      RubyLLM.models.save_to_json if persist
+      RubyLLM.models.refresh
       @ruby_llm_refreshed = true
     rescue StandardError => e
       warn "Failed to refresh RubyLLM registry: #{e.message}"

@@ -30,5 +30,5 @@ Gem::Specification.new do |spec|
   spec.executables = [ "miniswen" ]
 
   spec.add_dependency "logger"
-  spec.add_dependency "ruby_llm", "~> 1.16"
+  spec.add_dependency "ruby_llm", "~> 2.1.1"
 end

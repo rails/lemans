@@ -38,7 +38,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency "rack", "~> 3.1"
   spec.add_dependency "rackup", "~> 2.2"
   spec.add_dependency "rexml", "~> 3.4"
-  spec.add_dependency "ruby_llm", "~> 1.16"
+  spec.add_dependency "ruby_llm", "~> 2.1.1"
   spec.add_dependency "thor", "~> 1.5"
   spec.add_dependency "webrick", "~> 1.9"
   spec.add_dependency "zeitwerk", "~> 2.8"

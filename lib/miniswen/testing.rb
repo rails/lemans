@@ -21,22 +21,22 @@ module Miniswen
 
     # $20/M input (fresh and cached) and $400/M output price the default answer
     # (95 fresh + 5 cached input tokens, 20 output tokens) at exactly $0.01.
-    PRICED_MODEL = RubyLLM::Model::Info.new(
-      id: "test", name: "Test", provider: "test",
+    PRICED_MODEL = RubyLLM::Model.new(
+      id: "test", name: "Test", provider: "test", max_output_tokens: 4096,
       capabilities: %w[function_calling],
       modalities: { input: %w[text], output: %w[text] },
       pricing: { text_tokens: { standard: {
-        input_per_million: 20.0, cached_input_per_million: 20.0, output_per_million: 400.0
+        input_per_million: 20.0, cache_read_input_per_million: 20.0, output_per_million: 400.0
       } } }
     )
 
-    UNPRICED_MODEL = RubyLLM::Model::Info.new(
+    UNPRICED_MODEL = RubyLLM::Model.new(
       id: "test-unpriced", name: "Test unpriced", provider: "test",
       capabilities: %w[function_calling],
       modalities: { input: %w[text], output: %w[text] }
     )
 
-    FREE_MODEL = RubyLLM::Model::Info.new(
+    FREE_MODEL = RubyLLM::Model.new(
       id: "test-free", name: "Test free", provider: "openrouter",
       capabilities: %w[function_calling],
       modalities: { input: %w[text], output: %w[text] }
@@ -46,12 +46,10 @@ module Miniswen
 
     # Serves the test models from ruby_llm's registry lookups.
     module FindTestModels
-      def find(model_id, provider = nil)
+      def find(model_id, **)
         MODELS[model_id] || super
       end
     end
-
-    RawResponse = Data.define(:body)
 
     SUBMIT = { content: "Done.", cmd: "echo #{Agent::SUBMIT_MARKER}" }.freeze
 
@@ -110,19 +108,14 @@ module Miniswen
                                                              signature: answer[:thinking_signature]),
         input_tokens: answer.fetch(:input_tokens, 95),
         output_tokens: answer.fetch(:output_tokens, 20),
-        cached_tokens: answer.fetch(:cached_tokens, 5),
+        cache_read_tokens: answer.fetch(:cached_tokens, 5),
         thinking_tokens: answer[:thinking] && 40,
-        raw: RawResponse.new(body: raw_body_for(answer, calls))
+        raw_reasoning: answer[:reasoning_details],
+        finish_reason: answer.fetch(:finish_reason) { calls.empty? ? "stop" : "tool_calls" }
       )
     end
 
     private
-
-    def raw_body_for(answer, calls)
-      choice = { "finish_reason" => answer.fetch(:finish_reason) { calls.empty? ? "stop" : "tool_calls" } }
-      choice["message"] = { "reasoning_details" => answer[:reasoning_details] } if answer[:reasoning_details]
-      { "choices" => [ choice ] }
-    end
 
     def tool_calls_for(answer)
       calls = answer[:tool_calls] || Array(answer[:cmd]).map { { name: "bash", arguments: { "command" => it } } }
