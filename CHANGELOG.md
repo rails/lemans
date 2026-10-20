@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-- Miniswen: upgrade ruby_llm to 2.1.1 (use its new built-in caching, finish reasons and reasoning replay, keep the ~10 min retry window, honor `RUBYLLM_DEBUG`).
+- Miniswen: upgrade ruby_llm to 2.1.1 (use its new built-in caching, finish reasons and reasoning replay, keep the ~10 min retry window, honor `RUBYLLM_DEBUG`, allow JSON 3).
 
 ## [1.5.2] - 2026-10-14
 
