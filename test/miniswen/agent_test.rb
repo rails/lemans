@@ -336,29 +336,21 @@ class MiniswenAgentTest < Minitest::Test
     ENV.delete("OPENROUTER_PROVIDER_ORDER")
   end
 
-  def test_muse_cache_key
-    {
-      "openrouter/meta/muse-wonder#xhigh" => true,
-      "openrouter/meta/muse-spark-1.3#max" => true,
-      "openrouter/meta/llama-3.3-70b-instruct" => false
-    }.each do |model, cached|
+  def test_openrouter_cache_key
+    %w[openrouter/meta/muse-wonder#xhigh openrouter/meta/llama-3.3-70b-instruct].each do |model|
       with_api_key(:openrouter) { build_agent(model:) }
       stub_llm("true", SUBMIT)
       result = agent.run("task")
       requests = RubyLLM::Test.requests.last(2)
 
-      if cached
-        refute_empty result.cache_id
-        assert_equal [ result.cache_id ] * 2, requests.map { it.provider_options[:prompt_cache_key] }
+      refute_empty result.cache_id
+      assert_equal [ result.cache_id ] * 2, requests.map { it.provider_options[:prompt_cache_key] }
 
-        stub_llm(SUBMIT)
-        fresh = agent.run("task")
+      stub_llm(SUBMIT)
+      fresh = agent.run("task")
 
-        refute_equal result.cache_id, fresh.cache_id
-        assert_equal fresh.cache_id, RubyLLM::Test.last_request.provider_options[:prompt_cache_key]
-      else
-        assert(requests.none? { it.provider_options.key?(:prompt_cache_key) })
-      end
+      refute_equal result.cache_id, fresh.cache_id
+      assert_equal fresh.cache_id, RubyLLM::Test.last_request.provider_options[:prompt_cache_key]
     end
 
     build_agent(model: "test/meta/muse-wonder")

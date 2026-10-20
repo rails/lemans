@@ -541,8 +541,7 @@ module Miniswen
     def routing_params
       return {} unless @provider == "openrouter"
 
-      params = {}
-      params[:prompt_cache_key] = cache_id if @id.start_with?("meta/muse-")
+      params = { prompt_cache_key: cache_id }
       if (order = provider_order)
         params[:provider] = { order: order.split(",").map(&:strip), allow_fallbacks: false }
       end
