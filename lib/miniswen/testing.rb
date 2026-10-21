@@ -89,7 +89,7 @@ module Miniswen
 
     # Each answer is a command string, or a hash with :cmd (one command or many)
     # and/or :content, plus optional overrides (:tool_calls, :finish_reason,
-    # :thinking, token counts). Overrides given here apply to every answer.
+    # :thinking, :raw, token counts). Overrides given here apply to every answer.
     def stub_llm(*answers, **overrides)
       RubyLLM::Test.stub_responses(*answers.map { llm_answer(it, **overrides) })
     end
@@ -112,6 +112,7 @@ module Miniswen
         thinking_tokens: answer[:thinking] && 40,
         raw_reasoning: answer[:reasoning_details],
         reported_cost: answer[:reported_cost],
+        raw: answer[:raw],
         finish_reason: answer.fetch(:finish_reason) { calls.empty? ? "stop" : "tool_calls" }
       )
     end

@@ -4,6 +4,7 @@
 - Miniswen: send `prompt_cache_key` for every OpenRouter model, not only Muse, so a session keeps its cache without a pinned provider order.
 - Miniswen: turn on prompt caching for every model, so models that need it (like Claude, including on the Anthropic API) cache, and those that cache automatically are unaffected.
 - Miniswen: OpenRouter runs cost what OpenRouter actually billed (including discounts or a pricier provider), with registry prices as the rare fallback.
+- Miniswen: trajectories record which upstream provider served each OpenRouter turn.
 - `lemans-remote`: forward all provider keys RubyLLM reads, not only `OPENROUTER_API_KEY`.
 
 ## [1.5.2] - 2026-10-14

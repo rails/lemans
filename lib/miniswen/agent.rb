@@ -373,6 +373,7 @@ module Miniswen
       # content, no tool call and no billed tokens.
       entry[:finish_reason] = response[:finish_reason] if response[:finish_reason]
       entry[:thinking] = response[:thinking] if response[:thinking]
+      entry[:provider] = response[:provider] if response[:provider]
       # The provider's opaque handles on this turn's reasoning: replayed back
       # to the provider only, never into the trajectory.
       entry[:thinking_signature] = response[:thinking_signature] if response[:thinking_signature]
@@ -627,7 +628,8 @@ module Miniswen
         cached_tokens: tokens.cache_read.to_i,
         thinking_tokens: tokens.thinking.to_i,
         cost_usd: price(response),
-        reported: !tokens.reported_cost.nil?
+        reported: !tokens.reported_cost.nil?,
+        provider: response.raw&.body&.dig("provider")
       }
     end
 
