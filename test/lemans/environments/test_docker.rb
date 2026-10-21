@@ -110,6 +110,7 @@ class DockerEnvironmentTest < Minitest::Test
     argv = calls.last[:argv]
     assert_equal [ "timeout", "90", "bash", "-c", "bundle exec rake" ], argv.last(5)
     assert_includes argv.each_cons(2).to_a, [ "--env", "RAILS_ENV=test" ]
+    assert_includes argv.each_cons(2).to_a, [ "--user", "0" ]
     assert_equal 90 + Lemans::Environments::Docker::EXEC_SLACK, calls.last[:timeout]
     assert_equal 3, result.exit_code
     assert_equal "went sideways", result.output
@@ -121,8 +122,10 @@ class DockerEnvironmentTest < Minitest::Test
 
     environment.upload("/tmp/seed.patch", "/lemans/setup/seed.patch")
 
-    assert_equal [ "docker", "exec", environment.container, "mkdir", "-p", "/lemans/setup" ], calls[-2][:argv]
-    assert_equal [ "docker", "cp", "/tmp/seed.patch", "#{environment.container}:/lemans/setup/seed.patch" ], calls[-1][:argv]
+    assert_equal [ "docker", "exec", "--user", "0", environment.container, "mkdir", "-p", "/lemans/setup" ],
+                 calls[-2][:argv]
+    assert_equal [ "docker", "cp", "/tmp/seed.patch", "#{environment.container}:/lemans/setup/seed.patch" ],
+                 calls[-1][:argv]
   end
 
   def test_start_reuses_the_image
