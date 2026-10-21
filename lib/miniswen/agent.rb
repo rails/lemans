@@ -14,21 +14,6 @@ module Miniswen
     MAX_OBSERVATION_CHARS = 10_000
     MAX_CONSECUTIVE_FORMAT_ERRORS = 3
 
-    # Both finish_reason dialects accepted raw: OpenAI-shaped providers say
-    # "length"/"tool_calls", Anthropic says "max_tokens"/"tool_use".
-    TRUNCATION_FINISH_REASONS = %w[length max_tokens model_context_window_exceeded].freeze
-    CLAIMED_TOOL_FINISH_REASONS = %w[tool_calls tool_use].freeze
-    # A safety stop, which arrives looking exactly like a model that forgot
-    # to call the tool: no content, no tool call, and — since the provider
-    # bills nothing for a turn it refused — no tokens either. Only the
-    # finish reason tells the two apart, so the run is labelled by it. The
-    # retry is unchanged: the nudge still goes back, because matching
-    # mini-swe-agent turn for turn is what makes runs comparable.
-    REFUSAL_FINISH_REASONS = %w[content_filter refusal safety].freeze
-
-    # The breakpoint marker Anthropic reads, shaped the way OpenRouter forwards it.
-    CACHE_CONTROL = { type: "ephemeral" }.freeze
-
     EXEC_ENV = {
       "PAGER" => "cat",
       "MANPAGER" => "cat",
@@ -36,9 +21,6 @@ module Miniswen
       "PIP_PROGRESS_BAR" => "off",
       "TQDM_DISABLE" => "1"
     }.freeze
-
-    # Providers that serve local inference (and cost zero)
-    LOCAL_PROVIDERS = %i[ollama gpustack].freeze
 
     SYSTEM_TEMPLATE = <<~PROMPT
       You are a helpful assistant that can interact with a computer.
@@ -168,20 +150,10 @@ module Miniswen
       without any other command.
     MESSAGE
 
-    # Thinking that also carries the provider's reasoning_details for verbatim replay.
-    class VerbatimThinking < RubyLLM::Thinking
-      attr_reader :details
-
-      def initialize(text: nil, signature: nil, details: nil)
-        super(text: text, signature: signature)
-        @details = details
-      end
-    end
-
     # Only ever rendered into the request — the completion executes nothing — so no execute body.
     class BashTool < RubyLLM::Tool
       description "Execute a bash command"
-      param :command, desc: "The bash command to execute"
+      parameter :command, description: "The bash command to execute"
 
       # ruby_llm would otherwise derive "lemans--miniswen--bash" from the class path.
       def name = "bash"
@@ -339,6 +311,7 @@ module Miniswen
       @steps = 0
       @cost = 0.0
       @cost_known = true
+      @cost_reported = false
       @totals = { input_tokens: 0, output_tokens: 0, cached_tokens: 0, thinking_tokens: 0 }
       @started_at = @clock.call
     end
@@ -350,6 +323,7 @@ module Miniswen
       @steps = history.steps.to_i
       @cost = history.cost_usd.to_f
       @cost_known = !history.cost_usd.nil?
+      @cost_reported = history.cost_source&.name == :provider_reported
       @totals = { input_tokens: history.input_tokens.to_i, output_tokens: history.output_tokens.to_i,
                   cached_tokens: history.cached_tokens.to_i, thinking_tokens: history.thinking_tokens.to_i }
       @started_at = @clock.call - elapsed(history.messages)
@@ -399,6 +373,7 @@ module Miniswen
       # content, no tool call and no billed tokens.
       entry[:finish_reason] = response[:finish_reason] if response[:finish_reason]
       entry[:thinking] = response[:thinking] if response[:thinking]
+      entry[:provider] = response[:provider] if response[:provider]
       # The provider's opaque handles on this turn's reasoning: replayed back
       # to the provider only, never into the trajectory.
       entry[:thinking_signature] = response[:thinking_signature] if response[:thinking_signature]
@@ -412,7 +387,7 @@ module Miniswen
         # message with unanswered tool calls is a request providers reject.
         entry[:invalid_tool_calls] = tool_calls if tool_calls.any?
         @consecutive_format_errors += 1
-        @refused_turns += 1 if refused?(response)
+        @refused_turns += 1 if response[:refused]
 
         observe_message({ role: "user", content: format_error_message(error, response, tool_calls) })
 
@@ -424,8 +399,6 @@ module Miniswen
       entry[:tool_calls] = tool_calls
       tool_calls
     end
-
-    def refused?(response) = REFUSAL_FINISH_REASONS.include?(response[:finish_reason].to_s)
 
     # An unpriced completion under a cost ceiling is fatal on the spot: only failing fast stops
     # the spend. Without a ceiling, unknown cost is just a fact to report.
@@ -441,6 +414,7 @@ module Miniswen
       else
         @cost += cost
       end
+      @cost_reported = true if response[:reported]
     end
 
     def actions_error(tool_calls)
@@ -466,10 +440,8 @@ module Miniswen
     end
 
     def format_error_message(error, response, tool_calls)
-      finish_reason = response[:finish_reason].to_s
-      if TRUNCATION_FINISH_REASONS.include?(finish_reason) ||
-         (CLAIMED_TOOL_FINISH_REASONS.include?(finish_reason) && tool_calls.empty?)
-        format(TRUNCATION_ERROR_MESSAGE, finish_reason: finish_reason)
+      if response[:truncated] || (response[:finish_reason] == "tool_calls" && tool_calls.empty?)
+        format(TRUNCATION_ERROR_MESSAGE, finish_reason: response[:finish_reason])
       else
         format(TOOL_CALL_ERROR_MESSAGE, error: error)
       end
@@ -548,11 +520,13 @@ module Miniswen
     def complete(messages)
       model_info, provider = resolved
       response = provider.complete(
-        with_cache_breakpoints(messages.map { as_ruby_llm(it) }),
+        messages.map { as_ruby_llm(it) },
         tools: { bash: @bash_tool },
         temperature: nil,
         model: model_info,
-        params: routing_params.merge(output_cap_params(model_info)),
+        provider_options: routing_params,
+        max_output_tokens: output_cap,
+        caching: {},
         thinking: (RubyLLM::Thinking::Config.new(effort: @effort) if @effort)
       )
       payload(response)
@@ -564,30 +538,10 @@ module Miniswen
       raise InfrastructureError, "miniswen: the model call failed: #{e.class}: #{e.message}"
     end
 
-    # Anthropic bills every token fresh unless the request marks explicit cache
-    # breakpoints
-    def explicit_cache? = @provider == "openrouter" && @id.to_s.start_with?("anthropic/")
-
-    def with_cache_breakpoints(messages)
-      return messages unless explicit_cache?
-
-      system = messages.find { it.role == :system }
-      [ system, messages.last ].compact.uniq.each do |message|
-        text = message.content
-        next unless text.is_a?(String) && !text.empty?
-
-        message.content = RubyLLM::Content::Raw.new(
-          [ { type: "text", text: text, cache_control: CACHE_CONTROL } ]
-        )
-      end
-      messages
-    end
-
     def routing_params
       return {} unless @provider == "openrouter"
 
-      params = {}
-      params[:prompt_cache_key] = cache_id if @id.start_with?("meta/muse-")
+      params = { prompt_cache_key: cache_id }
       if (order = provider_order)
         params[:provider] = { order: order.split(",").map(&:strip), allow_fallbacks: false }
       end
@@ -596,20 +550,8 @@ module Miniswen
 
     def provider_order = ENV["LEMANS_PROVIDER_ORDER"] || ENV["OPENROUTER_PROVIDER_ORDER"]
 
-    # OpenAI itself retired `max_tokens` for its reasoning models; the
-    # OpenAI-compatible providers and Anthropic still read it.
-    def output_cap_params(model_info)
-      return {} if max_output_tokens.zero?
-
-      cap = [ info&.max_tokens, max_output_tokens ].compact.min
-      provider_class = RubyLLM::Provider.providers[model_info.provider.to_sym]
-      if [ RubyLLM::Providers::OpenAI, RubyLLM::Providers::Azure ].include?(provider_class)
-        { max_completion_tokens: cap }
-      elsif provider_class <= RubyLLM::Providers::OpenAI || provider_class <= RubyLLM::Providers::Anthropic
-        { max_tokens: cap }
-      else
-        {}
-      end
+    def output_cap
+      [ info&.max_output_tokens, max_output_tokens ].compact.min unless max_output_tokens.zero?
     end
 
     def cost_source
@@ -618,12 +560,12 @@ module Miniswen
                               priced_as: "#{@provider || info&.provider}/#{@id} ($0.00, local)",
                               registry: nil)
       end
-      return nil unless info
-      if free?
-        return CostSource.new(name: :free_model, model: @model,
-                              priced_as: "#{info.provider}/#{info.id} ($0.00, free)",
+      if @cost_reported
+        return CostSource.new(name: :provider_reported, model: @model,
+                              priced_as: "#{@provider || info&.provider}/#{@id} (as billed, else the registry price)",
                               registry: Miniswen.registry_revision)
       end
+      return nil unless info
 
       CostSource.new(name: :model_registry, model: @model,
                      priced_as: "#{info.provider}/#{info.id}",
@@ -631,14 +573,16 @@ module Miniswen
     end
 
     def resolved
-      @resolved ||= RubyLLM::Models.resolve(@id, provider: @provider, assume_exists: !@provider.nil?)
+      @resolved ||= RubyLLM::Models.resolve(@id, provider: @provider, assume_model_exists: !@provider.nil?)
     end
 
     def as_ruby_llm(entry)
       case entry[:role]
       when "assistant"
-        RubyLLM::Message.new(role: :assistant, content: entry[:content],
-                             thinking: as_ruby_llm_thinking(entry),
+        thinking = RubyLLM::Thinking.build(text: entry[:thinking], signature: entry[:thinking_signature])
+        RubyLLM::Message.new(role: :assistant, content: entry[:content], thinking:,
+                             raw_reasoning: entry[:reasoning_details],
+                             usage_entries: [ producing_entry ],
                              tool_calls: as_ruby_llm_tool_calls(entry[:tool_calls]))
       when "tool"
         RubyLLM::Message.new(role: :tool, content: entry[:content], tool_call_id: entry[:tool_call_id])
@@ -647,13 +591,11 @@ module Miniswen
       end
     end
 
-    def as_ruby_llm_thinking(entry)
-      details = entry[:reasoning_details]
-      if details && !details.empty?
-        VerbatimThinking.new(text: entry[:thinking], signature: entry[:thinking_signature], details: details)
-      else
-        RubyLLM::Thinking.build(text: entry[:thinking], signature: entry[:thinking_signature])
-      end
+    # A rebuilt turn must name its provider, or ruby_llm drops its thinking signature.
+    def producing_entry
+      model_info, provider = resolved
+      RubyLLM::Accounting::Usage::Entry.new(operation: :chat, provider: provider.slug, model: model_info.id,
+                                            status: :succeeded)
     end
 
     def as_ruby_llm_tool_calls(tool_calls)
@@ -674,16 +616,20 @@ module Miniswen
         content: response.content.to_s,
         thinking: response.thinking&.text,
         thinking_signature: response.thinking&.signature,
-        reasoning_details: reasoning_details_from(response),
+        reasoning_details: response.raw_reasoning,
         tool_calls: tool_calls_from(response),
-        finish_reason: finish_reason_from(response),
+        finish_reason: response.finish_reason&.to_s,
+        truncated: response.max_tokens?,
+        refused: response.content_filtered?,
         # ruby_llm's input_tokens is the cache-miss remainder only; the
         # convention counts the whole prompt, cached and cache-write included.
-        input_tokens: response.input_tokens.to_i + tokens&.cached.to_i + tokens&.cache_creation.to_i,
-        output_tokens: response.output_tokens.to_i,
-        cached_tokens: tokens&.cached.to_i,
-        thinking_tokens: tokens&.thinking.to_i,
-        cost_usd: price(response)
+        input_tokens: tokens.input.to_i + tokens.cache_read.to_i + tokens.cache_write.to_i,
+        output_tokens: tokens.output.to_i,
+        cached_tokens: tokens.cache_read.to_i,
+        thinking_tokens: tokens.thinking.to_i,
+        cost_usd: price(response),
+        reported: !tokens.reported_cost.nil?,
+        provider: response.raw&.body&.dig("provider")
       }
     end
 
@@ -704,27 +650,7 @@ module Miniswen
       arguments
     end
 
-    def finish_reason_from(response)
-      body = raw_body(response)
-      body && (body.dig("choices", 0, "finish_reason") || body["stop_reason"])
-    end
-
-    def reasoning_details_from(response)
-      details = raw_body(response)&.dig("choices", 0, "message", "reasoning_details")
-      details.is_a?(Array) && !details.empty? ? details : nil
-    end
-
-    def raw_body(response)
-      body = response.raw&.body
-      body = JSON.parse(body) if body.is_a?(String)
-      body.is_a?(Hash) ? body : nil
-    rescue JSON::ParserError
-      nil
-    end
-
-    def local? = LOCAL_PROVIDERS.include?((@provider || info&.provider)&.to_sym)
-
-    def free? = info&.provider == "openrouter" && info.input_price_per_million.nil? && info.output_price_per_million.nil?
+    def local? = RubyLLM::Provider.providers[(@provider || info&.provider)&.to_sym]&.local? || false
 
     def info
       return @info if defined?(@info)
@@ -733,28 +659,15 @@ module Miniswen
     end
 
     def find_model
-      @provider ? RubyLLM.models.find(@id, @provider) : RubyLLM.models.find(@id)
+      RubyLLM.models.find(@id, provider: @provider)
     rescue RubyLLM::ModelNotFoundError
       nil
     end
 
     def price(response)
-      return 0.0 if local? || free?
+      return 0.0 if local? || (response.tokens.to_h.empty? && response.tokens.reported_cost.nil?)
 
-      input = info&.input_price_per_million
-      output = info&.output_price_per_million
-      return nil unless input.is_a?(Numeric) && output.is_a?(Numeric)
-
-      tokens = response.tokens
-      cache_read = info.cache_read_input_price_per_million || input
-      cache_write = info.cache_write_input_price_per_million || input
-      # Providers usually fold thinking into output_tokens; max() bills the
-      # larger count once and can never double-bill.
-      generated = [ response.output_tokens.to_i, tokens&.thinking.to_i ].max
-      ((response.input_tokens.to_i * input) +
-        (tokens&.cached.to_i * cache_read) +
-        (tokens&.cache_creation.to_i * cache_write) +
-        (generated * output)) / 1_000_000.0
+      info ? info.cost_for(response.tokens).total : response.tokens.reported_cost
     end
   end
 end

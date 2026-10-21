@@ -78,7 +78,8 @@ module Miniswen
         step[:llm_call_count] = 1
       end
       # ATIF has no field for how a turn ended
-      step[:extra] = { finish_reason: message[:finish_reason] } if message[:finish_reason]
+      extra = { finish_reason: message[:finish_reason], provider: message[:provider] }.compact
+      step[:extra] = extra unless extra.empty?
       step
     end
 

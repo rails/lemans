@@ -99,7 +99,7 @@ module Miniswen
     end
 
     def refresh_registry_and_exit
-      refreshed = Miniswen.refresh_registry!(persist: true)
+      refreshed = Miniswen.refresh_registry!
       $stdout.puts Miniswen.registry_revision if refreshed
       Kernel.exit(refreshed ? 0 : 1)
     end

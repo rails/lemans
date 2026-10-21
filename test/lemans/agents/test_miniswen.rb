@@ -130,6 +130,15 @@ class MiniswenAdapterTest < Minitest::Test
     assert ATIFSchema.valid?(trajectory), ATIFSchema.errors(trajectory).join("\n")
   end
 
+  def test_content_filter
+    agent, task = build_agent(*Array.new(3) { { content: "stopped", finish_reason: "content_filter" } })
+    response, = run_agent(agent, task)
+
+    assert_predicate response.outcome, :completed?
+    assert_equal "the provider stopped the model with content_filter: " \
+                 "3 consecutive turns ended with no valid tool call", response.outcome.detail
+  end
+
   def test_tokens_billed_at_an_unknown_rate_are_refused_not_free
     agent, task = build_agent(SUBMIT, model: "test-unpriced")
 

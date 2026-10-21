@@ -80,6 +80,15 @@ class MiniswenTrajectoryTest < Minitest::Test
     assert_equal trajectory.dig("final_metrics", "total_steps"), agent_steps
   end
 
+  def test_provider
+    stub_llm({ cmd: "true", raw: Faraday::Response.new(body: { "provider" => "Together" }) }, SUBMIT)
+    result = agent.run("task")
+
+    turns = as_json(trajectory_for(result))["steps"].select { it["source"] == "agent" }
+
+    assert_equal [ "Together", nil ], turns.map { it.dig("extra", "provider") }
+  end
+
   def test_thinking_nests_as_reasoning_details
     stub_llm(SUBMIT, thinking: "just do it")
     result = agent.run("Just submit.")

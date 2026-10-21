@@ -74,8 +74,8 @@ module Lemans
         when :format_error
           "#{::Miniswen::Agent::MAX_CONSECUTIVE_FORMAT_ERRORS} consecutive responses without a valid bash tool call"
         when :content_filter
-          "the provider stopped the model: #{::Miniswen::Agent::MAX_CONSECUTIVE_FORMAT_ERRORS} consecutive turns " \
-          "ended with #{::Miniswen::Agent::REFUSAL_FINISH_REASONS.join("/")} and no tool call"
+          "the provider stopped the model with content_filter: " \
+          "#{::Miniswen::Agent::MAX_CONSECUTIVE_FORMAT_ERRORS} consecutive turns ended with no valid tool call"
         end
       end
 

@@ -20,4 +20,4 @@ gem "minitest-mock", "~> 5.27"
 gem "rubocop", "~> 1.89"
 gem "rubocop-rails-omakase", require: false
 
-gem "ruby_llm-test", "~> 0.2.0"
+gem "ruby_llm-test", "~> 0.3.0"

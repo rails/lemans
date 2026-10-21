@@ -51,8 +51,9 @@
 #     exe/lemans-remote snapshots
 #     exe/lemans-remote deprovision [--name SNAPSHOT]
 #
-#   Credentials come from the host ENV: DAYTONA_API_KEY (or DAYTONA_TOKEN),
-#   OPENROUTER_API_KEY, LEMANS_PROVIDER_ORDER (or OPENROUTER_PROVIDER_ORDER);
+#   Credentials come from the host ENV: DAYTONA_API_KEY (or DAYTONA_TOKEN), every
+#   provider key RubyLLM reads (OPENROUTER_API_KEY, ANTHROPIC_API_KEY, ...),
+#   LEMANS_PROVIDER_ORDER (or OPENROUTER_PROVIDER_ORDER);
 #   forward extras with --env KEY.
 
 lib_path = File.expand_path("../lib", __dir__)
@@ -101,7 +102,8 @@ module LemansRemote # :nodoc: all
   REMOTE_META = "/tmp/lemans-remote-run.json"
   REMOTE_REQUIRES_DIR = "/tmp/lemans-remote-requires"
 
-  ENV_ALLOWLIST = %w[OPENROUTER_API_KEY LEMANS_PROVIDER_ORDER OPENROUTER_PROVIDER_ORDER].freeze
+  ENV_ALLOWLIST = (RubyLLM::Provider.providers.values.flat_map(&:configuration_requirements).map { it.to_s.upcase } +
+                   %w[LEMANS_PROVIDER_ORDER OPENROUTER_PROVIDER_ORDER]).uniq.freeze
 
   Backend = Lemans::Environments::Daytona
 
