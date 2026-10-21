@@ -55,4 +55,17 @@ class MiniswenJailTest < Minitest::Test
     assert_equal "read-only\n", @jail.exec("(touch /x 2>/dev/null && echo writable) || echo read-only").output
     assert_equal "0\n0\n", @jail.exec("ls -A /root | wc -l; ls -A /tmp | wc -l").output
   end
+
+  def test_dies_with_its_parent
+    start = "Miniswen::Jail.new(allowed_hosts: [ 'example.com' ]).start; puts :started; $stdout.flush; sleep"
+    parent = IO.popen([ RbConfig.ruby, "-I#{File.expand_path("../../lib", __dir__)}", "-rminiswen/jail", "-e", start ])
+    parent.gets
+    children = File.read("/proc/#{parent.pid}/task/#{parent.pid}/children").split.map(&:to_i)
+    Process.kill(:KILL, parent.pid)
+    parent.close
+    sleep 0.1
+
+    refute_empty children
+    children.each { |pid| assert_raises(Errno::ESRCH) { Process.kill(0, pid) } }
+  end
 end
