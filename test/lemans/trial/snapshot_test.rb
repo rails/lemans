@@ -33,7 +33,7 @@ class TrialSnapshotTest < Minitest::Test
     shot = snapshot(env)
     shot.capture!
 
-    assert_includes env.commands.first, "GIT_INDEX_FILE=/tmp/lemans-baseline.idx"
+    assert_includes env.commands.first, "GIT_INDEX_FILE=/var/lib/lemans/git/baseline.idx"
     assert_includes env.commands.first, "write-tree"
 
     shot.restore!
@@ -41,6 +41,8 @@ class TrialSnapshotTest < Minitest::Test
     # anything destructive runs.
     assert_includes env.commands.last, "cat-file -e #{TREE} && rm -rf -- test bin && "
     assert_includes env.commands.last, "checkout #{TREE} -- test bin"
+    assert(env.commands.all? { it.include?("GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null git -C") })
+    assert(env.commands.all? { it.include?("--git-dir=/var/lib/lemans/git --work-tree=") })
   end
 
   def test_a_restore_that_fails_is_the_verifiers_error
