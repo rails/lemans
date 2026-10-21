@@ -525,7 +525,7 @@ module Miniswen
         model: model_info,
         provider_options: routing_params,
         max_output_tokens: output_cap,
-        caching: ({} if explicit_cache?),
+        caching: {},
         thinking: (RubyLLM::Thinking::Config.new(effort: @effort) if @effort)
       )
       payload(response)
@@ -536,10 +536,6 @@ module Miniswen
     rescue Faraday::SSLError, Faraday::ConnectionFailed, Faraday::TimeoutError, Faraday::ParsingError => e
       raise InfrastructureError, "miniswen: the model call failed: #{e.class}: #{e.message}"
     end
-
-    # Anthropic bills every token fresh unless the request marks explicit cache
-    # breakpoints
-    def explicit_cache? = @provider == "openrouter" && @id.to_s.start_with?("anthropic/")
 
     def routing_params
       return {} unless @provider == "openrouter"

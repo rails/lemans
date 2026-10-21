@@ -335,11 +335,11 @@ class MiniswenAgentTest < Minitest::Test
     assert_equal({}, RubyLLM::Test.last_request.caching)
   end
 
-  def test_a_plain_model_sends_no_cache_breakpoints
+  def test_prompt_caching
     stub_llm(SUBMIT)
     agent.run("task")
 
-    assert_nil RubyLLM::Test.last_request.caching
+    assert_equal({}, RubyLLM::Test.last_request.caching)
   end
 
   def test_provider_order_pins_openrouter_routing
@@ -413,7 +413,6 @@ class MiniswenAgentTest < Minitest::Test
     assert_equal :xhigh, RubyLLM::Test.last_request.thinking.effort
     assert_equal "anthropic/test", agent.send(:resolved).first.id
     assert_equal :submitted, result.status
-    assert agent.send(:explicit_cache?)
 
     build_agent(model: "ollama/qwen3:8b#high")
     source = agent.send(:cost_source)
