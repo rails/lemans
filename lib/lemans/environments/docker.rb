@@ -42,7 +42,7 @@ module Lemans
       def exec(command, timeout: nil, env: {})
         timeout ||= DEFAULT_TIMEOUT
         started = now
-        argv = [ "exec" ]
+        argv = [ "exec", "--user", "0" ]
         env = proxy_env.merge(env) if network.allowlist?
         env.each { |key, value| argv += [ "--env", "#{key}=#{value}" ] }
         # The in-container timeout is what actually kills the process
@@ -53,7 +53,7 @@ module Lemans
       end
 
       def upload(local_path, remote_path)
-        docker!("exec", container, "mkdir", "-p", File.dirname(remote_path.to_s))
+        docker!("exec", "--user", "0", container, "mkdir", "-p", File.dirname(remote_path.to_s))
         docker!("cp", local_path.to_s, "#{container}:#{remote_path}")
       end
 
