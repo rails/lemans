@@ -97,6 +97,13 @@ class TrialVerifierTest < Minitest::Test
     assert_in_delta 0.0, verification.reward
   end
 
+  def test_recorded_failures_outweigh_a_clean_exit
+    failing = JSON.generate(checks: { "T#test_b" => "fail" }, failures: [ "T#test_b" ])
+    verification, = verify(TestEnvironment.new(files: { "/logs/verifier/checks.json" => failing }))
+
+    assert_in_delta 0.0, verification.reward
+  end
+
   def test_a_crash_exit_fails_closed_instead_of_reading_as_zero
     error = assert_raises(Lemans::VerifierError) { verify(TestEnvironment.new(crashes: /test\.sh/)) }
 
