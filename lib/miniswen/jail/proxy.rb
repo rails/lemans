@@ -37,7 +37,13 @@ module Miniswen
       def start
         FileUtils.rm_f(@socket)
         server = UNIXServer.new(@socket)
-        @pid = fork { self.class.serve(server) { handle(it) } }
+        check, @lifeline = IO.pipe
+        @pid = fork do
+          @lifeline.close
+          Thread.new { check.wait_readable; exit! }
+          self.class.serve(server) { handle(it) }
+        end
+        check.close
         self
       end
 

@@ -73,6 +73,12 @@ class TrialTest < Minitest::Test
       assert_equal %w[allowlist none], env.policies.map(&:mode)
       assert_predicate env, :stopped
 
+      patch = env.commands.grep(/write-tree|diff --binary/)
+
+      refute_empty patch
+      assert(patch.all? { it.include?("GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null git -C") })
+      assert(patch.all? { it.include?("--git-dir=/var/lib/lemans/git --work-tree=") })
+
       run_dir = Pathname(dir).join("glm-5.2", result.id)
 
       assert_equal "the suite ran", run_dir.join("verifier.log").read
@@ -131,6 +137,16 @@ class TrialTest < Minitest::Test
       result = Lemans::Trial.new(task, agent: "nop", environment: env).run
 
       assert_equal({ "archspec" => true, "webhooks" => false }, result.features)
+    end
+  end
+
+  def test_a_graded_test_that_never_reports_scores_zero
+    with_task_dir("unreported") do |dir|
+      dir.join("verification_test.rb").write("class T < Minitest::Test\n  def test_a = assert(true)\nend\n")
+      task = Lemans::TaskDefinition.load_from_directory(load_config, dir)
+      result = Lemans::Trial.new(task, agent: "nop", environment: TestEnvironment.new).run
+
+      assert_in_delta 0.0, result.reward
     end
   end
 
@@ -303,11 +319,11 @@ class TrialTest < Minitest::Test
         assert_equal result.phases.map(&:started_at).sort, result.phases.map(&:started_at)
 
         # Step 1's patch went into the fresh tree before the agent took over at step 2.
-        replay = env.commands.index { it.include?("apply --binary --whitespace=nowarn /tmp/lemans-agent.patch") }
+        replay = env.commands.index { it.include?("apply --binary --whitespace=nowarn /var/lib/lemans/git/agent.patch") }
         oracle = env.commands.rindex { it.include?("apply --binary") }
 
         assert_operator replay, :<, oracle
-        assert_equal [ "/tmp/lemans-agent.patch" ], env.uploads.map(&:last).grep(/agent\.patch/)
+        assert_equal [ "/var/lib/lemans/git/agent.patch" ], env.uploads.map(&:last).grep(/agent\.patch/)
 
         # The settled step's evidence came along; the failed step's did not.
         artifacts = store.artifacts(result)
@@ -363,7 +379,7 @@ class TrialTest < Minitest::Test
         assert_equal [ '{"messages":[]}' ], agent.histories
 
         # Step one is settled under the savepoint; the partial step lands on top, uncommitted.
-        applies = env.commands.each_index.select { env.commands[it].include?("apply --binary --whitespace=nowarn /tmp/lemans-agent.patch") }
+        applies = env.commands.each_index.select { env.commands[it].include?("apply --binary --whitespace=nowarn /var/lib/lemans/git/agent.patch") }
         savepoint = env.commands.each_index.select { env.commands[it].include?("write-tree") }[1]
 
         assert_equal 2, applies.size

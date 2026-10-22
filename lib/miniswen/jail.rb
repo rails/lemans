@@ -22,7 +22,8 @@ module Miniswen
     def start
       _, @stdout, @stderr, @holder = Open3.popen3(
         container_env,
-        "unshare", "--net", "--mount", "--pid", "--fork", "--kill-child", "--mount-proc", "sh", "-c", setup,
+        "setpriv", "--pdeathsig=KILL", "unshare", "--net", "--mount", "--pid", "--fork", "--kill-child", "--mount-proc",
+        "sh", "-c", setup,
         pgroup: true, unsetenv_others: true
       )
       raise InfrastructureError, "jail did not start: #{@stderr.read}" unless @stdout.gets == "ready\n"

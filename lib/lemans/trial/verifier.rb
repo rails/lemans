@@ -100,8 +100,8 @@ module Lemans
 
         result = environment.exec(command, timeout:, env:)
 
-        reward = read_reward(result)
         checks = read_checks
+        reward = read_reward(result, checks)
         features = (self.class.features_from(checks.fetch("checks", {}), TestScanner.for(task)&.features) if checks && task.final_step?)
         Verification.new(reward:, credit: credit_from(checks, reward), features:, logs: result.output.to_s)
       end
@@ -110,10 +110,10 @@ module Lemans
         [ task.verifier.preverify, task.verifier.command ].compact.map { "( #{it} )" }.join(" && ")
       end
 
-      def read_reward(command_result)
+      def read_reward(command_result, checks)
         reward_path = task.verifier.reward_path
         present = environment.exec("test -e #{Shellwords.escape(reward_path)}")
-        return reward_from_exit(command_result) unless present.success?
+        return reward_from_exit(command_result, checks) unless present.success?
 
         result = environment.exec("cat #{Shellwords.escape(reward_path)}")
         raise VerifierError, "could not read #{reward_path}: #{result.output.to_s[0, 500]}" unless result.success?
@@ -154,14 +154,21 @@ module Lemans
         (base_credit + (1 - base_credit) * (passed.to_f / total)).round(2)
       end
 
-      def reward_from_exit(command_result)
+      def reward_from_exit(command_result, checks)
         case command_result.exit_code
-        when 0 then 1.0
+        when 0 then clean_exit_reward(checks)
         when 1 then 0.0
         else
           raise VerifierError,
                 "verifier exited #{command_result.exit_code} and wrote no reward to #{task.verifier.reward_path}"
         end
+      end
+
+      def clean_exit_reward(checks)
+        return 0.0 if checks&.dig("failures")&.any?
+        return 0.0 if TestScanner.for(task)&.tests&.any? { !checks&.dig("checks")&.key?(it) }
+
+        1.0
       end
 
       def download_evidence(collector)

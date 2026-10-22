@@ -56,6 +56,7 @@ class MiniswenInstalledTest < Minitest::Test
 
     command = shell.commands.last
 
+    assert command.start_with?("rm -f /tmp/lemans-miniswen.result.json && miniswen")
     assert_includes command, "miniswen -q --no-refresh-registry --jail"
     assert_includes command, "-m openrouter/z-ai/glm-5.2"
     assert_includes command, "--results-path /tmp/lemans-miniswen.result.json"

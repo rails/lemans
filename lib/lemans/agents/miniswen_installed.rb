@@ -34,7 +34,8 @@ module Lemans
       # comes from a file the sandbox wrote.
       def obtain_result(task, environment, history)
         upload_history(environment, history) if history
-        run = environment.exec(command_for(task, history:), timeout: outer_timeout, env: provider_env(environment))
+        command = "rm -f #{RESULTS_PATH} && #{command_for(task, history:)}"
+        run = environment.exec(command, timeout: outer_timeout, env: provider_env(environment))
 
         begin
           Tempfile.create(%w[miniswen .result.json]) do |file|
