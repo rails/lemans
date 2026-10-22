@@ -61,7 +61,7 @@ module Lemans
         def visit_class_node(node) = scoped(node) { super }
 
         def visit_def_node(node)
-          return super unless node.name.start_with?("test_")
+          return super unless node.name.start_with?("test_") && node.parameters.nil?
 
           within("#{@scope.join("::")}##{node.name}", node) { super }
         end
