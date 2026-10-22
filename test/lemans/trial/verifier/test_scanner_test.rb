@@ -27,6 +27,7 @@ class TrialVerifierTestScannerTest < Minitest::Test
 
         class RequiredTest < Minitest::Test
           def test_required = assert true
+          def test_lines(command) = command
         end
       RUBY
       "suites/extra.rb" => <<~RUBY

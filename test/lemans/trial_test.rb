@@ -140,6 +140,16 @@ class TrialTest < Minitest::Test
     end
   end
 
+  def test_a_graded_test_that_never_reports_scores_zero
+    with_task_dir("unreported") do |dir|
+      dir.join("verification_test.rb").write("class T < Minitest::Test\n  def test_a = assert(true)\nend\n")
+      task = Lemans::TaskDefinition.load_from_directory(load_config, dir)
+      result = Lemans::Trial.new(task, agent: "nop", environment: TestEnvironment.new).run
+
+      assert_in_delta 0.0, result.reward
+    end
+  end
+
   def test_a_nop_trial_is_scored_zero_rather_than_invalid
     result = build_trial(sandbox(reward: "0"), agent: "nop").run
 
