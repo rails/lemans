@@ -32,6 +32,8 @@ module Lemans
     STEP_FILE = /\A(?:tests\.(?<test>\d+)|verification_test\.(?<test>\d+)\.rb|verify\.(?<test>\d+)|
                      solution\.(?<solution>\d+)(?:\.patch)?|solve\.(?<solution>\d+)(?:\.sh)?)\z/x
 
+    VARIANT_FILE = /\A(?:environment\.(?<variant>[^.]+)\.patch|instruction\.(?<variant>[^.]+)\.md)\z/
+
     class << self
       def load_from_directory(config, dir)
         dir = Pathname(dir)
@@ -49,6 +51,14 @@ module Lemans
         declared_setup = Config::Setup.from_config(data["setup"], root: dir)
         refuse_config_collisions!(task, declared_setup, config.setup)
         task.setup = declared_setup
+
+        if (variants = data["setup"].is_a?(Hash) && data["setup"]["variants"])
+          task.variant_setups = variants.to_h do |variant, section|
+            declared = Config::Setup.from_config(section, root: dir) || Config::Setup.new
+            refuse_config_collisions!(task, declared, config.setup)
+            [ variant.to_s, declared ]
+          end
+        end
 
         task.verifier.restore_paths = Config::Verifier.restore_paths!(data["restore"]) if data.key?("restore")
         if (declared = Config::Setup.from_config(data.dig("verifier", "setup"), root: dir))
@@ -164,9 +174,9 @@ module Lemans
       end
     end
 
-    attr_reader :config, :name, :dir
+    attr_reader :config, :dir, :name, :variant
 
-    attr_accessor :difficulty, :tags, :description, :metadata, :environment_profile, :multistep
+    attr_accessor :difficulty, :tags, :description, :metadata, :environment_profile, :multistep, :variant_setups
 
     alias multistep? multistep
 
@@ -180,8 +190,10 @@ module Lemans
       @metadata = {}
       @environment_profile = nil
       @multistep = false
+      @variant_setups = {}
 
       @step = nil
+      @variant = nil
       @dir = dir || config.tasks_dir.join(name)
     end
 
@@ -189,15 +201,39 @@ module Lemans
     # (so we can generated correct paths and instructions)
     def for_step(index) = dup.tap { it.step = index }
 
+    # A copy of the task definition extended by a variant's files, setup and
+    # instruction; grading stays the task's own
+    def for_variant(variant)
+      unless variants.include?(variant)
+        listing = variants.any? ? "declares #{variants.join(", ")}" : "declares none"
+        raise ConfigError, "#{dir}: unknown variant #{variant} — the task #{listing}"
+      end
+
+      dup.tap { it.variant = variant }
+    end
+
+    def variants
+      files = dir.children.filter_map { VARIANT_FILE.match(it.basename.to_s)&.[](:variant) }
+      (variant_setups.keys + files).uniq.sort
+    end
+
     def final_step? = !multistep? || step == steps
 
     def steps = multistep? ? sections.size - 1 : 1
 
+    # A variant's instruction extends the task's one
     def instruction
-      return body unless multistep?
-      raise ArgumentError, "#{name} is multistep — only a step projection (for_step) has an instruction" unless step
+      if multistep?
+        raise ArgumentError, "#{name} is multistep — only a step projection (for_step) has an instruction" unless step
 
-      "#{sections[0].strip}\n\n#{sections.fetch(step).strip}\n"
+        parts = [ sections[0], variant_instruction, sections.fetch(step) ]
+      else
+        return body unless variant_instruction
+
+        parts = [ body, variant_instruction ]
+      end
+
+      "#{parts.compact.map(&:strip).join("\n\n")}\n"
     end
 
     def digest
@@ -208,7 +244,7 @@ module Lemans
     # task's own overrides applied. Phase machinery reads these, never the
     # global config.
     def setup
-      @setup ||= config.setup.merge(own_setup_with_seed)
+      @setup ||= config.setup.merge(own_setup_with_seed).merge(variant_setup_with_seed)
     end
 
     def setup=(declared)
@@ -222,6 +258,9 @@ module Lemans
     def environment = config.environment
 
     def seed? = dir.join(FLAT_SEED).file?
+
+    # Remote names of the environment patches, in the order they apply
+    def seeds = [ FLAT_SEED, variant_seed ].compact.select { dir.join(it).file? }
 
     # [absolute, remote-relative] pairs. Tests stay on the harness side while
     # the agent works; uploaded into the sandbox only at verification.
@@ -284,6 +323,12 @@ module Lemans
 
     protected attr_writer :step
 
+    protected def variant=(name)
+      @variant = name
+      @name = "#{@name}##{variant}"
+      @setup = nil
+    end
+
     private
 
     attr_reader :step
@@ -323,11 +368,25 @@ module Lemans
       end
     end
 
-    def own_setup_with_seed
-      declared = @declared_setup || Config::Setup.new
-      return declared unless seed? && declared.files.none? { |_, remote| remote == FLAT_SEED }
+    def own_setup_with_seed = with_seed(@declared_setup || Config::Setup.new, FLAT_SEED)
 
-      declared.merge(Config::Setup.new.tap { it.files = [ [ dir.join(FLAT_SEED), FLAT_SEED ] ] })
+    def variant_setup_with_seed
+      return Config::Setup.new unless variant
+
+      with_seed(variant_setups[variant] || Config::Setup.new, variant_seed)
+    end
+
+    def with_seed(declared, seed)
+      return declared unless dir.join(seed).file? && declared.files.none? { |_, remote| remote == seed }
+
+      declared.merge(Config::Setup.new.tap { it.files = [ [ dir.join(seed), seed ] ] })
+    end
+
+    def variant_seed = variant && "environment.#{variant}.patch"
+
+    def variant_instruction
+      path = dir.join("instruction.#{variant}.md") if variant
+      path.read if path&.file?
     end
 
     # Dotfiles included, matching TreeDigest: the files a digest records are

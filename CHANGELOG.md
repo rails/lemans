@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+- Support task variants: `lemans run --task my-task#codegraph` 
+
+  A task variant extends the setup phase and the instruction while keeping other task phases (e.g., grading) untouched. Use task variants to test different harness/context environments.
+
 ## [1.5.2] - 2026-10-14
 
 - `lemans --require/-r [command]`: load agent, backend plugins (`lemans -r plugin.rb restart RUN`)

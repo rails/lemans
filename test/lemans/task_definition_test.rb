@@ -62,6 +62,71 @@ class TaskDefinitionTest < Minitest::Test
     end
   end
 
+  def test_variant_projection
+    with_task_dir("varied") do |dir|
+      dir.join("instruction.md").write(<<~MD)
+        ---
+        setup:
+          commands: [bin/rails db:prepare]
+          variants:
+            codegraph:
+              commands: [bin/codegraph index]
+              files: [graph.json]
+            bare:
+              commands: [bin/bare]
+        ---
+        Fix it.
+      MD
+      dir.join("environment.patch").write("diff --git a/x b/x\n")
+      dir.join("environment.codegraph.patch").write("diff --git a/y b/y\n")
+      dir.join("instruction.codegraph.md").write("Use the code graph.\n")
+      dir.join("instruction.docs.md").write("Read the docs.\n")
+      dir.join("graph.json").write("{}")
+      task = load_task(dir)
+      variant = task.for_variant("codegraph")
+
+      assert_equal %w[bare codegraph docs], task.variants
+      assert_equal "varied", task.name
+      assert_equal "Fix it.\n", task.instruction
+      assert_equal [ "environment.patch" ], task.seeds
+      assert_equal [ "bin/rails db:prepare" ], task.setup.commands
+      assert_equal [ "environment.patch" ], task.setup.files.map(&:last)
+
+      assert_equal "varied#codegraph", variant.name
+      assert_equal "codegraph", variant.variant
+      assert_equal "Fix it.\n\nUse the code graph.\n", variant.instruction
+      assert_equal %w[environment.patch environment.codegraph.patch], variant.seeds
+      assert_equal [ "bin/rails db:prepare", "bin/codegraph index" ], variant.setup.commands
+      assert_equal [ [ dir.join("environment.patch"), "environment.patch" ], [ dir.join("graph.json"), "graph.json" ],
+                     [ dir.join("environment.codegraph.patch"), "environment.codegraph.patch" ] ], variant.setup.files
+      assert_equal task.test_files, variant.test_files
+      assert_equal task.digest, variant.digest
+
+      assert_equal "Fix it.\n", task.for_variant("bare").instruction
+      assert_equal [ "environment.patch" ], task.for_variant("bare").seeds
+      assert_equal [ "bin/rails db:prepare" ], task.for_variant("docs").setup.commands
+
+      error = assert_raises(Lemans::ConfigError) { task.for_variant("nope") }
+      assert_includes error.message, "unknown variant nope — the task declares bare, codegraph, docs"
+    end
+  end
+
+  def test_variant_extends_the_multistep_preamble
+    with_multistep_dir do |dir|
+      dir.join("instruction.codegraph.md").write("Use the code graph.\n")
+      dir.join("environment.codegraph.patch").write("diff --git a/y b/y\n")
+      variant = load_task(dir).for_variant("codegraph")
+
+      assert_equal "Shared preamble.\n\nUse the code graph.\n\nDo step two.\n", variant.for_step(2).instruction
+      assert_equal "multi#codegraph", variant.for_step(1).name
+      assert_equal [ "environment.codegraph.patch" ], variant.for_step(1).seeds
+      assert_includes load_task(dir).variants, "codegraph"
+
+      error = assert_raises(Lemans::ConfigError) { load_task(dir).for_variant("other") }
+      assert_includes error.message, "unknown variant other"
+    end
+  end
+
   def test_task_sections_extend_the_bench_ones_without_touching_them
     with_task_dir("custom") do |dir|
       dir.join("instruction.md").write(<<~MD)
