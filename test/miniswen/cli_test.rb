@@ -191,11 +191,18 @@ class MiniswenCLITest < Minitest::Test
   end
 
   def test_a_docker_run_exits_cleanly
+    path = ENV.fetch("PATH")
     Dir.mktmpdir do |dir|
+      File.write(File.join(dir, "docker"), "#!/bin/sh\nexit 1\n")
+      File.chmod(0o755, File.join(dir, "docker"))
+      ENV["PATH"] = "#{dir}:#{path}"
+
       assert_raises(RubyLLM::Test::Errors::NoResponseProvidedError) do
         run_cli("-q", "--no-refresh-registry", "--docker", "c", "--results-path=#{dir}/result.json", "-m", "test", "-p", "task")
       end
     end
+  ensure
+    ENV["PATH"] = path
   end
 
   def test_a_crashed_run_still_writes_the_results_and_trajectory_files
