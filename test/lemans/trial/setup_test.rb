@@ -13,9 +13,9 @@ class TrialSetupTest < Minitest::Test
     end
   end
 
-  def execute(task, seed: task.seed?)
+  def execute(task, seeds: task.seeds)
     env = TestEnvironment.new
-    Lemans::Trial::Setup.new(task, files: task.setup.files, commands: task.setup.commands, seed:).execute!(env)
+    Lemans::Trial::Setup.new(task, files: task.setup.files, commands: task.setup.commands, seeds:).execute!(env)
     env
   end
 
@@ -35,6 +35,16 @@ class TrialSetupTest < Minitest::Test
     end
   end
 
+  def test_a_variant_seed_applies_after_the_default_one
+    with_task do |task|
+      task.dir.join("environment.codegraph.patch").write("diff --git a/y b/y\n")
+      env = execute(task.for_variant("codegraph"))
+
+      assert_includes env.uploads.map(&:last), "/lemans/setup/environment.codegraph.patch"
+      assert_match %r{git apply .*/environment\.patch && git apply .*/environment\.codegraph\.patch && find}, env.commands.find { it.include?("git apply") }
+    end
+  end
+
   def test_a_task_without_a_seed_gets_no_git_surgery
     with_task(seed: false) do |task|
       env = execute(task)
@@ -45,7 +55,7 @@ class TrialSetupTest < Minitest::Test
 
   def test_the_verifier_phase_never_applies_a_seed
     with_task do |task|
-      env = execute(task, seed: false)
+      env = execute(task, seeds: [])
 
       assert_empty env.commands.grep(/git apply/)
     end

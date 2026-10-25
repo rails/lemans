@@ -285,7 +285,7 @@ module LemansRemote # :nodoc: all
       tasks_rel = @bench.tasks_dir.relative_path_from(@bench.root).to_s
       staged_tasks = File.join(stage, tasks_rel)
       Dir.children(staged_tasks).each do |entry|
-        next if @selected_tasks.include?(entry)
+        next if @selected_tasks.any? { it.split("#", 2).first == entry }
         next unless File.directory?(File.join(staged_tasks, entry))
 
         FileUtils.rm_rf(File.join(staged_tasks, entry))
@@ -991,7 +991,7 @@ module LemansRemote # :nodoc: all
       end
 
       tasks = retry_groups ? retry_groups.map(&:task).uniq : (options[:task] || [])
-      unknown = tasks - bench.tasks.map(&:name)
+      unknown = tasks.reject { |name| bench.tasks.any? { it.name == name.split("#", 2).first } }
       raise Thor::Error, "lemans-remote: no such task(s): #{unknown.join(", ")}" if unknown.any?
 
       provisioner = build_provisioner

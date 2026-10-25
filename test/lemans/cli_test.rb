@@ -4,6 +4,8 @@ require "test_helper"
 require "lemans/cli"
 
 class CLITest < Minitest::Test
+  include BenchFixture
+
   def teardown
     Lemans::Agents.unregister("required-agent")
     Lemans::Environments.unregister("required-backend")
@@ -57,6 +59,20 @@ class CLITest < Minitest::Test
       assert_includes Lemans::Agents.names, "required-agent"
       assert_includes Lemans::Environments.names, "required-backend"
       assert_includes err, "no matching tasks"
+    end
+  end
+
+  def test_filter_tasks_by_variant
+    with_task_dir("varied") do |dir|
+      dir.join("instruction.codegraph.md").write("Use the code graph.\n")
+      task = Lemans::TaskDefinition.load_from_directory(Lemans::Config.new, dir)
+      cli = Lemans::CLI.new
+
+      picked = cli.send(:filter_tasks, [ task ], name: %w[varied varied#codegraph varied])
+
+      assert_equal %w[varied varied#codegraph], picked.map(&:name)
+      assert_equal [ "varied" ], cli.send(:filter_tasks, [ task ], tags: nil).map(&:name)
+      assert_raises(Lemans::ConfigError) { cli.send(:filter_tasks, [ task ], name: [ "varied#nope" ]) }
     end
   end
 

@@ -8,6 +8,7 @@ class MiniswenJailTest < Minitest::Test
     @key = ENV.fetch("OPENROUTER_API_KEY", nil)
 
     skip "needs root" unless Process.uid.zero?
+    skip "needs namespaces" unless system("unshare", "--net", "--mount", "--pid", "--fork", "true", err: File::NULL)
 
     ENV["OPENROUTER_API_KEY"] = "sk"
     @jail = Miniswen::Jail.new(workdir: Dir.tmpdir).start
