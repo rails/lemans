@@ -4,8 +4,8 @@ module Lemans
   # Redacts known secret values (API credentials) from everything the store persists.
   class SecretsFilter
     # Credentials follow the <PROVIDER>_<KIND> environment convention
-    # (DAYTONA_API_KEY, OPENROUTER_API_KEY, DAYTONA_TOKEN, ...).
-    def self.default = new(ENV.filter_map { |name, value| value if name.match?(/_(API_KEY|TOKEN|SECRET|JWT)\z/) })
+    # (DAYTONA_API_KEY, OPENROUTER_API_KEY, AWS_SECRET_ACCESS_KEY, DAYTONA_TOKEN, ...).
+    def self.default = new(ENV.filter_map { |name, value| value if name.match?(/_(KEY|TOKEN|SECRET|JWT)\z/) })
 
     def initialize(secrets, replacement: "<filtered>", min_length: 8)
       @replacement = replacement
