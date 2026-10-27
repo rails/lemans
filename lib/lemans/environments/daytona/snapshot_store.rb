@@ -93,7 +93,7 @@ module Lemans
             name: name,
             # A published reference goes in as a one-line `FROM`, not a bare name:
             # Daytona mangles a bare name's `@sha256:` pin into an invalid reference.
-            image: image.built? ? ::Daytona::Image.from_dockerfile(image.dockerfile_path.to_s) : base_image,
+            image: image.built? ? dockerfile_image : base_image,
             resources: daytona_resources
           )
           Timeout.timeout(build_timeout, InfrastructureError,
@@ -145,6 +145,15 @@ module Lemans
         end
 
         def base_image = ::Daytona::Image.base(image.reference)
+
+        # The SDK reads a Dockerfile from a path only: a composed one takes the
+        # context its parts would each ship.
+        def dockerfile_image
+          return ::Daytona::Image.from_dockerfile(image.dockerfile_path.to_s) unless image.composed?
+
+          context = image.dockerfiles.flat_map { ::Daytona::Image.from_dockerfile(it.to_s).context_list }
+          ::Daytona::Image.new(dockerfile: image.dockerfile, context_list: context.uniq { [ it.source_path, it.archive_path ] })
+        end
 
         def daytona_resources
           ::Daytona::Resources.new(

@@ -251,6 +251,44 @@ class TaskDefinitionTest < Minitest::Test
     end
   end
 
+  def test_variant_environment_image
+    with_task_dir("imaged") do |dir|
+      config = Lemans::Config.new
+      fizzy = dir.parent.join("docker/fizzy")
+      fizzy.mkpath
+      fizzy.join("Dockerfile").write("FROM scratch\n")
+      fizzy.join("Dockerfile.codegraph").write("FROM ./Dockerfile\nRUN true\n")
+      fizzy.join("Dockerfile.dockerignore").write("tmp\n")
+      config.environment.profiles["fizzy"] = Lemans::Config::Environment::Profile.new(dockerfile: fizzy.join("Dockerfile"))
+      config.environment.profiles["ruby"] = Lemans::Config::Environment::Profile.new(image: "ruby:3.4")
+      dir.join("environment/Dockerfile.local").write("FROM ruby:3.4\n")
+      dir.join("instruction.codegraph.md").write("Use the graph.\n")
+      task = Lemans::TaskDefinition.load_from_directory(config, dir)
+
+      assert_equal %w[codegraph local], task.variants
+      assert_equal dir.join("environment/Dockerfile"), task.for_variant("codegraph").environment_image.dockerfile_path
+      assert_equal dir.join("environment/Dockerfile.local"), task.for_variant("local").environment_image.dockerfile_path
+      assert_equal "imaged#local", task.for_variant("local").environment_image.slug
+
+      FileUtils.rm(dir.join("environment/Dockerfile"))
+      dir.join("instruction.md").write("---\nenvironment: fizzy\n---\nGo.\n")
+      task = Lemans::TaskDefinition.load_from_directory(config, dir)
+      image = task.for_variant("codegraph").environment_image
+
+      assert_equal %w[codegraph local], task.variants
+      assert_predicate image, :composed?
+      assert_equal "fizzy#codegraph", image.slug
+      refute_equal task.environment_image.name, image.name
+      assert_equal dir.join("environment/Dockerfile.local"), task.for_variant("local").environment_image.dockerfile_path
+
+      dir.join("instruction.md").write("---\nenvironment: ruby\n---\nGo.\n")
+      task = Lemans::TaskDefinition.load_from_directory(config, dir)
+
+      assert_equal "ruby:3.4", task.for_variant("codegraph").environment_image.name
+      assert_predicate task.for_variant("local").environment_image, :built?
+    end
+  end
+
   def test_multistep_step_projections
     with_multistep_dir do |dir|
       task = load_task(dir)
