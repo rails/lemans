@@ -52,7 +52,7 @@ module Lemans
         workdir = Shellwords.escape(task.environment.workdir)
         environment.exec!(
           "cd #{workdir} && git apply --binary --whitespace=nowarn #{Shellwords.escape(seed)} && " \
-          "find . -path ./.git -prune -o -exec touch -h {} + && " \
+          "#{clear_bootsnap_caches} && #{unify_mtimes} && " \
           "rm -rf .git && git init -q && git add -A && " \
           "git -c user.name=lemans -c user.email=lemans@localhost commit -qm 'Initial commit'",
           timeout:
@@ -62,6 +62,10 @@ module Lemans
       def run_commands!(environment)
         commands.each { environment.exec!(it, timeout:) }
       end
+
+      def clear_bootsnap_caches = 'rm -rf "${BOOTSNAP_CACHE_DIR:-tmp/cache}"/bootsnap*'
+
+      def unify_mtimes = "find . -path ./.git -prune -o -exec touch -h {} +"
     end
   end
 end
