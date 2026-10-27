@@ -380,6 +380,29 @@ class TrialTest < Minitest::Test
     end
   end
 
+  def test_a_single_step_recovery
+    task = load_task
+    Dir.mktmpdir do |dir|
+      store = Lemans::Stores::FS.new(dir)
+      source = source_run(task, store, phases: [ [ :environment_setup, 0, 10 ], [ :agent, 10, 100 ] ],
+                                       artifacts: { "agent.patch" => "half done\n", "agent.result.json" => '{"messages":[]}' })
+      agent = recording_agent
+      env = sandbox
+      result = Lemans::Trial.new(task, agent:, environment: env, store:, restart_from: source, restart_mode: :recover).run
+      replay = env.commands.index { it.include?("apply --binary") && it.include?("agent.patch") }
+      savepoint = env.commands.each_index.select { env.commands[it].include?("write-tree") }[1]
+
+      assert_equal :completed, result.status
+      assert_equal Lemans::Result::Restart.new(trial: source.id, step: 1, mode: "recover"), result.restarted_from
+      assert_equal [ '{"messages":[]}' ], agent.histories
+
+      assert_operator savepoint, :<, replay
+
+      assert_equal %i[environment_setup agent verifier], result.phases.map(&:name)
+      assert_operator result.phases[1].duration, :>=, 90.0
+    end
+  end
+
   def test_a_reverification_grades_the_gate_again_and_goes_on
     with_multistep_task do |task|
       Dir.mktmpdir do |dir|
