@@ -4,6 +4,8 @@
 
   A task variant extends the setup phase and the instruction while keeping other task phases (e.g., grading) untouched. Use task variants to test different harness/context environments.
 
+  A variant may also bring its own image: `Dockerfile.<variant>` next to the task's, its profile's, or the shared Dockerfile; `FROM ./Dockerfile` builds on that sibling.
+
 ## [1.5.2] - 2026-10-14
 
 - `lemans --require/-r [command]`: load agent, backend plugins (`lemans -r plugin.rb restart RUN`)

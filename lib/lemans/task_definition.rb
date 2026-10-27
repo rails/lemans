@@ -33,6 +33,7 @@ module Lemans
                      solution\.(?<solution>\d+)(?:\.patch)?|solve\.(?<solution>\d+)(?:\.sh)?)\z/x
 
     VARIANT_FILE = /\A(?:environment\.(?<variant>[^.]+)\.patch|instruction\.(?<variant>[^.]+)\.md)\z/
+    VARIANT_DOCKERFILE = /\ADockerfile\.(?!dockerignore\z)(?<variant>[^.]+)\z/
 
     class << self
       def load_from_directory(config, dir)
@@ -214,7 +215,9 @@ module Lemans
 
     def variants
       files = dir.children.filter_map { VARIANT_FILE.match(it.basename.to_s)&.[](:variant) }
-      (variant_setups.keys + files).uniq.sort
+      dockerfiles = variant_dockerfile_dirs.flat_map { it.glob("Dockerfile.*") }
+                                           .filter_map { VARIANT_DOCKERFILE.match(it.basename.to_s)&.[](:variant) }
+      (variant_setups.keys + files + dockerfiles).uniq.sort
     end
 
     def final_step? = !multistep? || step == steps
@@ -305,19 +308,17 @@ module Lemans
 
     def environment_dockerfile = dir.join(ENVIRONMENT_DIR, "Dockerfile")
 
+    # A variant's Dockerfile.<variant> — the task's own, or a sibling of the
+    # Dockerfile the task builds from — replaces the image it would get
     def environment_image
-      if (profile = environment.profiles[environment_profile])
-        if profile.image
-          Config::ImageSpec.registry(profile.image)
-        else
-          Config::ImageSpec.dockerfile(profile.dockerfile, slug: environment_profile)
-        end
-      elsif environment_dockerfile.file?
-        Config::ImageSpec.dockerfile(environment_dockerfile, slug: name)
-      elsif environment.dockerfile
-        Config::ImageSpec.dockerfile(environment.dockerfile, slug: "shared")
+      dockerfile, slug = base_dockerfile
+      if (variant_file = variant_dockerfile)
+        own = variant_file.dirname == environment_dockerfile.dirname
+        Config::ImageSpec.dockerfile(variant_file, slug: own ? name : "#{slug}##{variant}")
+      elsif dockerfile
+        Config::ImageSpec.dockerfile(dockerfile, slug:)
       else
-        Config::ImageSpec.registry(environment.image)
+        Config::ImageSpec.registry(environment.profiles[environment_profile]&.image || environment.image)
       end
     end
 
@@ -383,6 +384,24 @@ module Lemans
     end
 
     def variant_seed = variant && "environment.#{variant}.patch"
+
+    def base_dockerfile
+      if (profile = environment.profiles[environment_profile])
+        [ profile.dockerfile, environment_profile ] if profile.dockerfile
+      elsif environment_dockerfile.file?
+        [ environment_dockerfile, name ]
+      elsif environment.dockerfile
+        [ environment.dockerfile, "shared" ]
+      end
+    end
+
+    def variant_dockerfile_dirs = [ environment_dockerfile.dirname, base_dockerfile&.first&.dirname ].compact.uniq
+
+    def variant_dockerfile
+      return unless variant
+
+      variant_dockerfile_dirs.map { it.join("Dockerfile.#{variant}") }.find(&:file?)
+    end
 
     def variant_instruction
       path = dir.join("instruction.#{variant}.md") if variant

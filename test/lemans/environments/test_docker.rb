@@ -139,7 +139,30 @@ class DockerEnvironmentTest < Minitest::Test
       calls = scripted(fresh, answers: { "image" => [ 1, "no such image" ] })
       fresh.start
       build = calls.find { it[:argv][1] == "build" }[:argv]
-      assert_equal [ "--tag", image.name, dir ], build.last(3)
+      assert_equal [ "--tag", image.name, "--file", "#{dir}/Dockerfile", dir ], build.last(5)
+    end
+  end
+
+  def test_start_builds_a_composed_dockerfile
+    Dir.mktmpdir do |dir|
+      Pathname(dir).join("Dockerfile").write("FROM ruby:3.4-slim\n")
+      Pathname(dir).join("Dockerfile.codegraph").write("FROM ./Dockerfile\nRUN true\n")
+      image = Lemans::Config::ImageSpec.dockerfile(Pathname(dir).join("Dockerfile.codegraph"), slug: "a-task")
+      environment = environment_for(image:)
+      built = nil
+      calls = scripted(environment, answers: { "image" => [ 1, "no such image" ] })
+      environment.define_singleton_method(:docker!) do |*argv, **|
+        built = File.read(argv[argv.index("--file") + 1]) if argv.first == "build"
+        calls << { argv: [ "docker", *argv ] }
+        ""
+      end
+
+      environment.start
+
+      build = calls.find { it[:argv][1] == "build" }[:argv]
+      assert_equal dir, build.last
+      refute_equal "#{dir}/Dockerfile.codegraph", build[-2]
+      assert_equal "FROM ruby:3.4-slim AS lemans-dockerfile\nFROM lemans-dockerfile\nRUN true\n", built
     end
   end
 

@@ -2,6 +2,7 @@
 
 require "open3"
 require "securerandom"
+require "tempfile"
 
 module Lemans
   module Environments
@@ -106,7 +107,18 @@ module Lemans
         exists, = capture("docker", "image", "inspect", spec.name, timeout: HOUSEKEEPING_TIMEOUT)
         return if exists.zero?
 
-        docker!("build", "--tag", spec.name, spec.context_dir.to_s, timeout: build_timeout, on_output: @logger)
+        return build!(spec, spec.dockerfile_path) unless spec.composed?
+
+        Tempfile.create([ "lemans-", ".Dockerfile" ]) do |file|
+          file.write(spec.dockerfile)
+          file.close
+          build!(spec, file.path)
+        end
+      end
+
+      def build!(spec, dockerfile)
+        docker!("build", "--tag", spec.name, "--file", dockerfile.to_s, spec.context_dir.to_s,
+                timeout: build_timeout, on_output: @logger)
       end
 
       # The task container sits on an internal network with no route out; the
