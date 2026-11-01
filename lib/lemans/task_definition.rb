@@ -32,8 +32,15 @@ module Lemans
     STEP_FILE = /\A(?:tests\.(?<test>\d+)|verification_test\.(?<test>\d+)\.rb|verify\.(?<test>\d+)|
                      solution\.(?<solution>\d+)(?:\.patch)?|solve\.(?<solution>\d+)(?:\.sh)?)\z/x
 
-    VARIANT_FILE = /\A(?:environment\.(?<variant>[^.]+)\.patch|instruction\.(?<variant>[^.]+)\.md)\z/
-    VARIANT_DOCKERFILE = /\ADockerfile\.(?!dockerignore\z)(?<variant>[^.]+)\z/
+    VARIANT = "[a-z][a-z0-9_-]*"
+    VARIANT_RULE = "a variant name is lowercase letters, digits, - and _, starting with a letter"
+    VARIANT_NAME = /\A#{VARIANT}\z/
+    # A variant's <kind>.<variant>.patch replaces the task's <kind>.patch, its <kind>+<variant>.patch goes on top
+    VARIANT_FILE = /\A(?:environment[.+](?<variant>#{VARIANT})\.patch|solution[.+](?<variant>#{VARIANT})(?:\.\d+)?\.patch|
+                        instruction\+(?<variant>#{VARIANT})\.md)\z/x
+    # solution.<variant>.N.patch replaces step N's solution, solution+<variant>.N.patch goes on top of it
+    VARIANT_STEP_SOLUTION = /\Asolution(?<separator>[.+])(?<variant>#{VARIANT})\.(?<step>\d+)\.patch\z/
+    VARIANT_DOCKERFILE = /\ADockerfile\.(?!dockerignore\z)(?<variant>#{VARIANT})\z/
 
     class << self
       def load_from_directory(config, dir)
@@ -55,6 +62,8 @@ module Lemans
 
         if (variants = data["setup"].is_a?(Hash) && data["setup"]["variants"])
           task.variant_setups = variants.to_h do |variant, section|
+            raise ConfigError, "#{dir}: setup.variants.#{variant}: #{VARIANT_RULE}" unless VARIANT_NAME.match?(variant.to_s)
+
             declared = Config::Setup.from_config(section, root: dir) || Config::Setup.new
             refuse_config_collisions!(task, declared, config.setup)
             [ variant.to_s, declared ]
@@ -120,6 +129,7 @@ module Lemans
           task.environment_profile || task.config.environment.image || task.config.environment.dockerfile || task.environment_dockerfile.file?
 
         validate_steps!(task)
+        validate_variants!(task)
 
         return unless task.test_files.empty?
 
@@ -160,6 +170,49 @@ module Lemans
 
         raise ConfigError, "#{task.dir}: #{FLAT_SOLUTION} is the whole task's solution while indexed step solutions " \
                            "chain step by step — ship one or the other, not both"
+      end
+
+      def validate_variants!(task)
+        names = task.dir.children.map { it.basename.to_s }
+        if (stray = names.find { it.match?(/\Ainstruction\.[^.]+\.md\z/) })
+          raise ConfigError, "#{task.dir}: #{stray} — a variant can only extend the instruction: " \
+                             "name it #{stray.sub("instruction.", "instruction+")}"
+        end
+
+        task.variants.product(%w[environment solution]).each do |variant, kind|
+          next unless names.include?("#{kind}.#{variant}.patch") && names.include?("#{kind}+#{variant}.patch")
+
+          raise ConfigError, "#{task.dir}: #{kind}.#{variant}.patch replaces #{kind}.patch while " \
+                             "#{kind}+#{variant}.patch extends it — ship one or the other"
+        end
+
+        validate_variant_step_solutions!(task, names)
+      end
+
+      def validate_variant_step_solutions!(task, names)
+        indexed = names.filter_map { VARIANT_STEP_SOLUTION.match(it) }
+        indexed.each do |match|
+          name = match.to_s
+          raise ConfigError, "#{task.dir}: #{name} is an indexed step file, but the task is not multistep: true" unless task.multistep?
+
+          step = match[:step].to_i
+          raise ConfigError, "#{task.dir}: #{name} names step #{step}, but the task has #{task.steps} steps" unless
+            step.between?(1, task.steps)
+
+          whole = "solution#{match[:separator]}#{match[:variant]}.patch"
+          raise ConfigError, "#{task.dir}: #{whole} is the variant's whole-task patch while #{name} is a step's — " \
+                             "ship one or the other" if names.include?(whole)
+
+          if match[:separator] == "+" && names.include?(replacing = "solution.#{match[:variant]}.patch")
+            raise ConfigError, "#{task.dir}: #{replacing} replaces the whole solution while #{name} extends it — " \
+                               "ship one or the other"
+          end
+
+          next unless match[:separator] == "." && names.include?(extending = "solution+#{match[:variant]}.#{step}.patch")
+
+          raise ConfigError, "#{task.dir}: #{name} replaces step #{step}'s solution while #{extending} extends it — " \
+                             "ship one or the other"
+        end
       end
 
       # Collisions would be resolved by upload order, so a task never gets to
@@ -247,7 +300,11 @@ module Lemans
     # task's own overrides applied. Phase machinery reads these, never the
     # global config.
     def setup
-      @setup ||= config.setup.merge(own_setup_with_seed).merge(variant_setup_with_seed)
+      @setup ||= begin
+        declared = [ @declared_setup, variant_setups[variant] ].compact.reduce(Config::Setup.new, :merge)
+        undeclared_seeds = seed_files.reject { |_, remote| declared.files.any? { it.last == remote } }
+        config.setup.merge(declared).merge(Config::Setup.new.tap { it.files = undeclared_seeds })
+      end
     end
 
     def setup=(declared)
@@ -263,7 +320,7 @@ module Lemans
     def seed? = dir.join(FLAT_SEED).file?
 
     # Remote names of the environment patches, in the order they apply
-    def seeds = [ FLAT_SEED, variant_seed ].compact.select { dir.join(it).file? }
+    def seeds = seed_files.map(&:last)
 
     # [absolute, remote-relative] pairs. Tests stay on the harness side while
     # the agent works; uploaded into the sandbox only at verification.
@@ -284,20 +341,47 @@ module Lemans
     def verifiable? = test_files.any?
 
     # A lone whole-task solution is applied before the first step: intermediate
-    # gates must see it, and later steps have nothing left to add.
+    # gates must see it, and later steps have nothing left to add. A variant's
+    # replacing patch is such a lone solution; its extending patch ships with
+    # the step that completes the task's own solution.
+    #
+    # Per step, solution.<variant>.N.patch replaces step N's solution (the
+    # rest keep the task's own, a lone one dropped) and
+    # solution+<variant>.N.patch goes on top of it.
     def solution_files
-      if step
-        return step_files(STEP_SOLUTIONS) if indexed_solutions?
-        return [] if multistep? && step > 1
+      if (replacing = variant_path("solution.%s.patch"))&.file?
+        return step && step > 1 ? [] : [ [ replacing, FLAT_SOLUTION ] ]
       end
 
-      solution_dir.directory? ? expand(solution_dir) : flat(FLAT_SOLUTION)
+      files =
+        if (replacing = step && variant_path("solution.%s.#{step}.patch"))&.file?
+          [ [ replacing, FLAT_SOLUTION ] ]
+        elsif variant_step_solutions?(".") && !indexed_solutions?
+          []
+        else
+          own_solution_files
+        end
+
+      whole = variant_path("solution+%s.patch")
+      extending =
+        if whole&.file?
+          whole if step.nil? || step == (stepwise_solutions? ? steps : 1)
+        elsif step
+          variant_path("solution+%s.#{step}.patch")
+        end
+      return files unless extending&.file?
+
+      files + [ [ extending, extending.basename.to_s ] ]
     end
 
     # True for the later steps of a multistep task whose lone solution already
     # shipped with step 1
     def solution_applied_earlier?
-      !!(step && step > 1 && !indexed_solutions? && (solution_dir.directory? || dir.join(FLAT_SOLUTION).file?))
+      return false unless step && step > 1
+      return true if variant_path("solution.%s.patch")&.file?
+
+      !stepwise_solutions? &&
+        (solution_dir.directory? || dir.join(FLAT_SOLUTION).file? || !!variant_path("solution+%s.patch")&.file?)
     end
 
     def solution? = solution_files.any?
@@ -344,6 +428,12 @@ module Lemans
 
     def indexed_solutions? = (1..steps).any? { step_files(STEP_SOLUTIONS, it).any? }
 
+    def stepwise_solutions? = indexed_solutions? || variant_step_solutions?(".")
+
+    def variant_step_solutions?(separator)
+      variant && (1..steps).any? { dir.join("solution#{separator}#{variant}.#{it}.patch").file? }
+    end
+
     # A task may keep its final test flat at the root and use tests/ for shared files
     def final_test_files
       return flat(FLAT_TEST) unless tests_dir.directory?
@@ -369,21 +459,24 @@ module Lemans
       end
     end
 
-    def own_setup_with_seed = with_seed(@declared_setup || Config::Setup.new, FLAT_SEED)
+    def own_solution_files
+      if step
+        return step_files(STEP_SOLUTIONS) if indexed_solutions?
+        return [] if multistep? && step > 1
+      end
 
-    def variant_setup_with_seed
-      return Config::Setup.new unless variant
-
-      with_seed(variant_setups[variant] || Config::Setup.new, variant_seed)
+      solution_dir.directory? ? expand(solution_dir) : flat(FLAT_SOLUTION)
     end
 
-    def with_seed(declared, seed)
-      return declared unless dir.join(seed).file? && declared.files.none? { |_, remote| remote == seed }
+    def seed_files
+      replacing = variant_path("environment.%s.patch")
+      return flat(replacing.basename.to_s) if replacing&.file?
 
-      declared.merge(Config::Setup.new.tap { it.files = [ [ dir.join(seed), seed ] ] })
+      extending = variant_path("environment+%s.patch")
+      flat(FLAT_SEED) + (extending&.file? ? flat(extending.basename.to_s) : [])
     end
 
-    def variant_seed = variant && "environment.#{variant}.patch"
+    def variant_path(pattern) = variant && dir.join(format(pattern, variant))
 
     def base_dockerfile
       if (profile = environment.profiles[environment_profile])
@@ -404,7 +497,7 @@ module Lemans
     end
 
     def variant_instruction
-      path = dir.join("instruction.#{variant}.md") if variant
+      path = variant_path("instruction+%s.md")
       path.read if path&.file?
     end
 

@@ -64,6 +64,23 @@ class TrialVerifierTest < Minitest::Test
     refute_predicate env, :stopped
   end
 
+  def test_the_grader_learns_the_variant
+    env = sandbox(reward: "1")
+    task = load_task(load_config)
+    task.verifier.setup = Lemans::Config::Setup.new.tap { it.commands = [ "bin/prep" ] }
+    Lemans::Trial::Verifier.new(task, env, Lemans::Trial::Snapshot.new(task, env)).verify! { nil }
+
+    assert(env.envs.none? { it.key?("LEMANS_TASK_VARIANT") })
+
+    env = sandbox(reward: "1")
+    task.define_singleton_method(:variant) { "codegraph" }
+    Lemans::Trial::Verifier.new(task, env, Lemans::Trial::Snapshot.new(task, env)).verify! { nil }
+    graded = env.commands.each_index.select { env.envs[it]["LEMANS_TASK_VARIANT"] == "codegraph" }.map { env.commands[it] }
+
+    assert_includes graded, "bin/prep"
+    assert(graded.any? { it.start_with?("cd /app && ") })
+  end
+
   def test_corpus_verification_files_ship_with_the_tests_and_the_task_wins_collisions
     in_corpus_with_verification do |config, root|
       env = sandbox(reward: "1")

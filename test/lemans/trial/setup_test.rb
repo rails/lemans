@@ -37,11 +37,11 @@ class TrialSetupTest < Minitest::Test
 
   def test_a_variant_seed_applies_after_the_default_one
     with_task do |task|
-      task.dir.join("environment.codegraph.patch").write("diff --git a/y b/y\n")
+      task.dir.join("environment+codegraph.patch").write("diff --git a/y b/y\n")
       env = execute(task.for_variant("codegraph"))
 
-      assert_includes env.uploads.map(&:last), "/lemans/setup/environment.codegraph.patch"
-      assert_match %r{git apply .*/environment\.patch && git apply .*/environment\.codegraph\.patch && find}, env.commands.find { it.include?("git apply") }
+      assert_includes env.uploads.map(&:last), "/lemans/setup/environment+codegraph.patch"
+      assert_match %r{git apply .*/environment\.patch && git apply .*/environment\+codegraph\.patch && find}, env.commands.find { it.include?("git apply") }
     end
   end
 

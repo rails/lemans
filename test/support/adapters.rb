@@ -5,7 +5,7 @@ require "fileutils"
 # A sandbox made of a Hash, so the phases around verification can be tested without
 # paying for one. It answers only the commands the harness actually issues.
 class TestEnvironment < Lemans::Environment
-  attr_reader :files, :uploads, :commands, :timeouts, :stopped, :policies
+  attr_reader :files, :uploads, :commands, :timeouts, :envs, :stopped, :policies
 
   def initialize(files: {}, on_command: nil, fails: nil, refuses: nil, crashes: nil)
     super(image: nil, resources: nil, network: nil)
@@ -17,6 +17,7 @@ class TestEnvironment < Lemans::Environment
     @uploads = []
     @commands = []
     @timeouts = []
+    @envs = []
     @policies = []
     @stopped = false
     @trees = 0
@@ -27,6 +28,7 @@ class TestEnvironment < Lemans::Environment
   def exec(command, timeout: nil, env: {})
     @commands << command
     @timeouts << timeout
+    @envs << env
     raise Lemans::InfrastructureError, "the sandbox went away" if @fails&.match?(command)
     return result(1, "no") if @refuses&.match?(command)
     return result(2, "it crashed") if @crashes&.match?(command)

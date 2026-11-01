@@ -12,13 +12,14 @@ module Lemans
       ROOT = "/lemans"
       DIR = "#{ROOT}/setup".freeze
 
-      private attr_reader :task, :files, :commands, :seeds, :timeout
+      private attr_reader :task, :files, :commands, :seeds, :env, :timeout
 
-      def initialize(task, files: [], commands: [], seeds: [], exec_timeout: nil)
+      def initialize(task, files: [], commands: [], seeds: [], env: {}, exec_timeout: nil)
         @task = task
         @files = files
         @commands = commands
         @seeds = seeds
+        @env = env
         @timeout = exec_timeout || task.environment.build_timeout
       end
 
@@ -61,7 +62,7 @@ module Lemans
       end
 
       def run_commands!(environment)
-        commands.each { environment.exec!(it, timeout:) }
+        commands.each { environment.exec!(it, timeout:, env:) }
       end
     end
   end
