@@ -64,7 +64,7 @@ class CLITest < Minitest::Test
 
   def test_filter_tasks_by_variant
     with_task_dir("varied") do |dir|
-      dir.join("instruction.codegraph.md").write("Use the code graph.\n")
+      dir.join("instruction+codegraph.md").write("Use the code graph.\n")
       task = Lemans::TaskDefinition.load_from_directory(Lemans::Config.new, dir)
       cli = Lemans::CLI.new
 

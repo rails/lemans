@@ -78,9 +78,9 @@ class TaskDefinitionTest < Minitest::Test
         Fix it.
       MD
       dir.join("environment.patch").write("diff --git a/x b/x\n")
-      dir.join("environment.codegraph.patch").write("diff --git a/y b/y\n")
-      dir.join("instruction.codegraph.md").write("Use the code graph.\n")
-      dir.join("instruction.docs.md").write("Read the docs.\n")
+      dir.join("environment+codegraph.patch").write("diff --git a/y b/y\n")
+      dir.join("instruction+codegraph.md").write("Use the code graph.\n")
+      dir.join("instruction+docs.md").write("Read the docs.\n")
       dir.join("graph.json").write("{}")
       task = load_task(dir)
       variant = task.for_variant("codegraph")
@@ -95,10 +95,10 @@ class TaskDefinitionTest < Minitest::Test
       assert_equal "varied#codegraph", variant.name
       assert_equal "codegraph", variant.variant
       assert_equal "Fix it.\n\nUse the code graph.\n", variant.instruction
-      assert_equal %w[environment.patch environment.codegraph.patch], variant.seeds
+      assert_equal %w[environment.patch environment+codegraph.patch], variant.seeds
       assert_equal [ "bin/rails db:prepare", "bin/codegraph index" ], variant.setup.commands
-      assert_equal [ [ dir.join("environment.patch"), "environment.patch" ], [ dir.join("graph.json"), "graph.json" ],
-                     [ dir.join("environment.codegraph.patch"), "environment.codegraph.patch" ] ], variant.setup.files
+      assert_equal [ [ dir.join("graph.json"), "graph.json" ], [ dir.join("environment.patch"), "environment.patch" ],
+                     [ dir.join("environment+codegraph.patch"), "environment+codegraph.patch" ] ], variant.setup.files
       assert_equal task.test_files, variant.test_files
       assert_equal task.digest, variant.digest
 
@@ -111,15 +111,139 @@ class TaskDefinitionTest < Minitest::Test
     end
   end
 
+  def test_replacing_and_extending_variant_patches
+    with_task_dir("varied") do |dir|
+      dir.join("environment.patch").write("diff --git a/x b/x\n")
+      dir.join("solution.patch").write("diff --git a/s b/s\n")
+      dir.join("environment.fresh.patch").write("diff --git a/y b/y\n")
+      dir.join("solution.fresh.patch").write("diff --git a/t b/t\n")
+      dir.join("environment+extra.patch").write("diff --git a/z b/z\n")
+      dir.join("solution+extra.patch").write("diff --git a/u b/u\n")
+      task = load_task(dir)
+      fresh = task.for_variant("fresh")
+      extra = task.for_variant("extra")
+
+      assert_equal %w[extra fresh], task.variants
+      assert_equal [ [ dir.join("solution.patch"), "solution.patch" ] ], task.solution_files
+
+      assert_equal [ "environment.fresh.patch" ], fresh.seeds
+      assert_equal [ "environment.fresh.patch" ], fresh.setup.files.map(&:last)
+      assert_equal [ [ dir.join("solution.fresh.patch"), "solution.patch" ] ], fresh.solution_files
+
+      assert_equal %w[environment.patch environment+extra.patch], extra.seeds
+      assert_equal [ [ dir.join("solution.patch"), "solution.patch" ], [ dir.join("solution+extra.patch"), "solution+extra.patch" ] ],
+                   extra.solution_files
+
+      dir.join("environment+fresh.patch").write("diff --git a/w b/w\n")
+      error = assert_raises(Lemans::ConfigError) { load_task(dir) }
+      assert_includes error.message, "environment.fresh.patch replaces environment.patch while environment+fresh.patch extends it"
+    end
+  end
+
+  def test_variant_naming_rules
+    with_task_dir("varied") do |dir|
+      dir.join("instruction.codegraph.md").write("Use the graph.\n")
+      error = assert_raises(Lemans::ConfigError) { load_task(dir) }
+
+      assert_includes error.message, "instruction.codegraph.md — a variant can only extend the instruction: name it instruction+codegraph.md"
+
+      FileUtils.rm(dir.join("instruction.codegraph.md"))
+      dir.join("instruction.md").write("---\nsetup:\n  variants:\n    Code.Graph: [true]\n---\nFix it.\n")
+      error = assert_raises(Lemans::ConfigError) { load_task(dir) }
+
+      assert_includes error.message, "setup.variants.Code.Graph: a variant name is lowercase letters"
+
+      dir.join("instruction.md").write("Fix it.\n")
+      dir.join("environment.Big.patch").write("diff --git a/y b/y\n")
+
+      assert_empty load_task(dir).variants
+    end
+  end
+
+  def test_variant_solutions_in_a_multistep_task
+    with_multistep_dir do |dir|
+      dir.join("verification_test.1.rb").write("# step one\n")
+      dir.join("solution.1.patch").write("diff --git a/one b/one\n")
+      dir.join("solution.2.patch").write("diff --git a/two b/two\n")
+      dir.join("solution+extra.patch").write("diff --git a/u b/u\n")
+      dir.join("solution.fresh.patch").write("diff --git a/t b/t\n")
+      task = load_task(dir)
+      extra = task.for_variant("extra")
+      fresh = task.for_variant("fresh")
+
+      assert_equal [ "solution.patch" ], extra.for_step(1).solution_files.map(&:last)
+      assert_equal [ dir.join("solution.2.patch"), dir.join("solution+extra.patch") ], extra.for_step(2).solution_files.map(&:first)
+
+      assert_equal [ [ dir.join("solution.fresh.patch"), "solution.patch" ] ], fresh.for_step(1).solution_files
+      assert_empty fresh.for_step(2).solution_files
+      assert_predicate fresh.for_step(2), :solution_applied_earlier?
+      refute_predicate extra.for_step(2), :solution_applied_earlier?
+    end
+  end
+
+  def test_variant_step_solutions
+    with_multistep_dir do |dir|
+      dir.join("verification_test.1.rb").write("# step one\n")
+      dir.join("solution.1.patch").write("diff --git a/one b/one\n")
+      dir.join("solution.2.patch").write("diff --git a/two b/two\n")
+      dir.join("solution.graph.2.patch").write("diff --git a/g b/g\n")
+      dir.join("solution+graph.1.patch").write("diff --git a/e b/e\n")
+      task = load_task(dir)
+      graph = task.for_variant("graph")
+
+      assert_equal %w[graph], task.variants
+      assert_equal [ [ dir.join("solution.1.patch"), "solution.patch" ], [ dir.join("solution+graph.1.patch"), "solution+graph.1.patch" ] ],
+                   graph.for_step(1).solution_files
+      assert_equal [ [ dir.join("solution.graph.2.patch"), "solution.patch" ] ], graph.for_step(2).solution_files
+      assert_equal [ [ dir.join("solution.2.patch"), "solution.patch" ] ], task.for_step(2).solution_files
+    end
+
+    with_multistep_dir do |dir|
+      dir.join("solution.patch").write("diff --git a/lone b/lone\n")
+      dir.join("solution.graph.1.patch").write("diff --git a/g1 b/g1\n")
+      dir.join("solution.graph.2.patch").write("diff --git a/g2 b/g2\n")
+      graph = load_task(dir).for_variant("graph")
+
+      assert_equal [ [ dir.join("solution.graph.1.patch"), "solution.patch" ] ], graph.for_step(1).solution_files
+      assert_equal [ [ dir.join("solution.graph.2.patch"), "solution.patch" ] ], graph.for_step(2).solution_files
+      refute_predicate graph.for_step(2), :solution_applied_earlier?
+    end
+  end
+
+  def test_variant_step_solutions_are_validated
+    refusals = {
+      %w[solution.graph.3.patch] => "names step 3, but the task has 2 steps",
+      %w[solution.graph.patch solution.graph.1.patch] => "solution.graph.patch is the variant's whole-task patch while solution.graph.1.patch is a step's",
+      %w[solution+graph.patch solution+graph.2.patch] => "solution+graph.patch is the variant's whole-task patch",
+      %w[solution.graph.patch solution+graph.1.patch] => "solution.graph.patch replaces the whole solution while solution+graph.1.patch extends it",
+      %w[solution.graph.1.patch solution+graph.1.patch] => "solution.graph.1.patch replaces step 1's solution while solution+graph.1.patch extends it"
+    }
+    refusals.each do |files, message|
+      with_multistep_dir do |dir|
+        files.each { dir.join(it).write("diff\n") }
+        error = assert_raises(Lemans::ConfigError) { load_task(dir) }
+
+        assert_includes error.message, message
+      end
+    end
+
+    with_task_dir("flat") do |dir|
+      dir.join("solution.graph.1.patch").write("diff\n")
+      error = assert_raises(Lemans::ConfigError) { load_task(dir) }
+
+      assert_includes error.message, "solution.graph.1.patch is an indexed step file, but the task is not multistep: true"
+    end
+  end
+
   def test_variant_extends_the_multistep_preamble
     with_multistep_dir do |dir|
-      dir.join("instruction.codegraph.md").write("Use the code graph.\n")
-      dir.join("environment.codegraph.patch").write("diff --git a/y b/y\n")
+      dir.join("instruction+codegraph.md").write("Use the code graph.\n")
+      dir.join("environment+codegraph.patch").write("diff --git a/y b/y\n")
       variant = load_task(dir).for_variant("codegraph")
 
       assert_equal "Shared preamble.\n\nUse the code graph.\n\nDo step two.\n", variant.for_step(2).instruction
       assert_equal "multi#codegraph", variant.for_step(1).name
-      assert_equal [ "environment.codegraph.patch" ], variant.for_step(1).seeds
+      assert_equal [ "environment+codegraph.patch" ], variant.for_step(1).seeds
       assert_includes load_task(dir).variants, "codegraph"
 
       error = assert_raises(Lemans::ConfigError) { load_task(dir).for_variant("other") }
@@ -262,7 +386,7 @@ class TaskDefinitionTest < Minitest::Test
       config.environment.profiles["fizzy"] = Lemans::Config::Environment::Profile.new(dockerfile: fizzy.join("Dockerfile"))
       config.environment.profiles["ruby"] = Lemans::Config::Environment::Profile.new(image: "ruby:3.4")
       dir.join("environment/Dockerfile.local").write("FROM ruby:3.4\n")
-      dir.join("instruction.codegraph.md").write("Use the graph.\n")
+      dir.join("instruction+codegraph.md").write("Use the graph.\n")
       task = Lemans::TaskDefinition.load_from_directory(config, dir)
 
       assert_equal %w[codegraph local], task.variants
