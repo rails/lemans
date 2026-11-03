@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [1.6.0] - 2026-11-03
+
 - Miniswen: upgrade ruby_llm to 2.1.1 (use its new built-in caching, finish reasons and reasoning replay, keep the ~10 min retry window, honor `RUBYLLM_DEBUG`, allow JSON 3).
 - Miniswen: send `prompt_cache_key` for every OpenRouter model, not only Muse, so a session keeps its cache without a pinned provider order.
 - Miniswen: turn on prompt caching for every model, so models that need it (like Claude, including on the Anthropic API) cache, and those that cache automatically are unaffected.
