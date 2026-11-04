@@ -12,6 +12,12 @@ class SecretsFilterTest < Minitest::Test
     assert_equal "as is", Lemans::SecretsFilter.new([]).filter("as is")
   end
 
+  def test_filter_secret_prefixing_another
+    filter = Lemans::SecretsFilter.new([ "tok-0123456789", "tok-0123456789-extended-secret" ])
+
+    assert_equal "a=<filtered> b=<filtered>", filter.filter("a=tok-0123456789-extended-secret b=tok-0123456789")
+  end
+
   def test_default
     ENV["LEMANSTEST_API_KEY"] = "prov-key-0123456789"
     ENV["LEMANSTEST_TOKEN"] = "tok-0123456789"
