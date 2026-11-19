@@ -118,14 +118,17 @@ class ConfigTest < Minitest::Test
 
   def test_load_options
     config = load_config
+    assert_nil config.verify_concurrency
+
     config.load_options(agent: "oracle", model: "test-model", max_output_tokens: 32_768, attempts: 3, concurrency: 2,
-                        backend: "shell", bench: ".")
+                        backend: "shell", verify_concurrency: 1, bench: ".")
 
     assert_equal "oracle", config.agent_name
     assert_equal [ "test-model" ], config.models
     assert_equal 32_768, config.agent.max_output_tokens
     assert_equal 3, config.attempts
     assert_equal 2, config.concurrency
+    assert_equal 1, config.verify_concurrency
     assert_equal "shell", config.backend
   end
 

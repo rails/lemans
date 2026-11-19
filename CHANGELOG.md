@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- `lemans run` / `lemans restart`: `--verify-concurrency N` caps verifications in flight, so heavy suites (Redmine, Mastodon, Forem) on one Docker host don't slow each other past their verifier timeout; waiting for a slot doesn't count against the timeout.
+
 ## [1.6.0] - 2026-11-03
 
 - Miniswen: upgrade ruby_llm to 2.1.1 (use its new built-in caching, finish reasons and reasoning replay, keep the ~10 min retry window, honor `RUBYLLM_DEBUG`, allow JSON 3).

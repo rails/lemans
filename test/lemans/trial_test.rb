@@ -2,6 +2,7 @@
 
 require "test_helper"
 require "json"
+require "concurrent"
 
 class TrialTest < Minitest::Test
   include BenchFixture
@@ -84,6 +85,24 @@ class TrialTest < Minitest::Test
       assert_equal "the suite ran", run_dir.join("verifier.log").read
       assert_equal "ran", run_dir.join("checks.txt").read
     end
+  end
+
+  def test_a_verification_waits_for_a_free_slot_and_gives_it_back
+    slots = Concurrent::Semaphore.new(1)
+    slots.acquire
+    env = sandbox
+    trial = Lemans::Trial.new(load_task, agent: "oracle", environment: env, verification_slots: slots)
+    running = Thread.new { trial.run }
+    sleep 0.2
+
+    assert_predicate running, :alive?
+    assert_nil trial.result.reward
+
+    slots.release
+    result = running.value
+
+    assert_in_delta 1.0, result.reward
+    assert_equal 1, slots.available_permits
   end
 
   def test_a_task_may_open_named_hosts_to_its_verifier
