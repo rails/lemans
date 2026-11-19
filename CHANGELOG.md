@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Secrets filter: redact the whole of a secret that starts with another secret's value, not only the shorter prefix.
+
 ## [1.6.0] - 2026-11-03
 
 - Miniswen: upgrade ruby_llm to 2.1.1 (use its new built-in caching, finish reasons and reasoning replay, keep the ~10 min retry window, honor `RUBYLLM_DEBUG`, allow JSON 3).

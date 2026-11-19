@@ -10,7 +10,8 @@ module Lemans
     def initialize(secrets, replacement: "<filtered>", min_length: 8)
       @replacement = replacement
 
-      secrets = secrets.compact.uniq.select { it.length >= min_length }
+      # Longest first: a secret that prefixes another must not leave its tail behind.
+      secrets = secrets.compact.uniq.select { it.length >= min_length }.sort_by { -it.bytesize }
       # Match bytes, not characters, so artifacts with non-UTF-8 content
       # (binary patch hunks) don't raise on scanning.
       @pattern = Regexp.union(secrets.map(&:b)) unless secrets.empty?
