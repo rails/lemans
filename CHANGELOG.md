@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Miniswen: concurrent trials share a provider's rate-limit backoff: a 429/529 `retry-after`, or an Anthropic window reported exhausted, pauses every trial's next call to that host instead of each spending its own retries.
+
 ## [1.6.0] - 2026-11-03
 
 - Miniswen: upgrade ruby_llm to 2.1.1 (use its new built-in caching, finish reasons and reasoning replay, keep the ~10 min retry window, honor `RUBYLLM_DEBUG`, allow JSON 3).
