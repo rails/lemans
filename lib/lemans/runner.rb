@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require "concurrent"
 require "pathname"
 
 module Lemans
@@ -20,7 +21,7 @@ module Lemans
 
     attr_reader :config, :tasks, :store, :reporter
 
-    private attr_reader :resuming, :restarts, :restart_mode, :allow_scored, :executor
+    private attr_reader :resuming, :restarts, :restart_mode, :allow_scored, :executor, :verification_slots
 
     def initialize(config, tasks, store: nil, reporter: nil, executor: nil, resume: false,
                    restarts: [], restart_mode: nil, allow_scored: false)
@@ -29,6 +30,7 @@ module Lemans
       @store = store
       @reporter = reporter
       @executor = executor || Executor.new(config.concurrency)
+      @verification_slots = Concurrent::Semaphore.new(config.verify_concurrency) if config.verify_concurrency
       @resuming = resume
       @restarts = restarts
       @restart_mode = restart_mode
@@ -43,7 +45,7 @@ module Lemans
       @attempts ||= config.agent.models.flat_map do |model|
         @tasks.flat_map do |task|
           completed = resuming? ? completed_attempts(task, model) : 0
-          ((completed + 1)..config.attempts).map { Task.new(model, task, store:, index: it) }
+          ((completed + 1)..config.attempts).map { Task.new(model, task, store:, index: it, verification_slots:) }
         end
       end
     end
@@ -104,7 +106,7 @@ module Lemans
         refuse.("no step was settled before it failed") if restart.settled_steps.zero?
       end
 
-      Task.new(restart.model, task, store:, index: restart.index || 1, restart_from: restart, restart_mode:)
+      Task.new(restart.model, task, store:, index: restart.index || 1, restart_from: restart, restart_mode:, verification_slots:)
     end
 
     def completed_attempts(task, model)

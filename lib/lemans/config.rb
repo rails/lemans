@@ -8,7 +8,7 @@ module Lemans
   # Benchmark configuration and task definitions container.
   class Config
     attr_reader :root, :config_path, :parent, :tasks_dir, :version,
-                :backend, :concurrency, :attempts
+                :backend, :concurrency, :verify_concurrency, :attempts
 
     # Nested configs
     attr_reader :environment, :agent, :verifier, :setup
@@ -84,23 +84,26 @@ module Lemans
       @verifier = verifier
       @verifier.verification ||= root.join(Verifier::VERIFICATION_DIR)
       @concurrency = 4
+      @verify_concurrency = nil
       @attempts = 1
       @backend = @environment.backend
     end
 
     def tasks = @tasks ||= parse_tasks
 
-    def load_options(agent: nil, model: nil, max_output_tokens: nil, attempts: nil, concurrency: nil, backend: nil, **)
+    def load_options(agent: nil, model: nil, max_output_tokens: nil, attempts: nil, concurrency: nil, backend: nil,
+                     verify_concurrency: nil, **)
       @agent.name = agent if agent
       @agent.models = Array(model) if model
       @agent.max_output_tokens = max_output_tokens if max_output_tokens
       @attempts = attempts if attempts
       @concurrency = concurrency if concurrency
+      @verify_concurrency = verify_concurrency if verify_concurrency
       @backend = environment.backend = backend if backend
       tasks.each do |task|
         next if task.config.equal?(self)
 
-        task.config.load_options(agent:, model:, max_output_tokens:, attempts:, concurrency:, backend:)
+        task.config.load_options(agent:, model:, max_output_tokens:, attempts:, concurrency:, backend:, verify_concurrency:)
       end
     end
 
