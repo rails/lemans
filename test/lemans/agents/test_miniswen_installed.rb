@@ -65,6 +65,7 @@ class MiniswenInstalledTest < Minitest::Test
     assert_includes command, "--max-cost 5"
     assert_includes command, "--workdir "
     assert_includes command, "--allow-hosts openrouter.ai"
+    refute_includes command, "--request-timeout"
 
     response.trajectory.session_id = "test-session"
     trajectory = JSON.parse(JSON.generate(response.trajectory.to_atif))
@@ -85,6 +86,16 @@ class MiniswenInstalledTest < Minitest::Test
     assert_equal Lemans::Agents::MiniswenInstalled::HISTORY_PATH, shell.uploads.last.last
     assert_includes shell.commands.last, "--continue-from #{Lemans::Agents::MiniswenInstalled::HISTORY_PATH}"
     refute_includes shell.commands.last, " -p "
+  end
+
+  def test_a_request_timeout_is_passed_to_the_sandboxed_cli
+    agent, task = build_agent
+    agent.profile.request_timeout = 1200
+    shell = TestEnvironment.new(files: { Lemans::Agents::MiniswenInstalled::RESULTS_PATH => remote_result_json })
+
+    with_openrouter_key { agent.run(task, shell) }
+
+    assert_includes shell.commands.last, "--request-timeout 1200"
   end
 
   def test_jailed_commands_get_no_network_outside_an_allowlist
