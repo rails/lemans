@@ -72,6 +72,10 @@ agent:
   # Timeout (in seconds) for a single command the agent runs
   exec_timeout: 300
 
+  # Timeout for a single model call (default: ruby_llm's 300s). Raise it for
+  # models that answer in one long turn, e.g. 20m.
+  # request_timeout: 20m
+
   # The sandbox network while the agent works: just enough to reach the model
   # Use mode: none when using a local agent (miniswen)
   # With mode allowlist, agent commands reach these hosts through the jail's proxy

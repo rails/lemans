@@ -137,6 +137,10 @@ module Miniswen
           options[:exec_timeout] = v
         end
 
+        opts.on("--request-timeout=SECONDS", Float, "Model call timeout (default: ruby_llm's)") do |v|
+          options[:request_timeout] = v
+        end
+
         opts.on("--max-output-tokens=TOKENS", Integer, "Output cap per model call (default: the provider's)") do |v|
           options[:max_output_tokens] = v
         end

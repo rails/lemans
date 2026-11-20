@@ -405,6 +405,18 @@ class MiniswenAgentTest < Minitest::Test
     assert_equal 4096, RubyLLM::Test.last_request.max_output_tokens
   end
 
+  def test_a_request_timeout_reaches_the_provider_without_touching_the_global_config
+    with_api_key(:openrouter) { build_agent(model: "openrouter/anthropic/test", request_timeout: 1200) }
+    _, provider = agent.send(:resolved)
+
+    assert_equal 1200, provider.config.request_timeout
+    refute_equal 1200, RubyLLM.config.request_timeout
+
+    with_api_key(:openrouter) { build_agent(model: "openrouter/anthropic/test") }
+
+    assert_same RubyLLM.config, agent.send(:resolved).last.config
+  end
+
   def test_an_effort_suffix_sets_the_reasoning_effort_and_stays_out_of_the_model_id
     with_api_key(:openrouter) { build_agent(model: "openrouter/anthropic/test#xhigh") }
     stub_llm(SUBMIT)

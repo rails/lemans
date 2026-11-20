@@ -206,14 +206,15 @@ module Miniswen
 
     attr_reader :messages, :environment
 
-    private attr_reader :workdir, :max_steps, :max_time, :max_cost, :exec_timeout, :max_output_tokens,
+    private attr_reader :workdir, :max_steps, :max_time, :max_cost, :exec_timeout, :request_timeout, :max_output_tokens,
                         :cache_id, :clock, :reporter
 
     # `model` is a litellm-style name ("openrouter/z-ai/glm-5.2"), optionally
     # suffixed with a reasoning effort ("openrouter/openai/gpt-5.6-luna#xhigh").
-    # Limits of 0 or nil are disabled.
+    # Limits of 0 or nil are disabled. `request_timeout` bounds one model call
+    # (ruby_llm's default when nil).
     def initialize(model:, environment:, workdir: nil, max_steps: 0, max_time: 0, max_cost: nil,
-                   exec_timeout: 30, max_output_tokens: 0,
+                   exec_timeout: 30, request_timeout: nil, max_output_tokens: 0,
                    clock: -> { Process.clock_gettime(Process::CLOCK_MONOTONIC) },
                    reporter: nil)
       name, @effort = model.split("#", 2)
@@ -233,6 +234,7 @@ module Miniswen
       @max_time = max_time.to_f
       @max_cost = max_cost
       @exec_timeout = exec_timeout
+      @request_timeout = request_timeout
       @max_output_tokens = max_output_tokens.to_i
 
       @clock = clock
@@ -576,7 +578,16 @@ module Miniswen
     end
 
     def resolved
-      @resolved ||= RubyLLM::Models.resolve(@id, provider: @provider, assume_model_exists: !@provider.nil?)
+      @resolved ||= RubyLLM::Models.resolve(@id, provider: @provider, assume_model_exists: !@provider.nil?,
+                                                 config: llm_config)
+    end
+
+    # Some models answer in one long turn (Gemini 4 Carbon: 10+ minutes for a
+    # 28K-token reply), which ruby_llm's default timeout would cut and retry forever.
+    def llm_config
+      return RubyLLM.config unless request_timeout
+
+      RubyLLM.context { it.request_timeout = request_timeout }.config
     end
 
     def as_ruby_llm(entry)

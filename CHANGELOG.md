@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+- Miniswen: `agent.request_timeout` (and `miniswen --request-timeout`) bounds one model call, so a model that answers in one long turn (Gemini 4 Carbon took 627 s for a 28K-token reply) isn't cut at ruby_llm's 300 s and retried until the step limit.
+
 ## [1.6.0] - 2026-11-03
 
 - Miniswen: upgrade ruby_llm to 2.1.1 (use its new built-in caching, finish reasons and reasoning replay, keep the ~10 min retry window, honor `RUBYLLM_DEBUG`, allow JSON 3).
