@@ -24,6 +24,7 @@ class CodexAgent::Checkpoint
   def elapsed = @data.fetch("elapsed")
   def report = @data["result"]
   def token_usage = @data["token_usage"]
+  def model_calls = @data["model_calls"]
   def as_json(**) = @data
 
   def stream = @data.fetch("segments").map { it.fetch("stream") }.reject(&:empty?).map { it.sub(/\n?\z/, "\n") }.join
@@ -60,12 +61,14 @@ class CodexAgent::Checkpoint
     @data["result"] = current_events.reverse.find { %w[turn.completed turn.failed].include?(it["type"]) }
     @data["session_id"] = current_events.find { it["type"] == "thread.started" }&.fetch("thread_id", nil) || session_id
     @data["token_usage"] = report&.fetch("usage", nil) || token_usage
+    @data.delete("model_calls")
     @data.delete("session_state")
     @data.delete("recovery_error")
     return unless session_id
 
-    rollout = download_rollout(environment)
-    @data["token_usage"] = tokens_from(rollout) || token_usage
+    totals, calls = usage_from(download_rollout(environment))
+    @data["token_usage"] = totals || token_usage
+    @data["model_calls"] = calls
     archive_state(environment)
     @data["session_state"] = Base64.strict_encode64(download(environment, STATE_PATH))
   rescue Lemans::InfrastructureError => e
@@ -106,17 +109,19 @@ class CodexAgent::Checkpoint
                       "tar --null -czf #{STATE_PATH} -T -")
   end
 
-  def tokens_from(rollout)
+  def usage_from(rollout)
     records = events_from(rollout)
-    responses = records.select { it["type"] == "token_usage_record" }.map { it.fetch("payload") }
-    thread_total = responses.reverse.filter_map { it["thread_token_usage"] }.first
-    return thread_total if thread_total
+    responses = records.filter_map { it["payload"] if it["type"] == "token_usage_record" }
+    unique = responses.uniq { it["response_id"] }
+    calls = unique.size if unique.any? && unique.all? { it["response_id"] }
+    thread_total = responses.reverse_each.find { it["thread_token_usage"] }&.fetch("thread_token_usage")
+    return [ thread_total, calls ] if thread_total
 
-    unless responses.empty?
-      unique = responses.uniq { it.fetch("response_id") }
-      return %w[input_tokens cached_input_tokens cache_write_input_tokens output_tokens reasoning_output_tokens].to_h do |key|
+    if calls
+      totals = %w[input_tokens cached_input_tokens cache_write_input_tokens output_tokens reasoning_output_tokens].to_h do |key|
         [ key, unique.sum { it.fetch("usage")[key].to_i } ]
       end
+      return [ totals, calls ]
     end
 
     # Older CLIs emit cumulative token_count snapshots, which must not be summed after resume.
@@ -124,8 +129,8 @@ class CodexAgent::Checkpoint
       next unless record["type"] == "event_msg" && record.dig("payload", "type") == "token_count"
 
       total = record.dig("payload", "info", "total_token_usage")
-      return total if total
+      return [ total, nil ] if total
     end
-    nil
+    [ nil, nil ]
   end
 end
