@@ -22,7 +22,7 @@ class CodexAgent::Trajectory
       agent: { name: CodexAgent::NAME, version: @version || "unknown", model_name: @model,
                extra: { adapter_version: Lemans::VERSION } },
       steps: steps,
-      notes: "Steps follow Codex items, not individual model calls; total_steps counts completed command executions. " \
+      notes: "Trajectory steps follow Codex items. total_steps counts distinct model responses in the native session log. " \
              "Prompts come from Lemans. System prompts, timestamps, and per-call usage are not in the event stream.",
       final_metrics: final_metrics,
       extra: stream_info

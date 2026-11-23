@@ -67,7 +67,7 @@ class CodexAgent < Lemans::Agent
   def response_for(task, checkpoint, exit_code:, output:)
     events = checkpoint.events
     report = checkpoint.report
-    usage = usage_for(events, token_usage: checkpoint.token_usage)
+    usage = usage_for(events, token_usage: checkpoint.token_usage, steps: checkpoint.model_calls.to_i)
     trajectory = Trajectory.new(events:, instruction: task.instruction, model:, usage:, exit_code:,
                                 segments: checkpoint.trajectory_segments, version: checkpoint.version,
                                 token_usage: checkpoint.token_usage) unless events.empty?
@@ -140,14 +140,14 @@ class CodexAgent < Lemans::Agent
     nil
   end
 
-  def usage_for(events, token_usage: nil)
+  def usage_for(events, token_usage:, steps:)
     totals = token_usage ? [ token_usage ] : events.select { it["type"] == "turn.completed" }.filter_map { it["usage"] }.last(1)
     info = priced_model unless totals.empty?
     Lemans::Result::Usage.new(
       input_tokens: totals.sum { it["input_tokens"].to_i },
       output_tokens: totals.sum { it["output_tokens"].to_i },
       cached_tokens: totals.sum { it["cached_input_tokens"].to_i },
-      steps: events.count { it["type"] == "item.completed" && it.dig("item", "type") == "command_execution" },
+      steps:,
       cost_usd: estimated_cost(totals, info),
       cost_source: cost_source(info)
     )

@@ -77,4 +77,4 @@ Each trial receives an access-token snapshot in an isolated Codex home. The refr
 - Dollar budgets cannot be enforced: cost is calculated after Codex exits. Set `agent.cost_limit: null` and use `agent.timeout`. Lemans's `step_limit`, `exec_timeout`, and `max_output_tokens` are not forwarded to Codex.
 - Subscription usage limits and access-token expiry still apply; long runs cannot refresh their credentials.
 - Recovery needs a saved native checkpoint and the same model and Codex CLI version. Workspace files are restored through Git patches; ignored files and files outside the worktree are not recovered.
-- The ATIF conversion uses the CLI event stream. System prompts, timestamps, and per-call usage are absent; `total_steps` counts completed shell commands rather than model calls.
+- The ATIF trajectory lists CLI events. The reported step count comes from distinct model response IDs in the native session log, including earlier responses after recovery. If the session log or its response IDs are unavailable, Codex reports zero steps.
