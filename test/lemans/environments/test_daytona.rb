@@ -42,6 +42,22 @@ class DaytonaEnvironmentTest < Minitest::Test
     end
   end
 
+  def test_a_composed_dockerfile_ships_with_every_part_s_context
+    in_root do
+      dir = context_with({ "app.rb" => "shared", "graph.yml" => "on" }).context_dir
+      dir.join("Dockerfile.codegraph").write("FROM ./Dockerfile\nCOPY graph.yml /etc/graph.yml\n")
+      image = Lemans::Config::ImageSpec.dockerfile(dir.join("Dockerfile.codegraph"), slug: "a-task.codegraph")
+      snapshots = FakeSnapshotService.new(answers: [])
+
+      store_for(image, snapshots:).call
+
+      built = snapshots.created.first.image
+      assert_equal image.dockerfile, built.dockerfile
+      assert_includes built.context_list.map(&:archive_path), "graph.yml"
+      assert_includes built.context_list.map(&:archive_path), "."
+    end
+  end
+
   def test_a_published_image_gets_one_snapshot_per_shape
     image = Lemans::Config::ImageSpec.registry("ghcr.io/lemans/reference@sha256:#{"ab" * 32}")
 

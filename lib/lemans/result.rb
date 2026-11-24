@@ -180,7 +180,7 @@ module Lemans
       @total_steps = nil
       @restarted_from = nil
 
-      @id = id || "#{task}__#{SecureRandom.alphanumeric(7)}"
+      @id = id || "#{task.to_s.tr("#", "-")}__#{SecureRandom.alphanumeric(7)}"
       @outcome = Outcome.new(:pending)
     end
 
